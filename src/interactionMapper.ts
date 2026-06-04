@@ -10,6 +10,7 @@ export class InteractionMapper {
   mapHand(hand: AnalyzedHand, bounds: DOMRect): MappedHandPoint {
     const pinchPoint = getPinchPoint(hand);
     const normalizedX = this.mirror ? 1 - pinchPoint.x : pinchPoint.x;
+    const pose = getPalmPose(hand, this.mirror);
 
     return {
       handId: hand.id,
@@ -18,6 +19,8 @@ export class InteractionMapper {
       y: bounds.top + pinchPoint.y * bounds.height,
       z: pinchPoint.z,
       handScale: getHandScale(hand),
+      palmRoll: pose.roll,
+      palmYaw: pose.yaw,
     };
   }
 
@@ -66,7 +69,26 @@ function getHandScale(hand: AnalyzedHand) {
   );
 }
 
+function getPalmPose(hand: AnalyzedHand, mirror: boolean) {
+  const indexMcp = hand.landmarks[5];
+  const pinkyMcp = hand.landmarks[17];
+  const dx = (mirror ? 1 - indexMcp.x : indexMcp.x) - (mirror ? 1 - pinkyMcp.x : pinkyMcp.x);
+  const dy = indexMcp.y - pinkyMcp.y;
+  const palmSpan = Math.max(Math.hypot(indexMcp.x - pinkyMcp.x, indexMcp.y - pinkyMcp.y), 0.001);
+  const sideDepth = ((indexMcp.z ?? 0) - (pinkyMcp.z ?? 0)) / palmSpan;
+  const yawSign = mirror ? -1 : 1;
+
+  return {
+    roll: Math.atan2(dy, dx),
+    yaw: clamp(sideDepth * yawSign, -1.4, 1.4),
+  };
+}
+
 function distance(a: { x: number; y: number; z?: number }, b: { x: number; y: number; z?: number }) {
   const dz = (a.z ?? 0) - (b.z ?? 0);
   return Math.hypot(a.x - b.x, a.y - b.y, dz);
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }

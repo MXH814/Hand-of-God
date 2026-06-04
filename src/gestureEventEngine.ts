@@ -57,7 +57,7 @@ export class GestureEventEngine {
     const primaryPoint = primaryHand
       ? mappedPoints.find((point) => point.handId === primaryHand.id)
       : undefined;
-    const confidence = getConfidence(hands, profile?.pinchThreshold ?? 0.45);
+    const confidence = getConfidence(hands, profile?.pinchThreshold ?? 0.56);
 
     this.updatePinch(primaryHand, primaryPoint, timestamp, confidence, events);
     this.updateTwoHand(hands, mappedPoints, timestamp, confidence, events);

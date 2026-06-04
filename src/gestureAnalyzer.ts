@@ -32,7 +32,7 @@ interface PreviousHand {
 export class GestureAnalyzer {
   private previousHands = new Map<string, PreviousHand>();
 
-  analyze(hands: RawHand[], smoothing: number, pinchThreshold = 0.45): AnalyzedHand[] {
+  analyze(hands: RawHand[], smoothing: number, pinchThreshold = 0.56): AnalyzedHand[] {
     const alpha = Math.min(Math.max(smoothing, 0), 0.95);
     const currentIds = new Set<string>();
 
@@ -141,7 +141,7 @@ function getIndexMiddleTogether(hand: RawHand) {
   const middleExtended = hand.landmarks[12].y < hand.landmarks[10].y;
 
   return {
-    active: normalizedDistance < 0.38 && indexExtended && middleExtended,
+    active: normalizedDistance < 0.62 && indexExtended && middleExtended,
     distance: normalizedDistance,
   };
 }

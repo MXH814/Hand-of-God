@@ -1,7 +1,7 @@
 import type { AnalyzedHand, CalibrationProfile, CalibrationStage } from "./types";
 
 const HOLD_MS = 1000;
-const DEFAULT_PINCH_THRESHOLD = 0.45;
+const DEFAULT_PINCH_THRESHOLD = 0.56;
 
 interface HoldState {
   startedAt?: number;
@@ -110,7 +110,7 @@ export class CalibrationManager {
     this.profile = {
       openPalmSpan,
       pinchDistance,
-      pinchThreshold: clamp(pinchDistance * 1.35, 0.28, 0.5),
+      pinchThreshold: clamp(pinchDistance * 1.65, 0.36, 0.62),
       confidenceBaseline: 0.62,
       createdAt: timestamp,
     };

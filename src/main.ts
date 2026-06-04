@@ -704,7 +704,7 @@ function renderCalibration() {
   } else if (state.stage === "pinch") {
     calibrationDetail.textContent = "Touch thumb and index finger together and hold for 1 second.";
   } else if (state.stage === "ready") {
-    calibrationDetail.textContent = `Ready. Pinch threshold ${state.profile?.pinchThreshold.toFixed(2) ?? "0.45"}.`;
+    calibrationDetail.textContent = `Ready. Pinch threshold ${state.profile?.pinchThreshold.toFixed(2) ?? "0.56"}.`;
   } else if (state.stage === "skipped") {
     calibrationDetail.textContent = "Using default gesture thresholds.";
   } else {

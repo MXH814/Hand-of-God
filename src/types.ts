@@ -67,6 +67,8 @@ export interface MappedHandPoint {
   y: number;
   z: number;
   handScale: number;
+  palmRoll: number;
+  palmYaw: number;
 }
 
 export interface TwoHandTransform {

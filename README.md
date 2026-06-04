@@ -118,6 +118,14 @@ npm run dev
 - 相关文件：`src/main.ts`、`src/shapeScene.ts`、`src/styles.css`
 - 参考：自研规则。
 
+### 单手姿态旋转与宽容捏合阈值
+
+- 功能：单手捏住几何体后可更流畅地控制位置和三轴旋转；捏取几何体、托盘选中和双指缩放不再要求两个 landmark 完全重合，只要在合理距离内即可触发。
+- 技术：MediaPipe 21 点 landmark、Three.js Euler rotation、校准阈值、TypeScript 连续几何特征映射。
+- 算法/规则：单手控制点仍使用拇指尖 `4` 与食指尖 `8` 的中点来移动对象；旋转不再只依赖屏幕横移，而是同时读取食指根部 `5` 与小指根部 `17` 的屏幕连线角度作为 `palmRoll`、两点 z 差作为 `palmYaw`，再结合手掌尺度和捏合点 z 变化生成 X/Y/Z 三轴旋转，并使用角度平滑避免突跳。默认 Pinch 阈值放宽到 `0.56`，校准阈值按个人捏合距离放大并限制在 `0.36..0.62`；双手食指中指并拢缩放阈值放宽到 `0.62`，适配识别点不完全落在真实指尖的情况。
+- 相关文件：`src/interactionMapper.ts`、`src/shapeScene.ts`、`src/gestureAnalyzer.ts`、`src/calibrationManager.ts`、`src/gestureEventEngine.ts`、`src/types.ts`
+- 参考：自研规则，基于 MediaPipe landmark 数据；参考 landmark-driven 控制思路：Codrops Webcam 3D HandControls, https://tympanus.net/Tutorials/webcam-3D-handcontrols/
+
 ## Notes
 
 当前 AR 几何体是屏幕平面叠加原型，不包含真实深度遮挡、真实世界平面检测、物理碰撞、重力、小球玩法或完整游戏关卡。

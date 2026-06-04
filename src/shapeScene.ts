@@ -34,6 +34,8 @@ export class ShapeScene {
     rotation: THREE.Euler;
     x: number;
     z: number;
+    palmRoll: number;
+    palmYaw: number;
   };
 
   constructor(private readonly options: ShapeControllerOptions) {
@@ -198,6 +200,8 @@ export class ShapeScene {
       rotation: mesh.rotation.clone(),
       x: point.x,
       z: point.z,
+      palmRoll: point.palmRoll,
+      palmYaw: point.palmYaw,
     };
     this.setActiveObject(objectId);
   }
@@ -262,11 +266,16 @@ export class ShapeScene {
     if (this.singleHandBase && this.singleHandBase.objectId === this.selectedObjectId) {
       const depthByScale = Math.log(Math.max(point.handScale, 0.001) / this.singleHandBase.handScale);
       const depthByZ = this.singleHandBase.z - point.z;
-      const depthRotation = clamp(depthByScale * 3.6 + depthByZ * 4.5, -1.2, 1.2);
-      const lateralRotation = clamp((point.x - this.singleHandBase.x) / 240, -0.85, 0.85);
+      const rollDelta = normalizeAngle(point.palmRoll - this.singleHandBase.palmRoll);
+      const yawDelta = point.palmYaw - this.singleHandBase.palmYaw;
+      const lateralNudge = (point.x - this.singleHandBase.x) / 360;
+      const depthRotation = clamp(depthByScale * 4.6 + depthByZ * 6.2, -1.65, 1.65);
+      const yawRotation = clamp(yawDelta * 2.25 + lateralNudge, -1.75, 1.75);
+      const rollRotation = clamp(rollDelta * 1.15, -1.55, 1.55);
 
-      mesh.rotation.x = smoothAngle(mesh.rotation.x, this.singleHandBase.rotation.x + depthRotation, 0.38);
-      mesh.rotation.y = smoothAngle(mesh.rotation.y, this.singleHandBase.rotation.y + lateralRotation, 0.32);
+      mesh.rotation.x = smoothAngle(mesh.rotation.x, this.singleHandBase.rotation.x + depthRotation, 0.46);
+      mesh.rotation.y = smoothAngle(mesh.rotation.y, this.singleHandBase.rotation.y + yawRotation, 0.5);
+      mesh.rotation.z = smoothAngle(mesh.rotation.z, this.singleHandBase.rotation.z + rollRotation, 0.48);
       this.syncState(mesh);
     }
 
