@@ -61,6 +61,8 @@ export interface MappedHandPoint {
   handedness: HandSide;
   x: number;
   y: number;
+  z: number;
+  handScale: number;
 }
 
 export interface TwoHandTransform {
@@ -69,6 +71,9 @@ export interface TwoHandTransform {
   angle: number;
   scaleDelta: number;
   rotationDelta: number;
+  rotationXDelta: number;
+  rotationYDelta: number;
+  depthDelta: number;
 }
 
 export interface GestureEvent {

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { SceneObject, ShapeLibraryItem, ShapeType, Vector2 } from "./types";
+import type { MappedHandPoint, SceneObject, ShapeLibraryItem, ShapeType, Vector2 } from "./types";
 
 interface ShapeControllerOptions {
   stageElement: HTMLElement;
@@ -23,6 +23,13 @@ export class ShapeScene {
     objectId: string;
     scale: number;
     rotation: THREE.Euler;
+  };
+  private singleHandBase?: {
+    objectId: string;
+    handScale: number;
+    rotation: THREE.Euler;
+    x: number;
+    z: number;
   };
 
   constructor(private readonly options: ShapeControllerOptions) {
@@ -131,8 +138,21 @@ export class ShapeScene {
     this.previewMesh.position.set(point.x, point.y, 0.3);
   }
 
-  applyTransformAtScreenPoint(clientX: number, clientY: number, scaleDelta: number, rotationDelta: number) {
-    this.applyTransform(this.screenToWorldPoint(clientX, clientY), scaleDelta, rotationDelta);
+  applyTransformAtScreenPoint(
+    clientX: number,
+    clientY: number,
+    scaleDelta: number,
+    rotationDelta: number,
+    rotationXDelta = 0,
+    rotationYDelta = 0,
+  ) {
+    this.applyTransform(
+      this.screenToWorldPoint(clientX, clientY),
+      scaleDelta,
+      rotationDelta,
+      rotationXDelta,
+      rotationYDelta,
+    );
   }
 
   beginTransform() {
@@ -154,7 +174,34 @@ export class ShapeScene {
     this.transformBase = undefined;
   }
 
-  applyTransform(center: Vector2, scaleDelta: number, rotationDelta: number) {
+  beginSingleHandTransform(point: MappedHandPoint) {
+    const mesh = this.getSelectedMesh();
+    const objectId = this.selectedObjectId;
+    if (!mesh || !objectId) {
+      this.singleHandBase = undefined;
+      return;
+    }
+
+    this.singleHandBase = {
+      objectId,
+      handScale: Math.max(point.handScale, 0.001),
+      rotation: mesh.rotation.clone(),
+      x: point.x,
+      z: point.z,
+    };
+  }
+
+  endSingleHandTransform() {
+    this.singleHandBase = undefined;
+  }
+
+  applyTransform(
+    center: Vector2,
+    scaleDelta: number,
+    rotationDelta: number,
+    rotationXDelta = 0,
+    rotationYDelta = 0,
+  ) {
     const mesh = this.getSelectedMesh();
     if (!mesh) {
       return;
@@ -165,12 +212,13 @@ export class ShapeScene {
         ? this.transformBase
         : { scale: mesh.scale.x, rotation: mesh.rotation };
     const currentWorld = new THREE.Vector2(mesh.position.x, mesh.position.y);
-    currentWorld.lerp(new THREE.Vector2(center.x, center.y), 0.45);
+    currentWorld.lerp(new THREE.Vector2(center.x, center.y), 0.58);
     mesh.position.set(currentWorld.x, currentWorld.y, mesh.position.z);
     const nextScale = clamp(base.scale * scaleDelta, 0.35, 3.4);
     mesh.scale.setScalar(nextScale);
-    mesh.rotation.z = base.rotation.z + rotationDelta;
-    mesh.rotation.x = base.rotation.x + rotationDelta * 0.08;
+    mesh.rotation.x = smoothAngle(mesh.rotation.x, base.rotation.x + rotationXDelta, 0.42);
+    mesh.rotation.y = smoothAngle(mesh.rotation.y, base.rotation.y + rotationYDelta, 0.42);
+    mesh.rotation.z = smoothAngle(mesh.rotation.z, base.rotation.z + rotationDelta, 0.5);
     this.syncState(mesh);
   }
 
@@ -185,6 +233,31 @@ export class ShapeScene {
     currentWorld.lerp(new THREE.Vector2(point.x, point.y), 0.55);
     mesh.position.set(currentWorld.x, currentWorld.y, mesh.position.z);
     this.syncState(mesh);
+    return true;
+  }
+
+  moveSelectedByHandPoint(point: MappedHandPoint) {
+    const mesh = this.getSelectedMesh();
+    if (!mesh) {
+      return false;
+    }
+
+    const moved = this.moveSelectedAtScreenPoint(point.x, point.y);
+    if (!moved) {
+      return false;
+    }
+
+    if (this.singleHandBase && this.singleHandBase.objectId === this.selectedObjectId) {
+      const depthByScale = Math.log(Math.max(point.handScale, 0.001) / this.singleHandBase.handScale);
+      const depthByZ = this.singleHandBase.z - point.z;
+      const depthRotation = clamp(depthByScale * 3.6 + depthByZ * 4.5, -1.2, 1.2);
+      const lateralRotation = clamp((point.x - this.singleHandBase.x) / 240, -0.85, 0.85);
+
+      mesh.rotation.x = smoothAngle(mesh.rotation.x, this.singleHandBase.rotation.x + depthRotation, 0.38);
+      mesh.rotation.y = smoothAngle(mesh.rotation.y, this.singleHandBase.rotation.y + lateralRotation, 0.32);
+      this.syncState(mesh);
+    }
+
     return true;
   }
 
@@ -301,4 +374,15 @@ function disposeMaterial(material: THREE.Material | THREE.Material[]) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function smoothAngle(current: number, target: number, alpha: number) {
+  return current + normalizeAngle(target - current) * alpha;
+}
+
+function normalizeAngle(angle: number) {
+  let normalized = angle;
+  while (normalized > Math.PI) normalized -= Math.PI * 2;
+  while (normalized < -Math.PI) normalized += Math.PI * 2;
+  return normalized;
 }

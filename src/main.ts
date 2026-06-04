@@ -306,6 +306,7 @@ function applyGestureEvents(events: GestureEvent[]) {
     }
 
     if (event.type === "twoHandTransformStart") {
+      shapeScene.endSingleHandTransform();
       shapeScene.beginTransform();
       setInteractionMode("twoHandTransform");
     }
@@ -316,6 +317,8 @@ function applyGestureEvents(events: GestureEvent[]) {
         event.transform.center.y,
         event.transform.scaleDelta,
         event.transform.rotationDelta,
+        event.transform.rotationXDelta,
+        event.transform.rotationYDelta,
       );
       refreshObjectCount();
     }
@@ -342,6 +345,9 @@ function handlePinch(event: GestureEvent) {
 
     const selected = shapeScene.selectAtScreenPoint(point.x, point.y);
     if (selected) {
+      if (event.mappedPoint) {
+        shapeScene.beginSingleHandTransform(event.mappedPoint);
+      }
       setInteractionMode("movingObject");
       setEventHud("objectSelected", selected);
     }
@@ -358,7 +364,11 @@ function handlePinch(event: GestureEvent) {
     }
 
     if (interactionMode === "movingObject") {
-      shapeScene.moveSelectedAtScreenPoint(point.x, point.y);
+      if (event.mappedPoint) {
+        shapeScene.moveSelectedByHandPoint(event.mappedPoint);
+      } else {
+        shapeScene.moveSelectedAtScreenPoint(point.x, point.y);
+      }
       refreshObjectCount();
     }
   }
@@ -380,6 +390,7 @@ function finishPinch(event: GestureEvent) {
 
   activeDraggedShape = undefined;
   shapeScene.setPreview(undefined);
+  shapeScene.endSingleHandTransform();
   clearTrayHold();
   setInteractionMode("idle");
 }
@@ -605,7 +616,7 @@ function refreshObjectCount() {
 
 function formatEventDetail(event: GestureEvent) {
   if (event.transform) {
-    return `scale ${event.transform.scaleDelta.toFixed(2)} / rotate ${event.transform.rotationDelta.toFixed(2)}`;
+    return `scale ${event.transform.scaleDelta.toFixed(2)} / rot x ${event.transform.rotationXDelta.toFixed(2)} / y ${event.transform.rotationYDelta.toFixed(2)} / z ${event.transform.rotationDelta.toFixed(2)} / depth ${event.transform.depthDelta.toFixed(2)}`;
   }
   const point = event.screenPoint ?? event.mappedPoint;
   if (point) {

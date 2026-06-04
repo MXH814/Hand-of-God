@@ -26,6 +26,9 @@ interface TwoHandState {
   endFrames: number;
   baselineDistance: number;
   baselineAngle: number;
+  baselineAverageScale: number;
+  baselineScaleSkew: number;
+  baselineZSkew: number;
 }
 
 export class GestureEventEngine {
@@ -36,6 +39,9 @@ export class GestureEventEngine {
     endFrames: 0,
     baselineDistance: 1,
     baselineAngle: 0,
+    baselineAverageScale: 1,
+    baselineScaleSkew: 0,
+    baselineZSkew: 0,
   };
 
   update(
@@ -65,6 +71,9 @@ export class GestureEventEngine {
       endFrames: 0,
       baselineDistance: 1,
       baselineAngle: 0,
+      baselineAverageScale: 1,
+      baselineScaleSkew: 0,
+      baselineZSkew: 0,
     };
   }
 
@@ -160,6 +169,9 @@ export class GestureEventEngine {
       this.twoHandState.active = true;
       this.twoHandState.baselineDistance = transform.distance || 1;
       this.twoHandState.baselineAngle = transform.angle;
+      this.twoHandState.baselineAverageScale = getAverageScale(pair.left, pair.right);
+      this.twoHandState.baselineScaleSkew = getScaleSkew(pair.left, pair.right);
+      this.twoHandState.baselineZSkew = getZSkew(pair.left, pair.right);
       events.push({ type: "twoHandTransformStart", timestamp, transform, confidence });
       return;
     }
@@ -237,14 +249,33 @@ function getTwoHandTransform(
   const dy = right.y - left.y;
   const distance = Math.hypot(dx, dy) || 1;
   const angle = Math.atan2(dy, dx);
+  const averageScale = getAverageScale(left, right);
+  const depthDelta = Math.log(averageScale / (state.baselineAverageScale || averageScale || 1));
+  const scaleSkewDelta = (getScaleSkew(left, right) - state.baselineScaleSkew) / (state.baselineAverageScale || averageScale || 1);
+  const zSkewDelta = getZSkew(left, right) - state.baselineZSkew;
 
   return {
     center,
     distance,
     angle,
     scaleDelta: clamp(distance / (state.baselineDistance || distance || 1), 0.35, 3),
-    rotationDelta: normalizeAngle(angle - state.baselineAngle),
+    rotationDelta: clamp(normalizeAngle(angle - state.baselineAngle) * 1.35, -Math.PI, Math.PI),
+    rotationXDelta: clamp(depthDelta * 4.2, -1.35, 1.35),
+    rotationYDelta: clamp(scaleSkewDelta * 3.2 + zSkewDelta * 5.5, -1.45, 1.45),
+    depthDelta,
   };
+}
+
+function getAverageScale(left: MappedHandPoint, right: MappedHandPoint) {
+  return Math.max((left.handScale + right.handScale) / 2, 0.001);
+}
+
+function getScaleSkew(left: MappedHandPoint, right: MappedHandPoint) {
+  return right.handScale - left.handScale;
+}
+
+function getZSkew(left: MappedHandPoint, right: MappedHandPoint) {
+  return left.z - right.z;
 }
 
 function normalizeAngle(angle: number) {
