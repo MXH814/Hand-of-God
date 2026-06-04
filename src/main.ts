@@ -18,6 +18,8 @@ import type {
 } from "./types";
 
 const TRAY_HOLD_MS = 1000;
+const TRAY_HIT_EXPAND_Y = 58;
+const INDEX_CROSS_DELETE_HOLD_MS = 850;
 const INDEX_CROSS_DELETE_COOLDOWN_MS = 900;
 const INDEX_CROSS_MIN_ANGLE = Math.PI / 5;
 
@@ -57,6 +59,10 @@ app.innerHTML = `
         </div>
 
         <div class="shape-tray" id="shape-library"></div>
+        <div class="cross-delete-progress" id="cross-delete-progress" hidden>
+          <span class="cross-delete-label">Delete</span>
+          <span class="cross-delete-track"><span id="cross-delete-bar"></span></span>
+        </div>
       </div>
 
       <aside class="debug-panel">
@@ -133,6 +139,8 @@ const handsList = getElement<HTMLDivElement>("hands-list");
 const shapeLibrary = getElement<HTMLDivElement>("shape-library");
 const eventName = getElement<HTMLElement>("event-name");
 const eventDetail = getElement<HTMLParagraphElement>("event-detail");
+const crossDeleteProgress = getElement<HTMLDivElement>("cross-delete-progress");
+const crossDeleteBar = getElement<HTMLSpanElement>("cross-delete-bar");
 const objectCount = getElement<HTMLElement>("object-count");
 const interactionModeNode = getElement<HTMLElement>("interaction-mode");
 const calibrationLayer = getElement<HTMLDivElement>("calibration-layer");
@@ -168,6 +176,12 @@ let trayHold:
   | undefined;
 let armedTrayShape: ShapeType | undefined;
 let lastIndexCrossDeleteAt = 0;
+let indexCrossHold:
+  | {
+      objectId: string;
+      startedAt: number;
+    }
+  | undefined;
 
 mountIcons();
 renderShapeLibrary();
@@ -260,6 +274,7 @@ function stopCamera(status = "Idle") {
   latestHands = [];
   latestMappedPoints = [];
   activeDraggedShape = undefined;
+  clearIndexCrossHold();
   clearTrayHold();
   analyzer.reset();
   eventEngine.reset();
@@ -341,7 +356,7 @@ function handlePinch(event: GestureEvent) {
   }
 
   if (event.type === "pinchStart") {
-    const trayShape = getShapeUnderPoint(point.x, point.y);
+    const trayShape = getShapeUnderPoint(point.x, point.y, TRAY_HIT_EXPAND_Y);
     if (trayShape) {
       startTrayHold(trayShape, event.timestamp);
       return;
@@ -438,6 +453,7 @@ function detectIndexCrossDelete(timestamp: number) {
 
   const candidates = latestHands.filter((hand) => hand.score >= 0.55 && isFingerExtended(hand, "index"));
   if (candidates.length < 2) {
+    clearIndexCrossHold();
     return;
   }
 
@@ -451,20 +467,43 @@ function detectIndexCrossDelete(timestamp: number) {
     }));
   const intersection = getSegmentIntersection(first.start, first.end, second.start, second.end);
   if (!intersection) {
+    clearIndexCrossHold();
     return;
   }
 
   const angle = getLineAngle(first.start, first.end, second.start, second.end);
   if (angle < INDEX_CROSS_MIN_ANGLE) {
+    clearIndexCrossHold();
     return;
   }
 
-  const deletedId = shapeScene.deleteFrontmostAtScreenPoint(intersection.x, intersection.y);
-  if (!deletedId) {
+  const targetId = shapeScene.getFrontmostObjectAtScreenPoint(intersection.x, intersection.y);
+  if (!targetId) {
+    clearIndexCrossHold();
     setEventHud("indexCross", `cross at x ${Math.round(intersection.x)} / y ${Math.round(intersection.y)}: no shape`);
     return;
   }
 
+  if (!indexCrossHold || indexCrossHold.objectId !== targetId) {
+    indexCrossHold = { objectId: targetId, startedAt: timestamp };
+  }
+
+  const progress = Math.min((timestamp - indexCrossHold.startedAt) / INDEX_CROSS_DELETE_HOLD_MS, 1);
+  shapeScene.setDeleteTargetObject(targetId);
+  showIndexCrossProgress(intersection.x, intersection.y, progress);
+  setEventHud("indexCross", `${targetId}: ${Math.round(progress * 100)}%`);
+
+  if (progress < 1) {
+    return;
+  }
+
+  const deletedId = shapeScene.deleteObject(targetId);
+  if (!deletedId) {
+    clearIndexCrossHold();
+    return;
+  }
+
+  clearIndexCrossHold();
   lastIndexCrossDeleteAt = timestamp;
   refreshObjectCount();
   setInteractionMode("idle");
@@ -508,6 +547,21 @@ function normalizeAngle(angle: number) {
   return normalized;
 }
 
+function clearIndexCrossHold() {
+  indexCrossHold = undefined;
+  shapeScene.setDeleteTargetObject(undefined);
+  crossDeleteProgress.hidden = true;
+  crossDeleteBar.style.width = "0%";
+}
+
+function showIndexCrossProgress(x: number, y: number, progress: number) {
+  const stageRect = arStage.getBoundingClientRect();
+  crossDeleteProgress.hidden = false;
+  crossDeleteProgress.style.left = `${x - stageRect.left}px`;
+  crossDeleteProgress.style.top = `${y - stageRect.top}px`;
+  crossDeleteBar.style.width = `${Math.round(progress * 100)}%`;
+}
+
 function renderShapeLibrary() {
   shapeLibrary.innerHTML = `
     ${SHAPE_LIBRARY.map(
@@ -534,10 +588,10 @@ function renderShapeLibrary() {
   }
 }
 
-function getShapeUnderPoint(x: number, y: number) {
+function getShapeUnderPoint(x: number, y: number, expandY = 0) {
   for (const button of shapeLibrary.querySelectorAll<HTMLButtonElement>("[data-shape]")) {
     const rect = button.getBoundingClientRect();
-    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+    if (x >= rect.left && x <= rect.right && y >= rect.top - expandY && y <= rect.bottom + expandY) {
       return button.dataset.shape as ShapeType;
     }
   }
@@ -554,7 +608,7 @@ function startTrayHold(shape: ShapeType, timestamp: number) {
 }
 
 function updateTrayHold(x: number, y: number, timestamp: number) {
-  const shape = getShapeUnderPoint(x, y);
+  const shape = getShapeUnderPoint(x, y, armedTrayShape ? 0 : TRAY_HIT_EXPAND_Y);
 
   if (interactionMode === "draggingShape") {
     return false;

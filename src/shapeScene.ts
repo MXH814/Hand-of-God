@@ -7,6 +7,7 @@ interface ShapeControllerOptions {
 }
 
 const WORLD_SCALE = 140;
+const DEPTH_STEP = 1.35;
 
 export class ShapeScene {
   private readonly scene = new THREE.Scene();
@@ -17,6 +18,8 @@ export class ShapeScene {
   private readonly objects = new Map<string, THREE.Mesh>();
   private readonly objectState = new Map<string, SceneObject>();
   private selectedObjectId?: string;
+  private activeObjectId?: string;
+  private deleteTargetObjectId?: string;
   private animationFrame = 0;
   private previewMesh?: THREE.Mesh;
   private nextObjectDepth = 0;
@@ -38,7 +41,7 @@ export class ShapeScene {
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.domElement.className = "shape-canvas";
     this.options.stageElement.appendChild(this.renderer.domElement);
-    this.camera.position.set(0, 0, 10);
+    this.camera.position.set(0, 0, 30);
     this.camera.lookAt(0, 0, 0);
     this.addLights();
     this.resize();
@@ -87,7 +90,7 @@ export class ShapeScene {
     const mesh = this.createMesh(item);
     const id = `${type}-${Date.now()}`;
     const z = this.nextObjectDepth;
-    this.nextObjectDepth += 0.08;
+    this.nextObjectDepth += DEPTH_STEP;
     mesh.position.set(point.x, point.y, z);
     mesh.scale.setScalar(item.defaultScale);
     mesh.renderOrder = Math.round(z * 1000);
@@ -173,10 +176,12 @@ export class ShapeScene {
       scale: mesh.scale.x,
       rotation: mesh.rotation.clone(),
     };
+    this.setActiveObject(objectId);
   }
 
   endTransform() {
     this.transformBase = undefined;
+    this.setActiveObject(undefined);
   }
 
   beginSingleHandTransform(point: MappedHandPoint) {
@@ -194,10 +199,12 @@ export class ShapeScene {
       x: point.x,
       z: point.z,
     };
+    this.setActiveObject(objectId);
   }
 
   endSingleHandTransform() {
     this.singleHandBase = undefined;
+    this.setActiveObject(undefined);
   }
 
   applyTransform(
@@ -267,12 +274,7 @@ export class ShapeScene {
   }
 
   selectAtScreenPoint(clientX: number, clientY: number) {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hits = this.raycaster.intersectObjects([...this.objects.values()]);
-    const id = hits[0]?.object.userData.objectId as string | undefined;
+    const id = this.getHitObjectId(clientX, clientY);
     if (id) {
       this.selectObject(id);
     }
@@ -285,6 +287,14 @@ export class ShapeScene {
 
   deleteFrontmostAtScreenPoint(clientX: number, clientY: number) {
     const id = this.getHitObjectId(clientX, clientY);
+    return this.deleteObject(id);
+  }
+
+  getFrontmostObjectAtScreenPoint(clientX: number, clientY: number) {
+    return this.getHitObjectId(clientX, clientY);
+  }
+
+  deleteObject(id: string | undefined) {
     if (!id) {
       return undefined;
     }
@@ -304,8 +314,24 @@ export class ShapeScene {
       this.transformBase = undefined;
       this.singleHandBase = undefined;
     }
+    if (this.activeObjectId === id) {
+      this.activeObjectId = undefined;
+    }
+    if (this.deleteTargetObjectId === id) {
+      this.deleteTargetObjectId = undefined;
+    }
 
     return id;
+  }
+
+  setActiveObject(id: string | undefined) {
+    this.activeObjectId = id;
+    this.updateMaterialStates();
+  }
+
+  setDeleteTargetObject(id: string | undefined) {
+    this.deleteTargetObjectId = id;
+    this.updateMaterialStates();
   }
 
   getSceneObjects(): SceneObject[] {
@@ -331,7 +357,22 @@ export class ShapeScene {
       }
       const material = mesh.material;
       if (material instanceof THREE.MeshStandardMaterial) {
-        material.emissive.set(selected ? "#2f4f46" : "#000000");
+        setMaterialHighlight(material, selected, objectId === this.activeObjectId, objectId === this.deleteTargetObjectId);
+      }
+    }
+  }
+
+  private updateMaterialStates() {
+    for (const [objectId, mesh] of this.objects.entries()) {
+      const material = mesh.material;
+      const state = this.objectState.get(objectId);
+      if (material instanceof THREE.MeshStandardMaterial) {
+        setMaterialHighlight(
+          material,
+          Boolean(state?.selected),
+          objectId === this.activeObjectId,
+          objectId === this.deleteTargetObjectId,
+        );
       }
     }
   }
@@ -409,6 +450,31 @@ function disposeMaterial(material: THREE.Material | THREE.Material[]) {
     return;
   }
   material.dispose();
+}
+
+function setMaterialHighlight(
+  material: THREE.MeshStandardMaterial,
+  selected: boolean,
+  active: boolean,
+  deleteTarget: boolean,
+) {
+  if (deleteTarget) {
+    material.emissive.set("#d1495b");
+    material.emissiveIntensity = 0.9;
+    return;
+  }
+  if (active) {
+    material.emissive.set("#f7b801");
+    material.emissiveIntensity = 0.75;
+    return;
+  }
+  if (selected) {
+    material.emissive.set("#2f4f46");
+    material.emissiveIntensity = 0.55;
+    return;
+  }
+  material.emissive.set("#000000");
+  material.emissiveIntensity = 0;
 }
 
 function clamp(value: number, min: number, max: number) {

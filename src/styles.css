@@ -220,6 +220,49 @@ video {
   backdrop-filter: blur(10px);
 }
 
+.cross-delete-progress {
+  position: absolute;
+  z-index: 7;
+  display: grid;
+  width: 112px;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 8px;
+  background: rgba(247, 251, 248, 0.92);
+  box-shadow: 0 12px 30px rgba(10, 17, 14, 0.22);
+  transform: translate(-50%, -130%);
+  pointer-events: none;
+}
+
+.cross-delete-progress[hidden] {
+  display: none;
+}
+
+.cross-delete-label {
+  color: #d1495b;
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.cross-delete-track {
+  overflow: hidden;
+  height: 6px;
+  border-radius: 999px;
+  background: #ead7da;
+}
+
+.cross-delete-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #d1495b;
+  transition: width 80ms linear;
+}
+
 .debug-panel {
   display: flex;
   max-height: calc(100vh - 110px);
