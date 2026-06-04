@@ -6,3 +6,6 @@ dist/
 *.log
 coverage/
 tmp/
+Doc.pdf
+1.png
+课件/
