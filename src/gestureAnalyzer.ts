@@ -91,6 +91,7 @@ export class GestureAnalyzer {
       palmFacing: classifyPalmFacing(palmNormal),
       fingers: getFingerStates(hand),
       pinch: getPinch(hand, pinchThreshold),
+      indexMiddleTogether: getIndexMiddleTogether(hand),
       motion,
     };
   }
@@ -129,6 +130,18 @@ function getPinch(hand: RawHand, threshold: number) {
 
   return {
     active: normalizedDistance < threshold,
+    distance: normalizedDistance,
+  };
+}
+
+function getIndexMiddleTogether(hand: RawHand) {
+  const palmSpan = distance(hand.landmarks[5], hand.landmarks[17]) || 1;
+  const normalizedDistance = distance(hand.landmarks[8], hand.landmarks[12]) / palmSpan;
+  const indexExtended = hand.landmarks[8].y < hand.landmarks[6].y;
+  const middleExtended = hand.landmarks[12].y < hand.landmarks[10].y;
+
+  return {
+    active: normalizedDistance < 0.38 && indexExtended && middleExtended,
     distance: normalizedDistance,
   };
 }

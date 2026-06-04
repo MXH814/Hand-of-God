@@ -19,6 +19,7 @@ export class ShapeScene {
   private selectedObjectId?: string;
   private animationFrame = 0;
   private previewMesh?: THREE.Mesh;
+  private nextObjectDepth = 0;
   private transformBase?: {
     objectId: string;
     scale: number;
@@ -85,15 +86,18 @@ export class ShapeScene {
 
     const mesh = this.createMesh(item);
     const id = `${type}-${Date.now()}`;
-    mesh.position.set(point.x, point.y, 0);
+    const z = this.nextObjectDepth;
+    this.nextObjectDepth += 0.08;
+    mesh.position.set(point.x, point.y, z);
     mesh.scale.setScalar(item.defaultScale);
+    mesh.renderOrder = Math.round(z * 1000);
     mesh.userData.objectId = id;
     this.scene.add(mesh);
     this.objects.set(id, mesh);
     this.objectState.set(id, {
       id,
       type,
-      position: { x: point.x, y: point.y, z: 0 },
+      position: { x: point.x, y: point.y, z },
       rotation: { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z },
       scale: item.defaultScale,
       selected: true,
@@ -135,7 +139,8 @@ export class ShapeScene {
       this.scene.add(this.previewMesh);
     }
 
-    this.previewMesh.position.set(point.x, point.y, 0.3);
+    this.previewMesh.position.set(point.x, point.y, this.nextObjectDepth + 0.16);
+    this.previewMesh.renderOrder = Math.round((this.nextObjectDepth + 0.16) * 1000);
   }
 
   applyTransformAtScreenPoint(
@@ -278,14 +283,9 @@ export class ShapeScene {
     return this.selectAtScreenPoint(clientX, clientY);
   }
 
-  deleteCubeAtScreenPoint(clientX: number, clientY: number) {
+  deleteFrontmostAtScreenPoint(clientX: number, clientY: number) {
     const id = this.getHitObjectId(clientX, clientY);
     if (!id) {
-      return undefined;
-    }
-
-    const state = this.objectState.get(id);
-    if (state?.type !== "cube") {
       return undefined;
     }
 

@@ -29,6 +29,7 @@ interface TwoHandState {
   baselineAverageScale: number;
   baselineScaleSkew: number;
   baselineZSkew: number;
+  scaleEnabled: boolean;
 }
 
 export class GestureEventEngine {
@@ -42,6 +43,7 @@ export class GestureEventEngine {
     baselineAverageScale: 1,
     baselineScaleSkew: 0,
     baselineZSkew: 0,
+    scaleEnabled: false,
   };
 
   update(
@@ -74,6 +76,7 @@ export class GestureEventEngine {
       baselineAverageScale: 1,
       baselineScaleSkew: 0,
       baselineZSkew: 0,
+      scaleEnabled: false,
     };
   }
 
@@ -144,7 +147,7 @@ export class GestureEventEngine {
     confidence: GestureConfidence,
     events: GestureEvent[],
   ) {
-    const pair = getTwoHandPinchPair(hands, mappedPoints);
+    const pair = getTwoHandControlPair(hands, mappedPoints);
     const canTransform = Boolean(pair && confidence.twoHandTransform >= 0.55);
 
     if (canTransform) {
@@ -172,6 +175,7 @@ export class GestureEventEngine {
       this.twoHandState.baselineAverageScale = getAverageScale(pair.left, pair.right);
       this.twoHandState.baselineScaleSkew = getScaleSkew(pair.left, pair.right);
       this.twoHandState.baselineZSkew = getZSkew(pair.left, pair.right);
+      this.twoHandState.scaleEnabled = pair.scaleEnabled;
       events.push({ type: "twoHandTransformStart", timestamp, transform, confidence });
       return;
     }
@@ -215,25 +219,28 @@ function getConfidence(hands: AnalyzedHand[], pinchThreshold: number): GestureCo
   };
 }
 
-function getTwoHandPinchPair(hands: AnalyzedHand[], mappedPoints: MappedHandPoint[]) {
+function getTwoHandControlPair(hands: AnalyzedHand[], mappedPoints: MappedHandPoint[]) {
   if (hands.length < 2) {
     return undefined;
   }
 
-  const pinchingHands = hands.filter((hand) => hand.pinch.active && hand.score >= 0.55);
-  if (pinchingHands.length < 2) {
+  const controlHands = hands.filter(
+    (hand) => hand.score >= 0.55 && (hand.pinch.active || hand.indexMiddleTogether.active),
+  );
+  if (controlHands.length < 2) {
     return undefined;
   }
 
-  const sortedHands = [...pinchingHands].sort((a, b) => {
+  const sortedHands = [...controlHands].sort((a, b) => {
     if (a.handedness === "Left" && b.handedness !== "Left") return -1;
     if (a.handedness !== "Left" && b.handedness === "Left") return 1;
     return b.score - a.score;
   });
   const left = mappedPoints.find((point) => point.handId === sortedHands[0].id);
   const right = mappedPoints.find((point) => point.handId === sortedHands[1].id);
+  const scaleEnabled = sortedHands[0].indexMiddleTogether.active && sortedHands[1].indexMiddleTogether.active;
 
-  return left && right ? { left, right } : undefined;
+  return left && right ? { left, right, scaleEnabled } : undefined;
 }
 
 function getTwoHandTransform(
@@ -258,11 +265,12 @@ function getTwoHandTransform(
     center,
     distance,
     angle,
-    scaleDelta: clamp(distance / (state.baselineDistance || distance || 1), 0.35, 3),
+    scaleDelta: state.scaleEnabled ? clamp(distance / (state.baselineDistance || distance || 1), 0.35, 3) : 1,
     rotationDelta: clamp(normalizeAngle(angle - state.baselineAngle) * 1.35, -Math.PI, Math.PI),
     rotationXDelta: clamp(depthDelta * 4.2, -1.35, 1.35),
     rotationYDelta: clamp(scaleSkewDelta * 3.2 + zSkewDelta * 5.5, -1.45, 1.45),
     depthDelta,
+    scaleEnabled: state.scaleEnabled,
   };
 }
 

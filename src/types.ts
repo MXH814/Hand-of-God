@@ -48,6 +48,10 @@ export interface AnalyzedHand extends RawHand {
     active: boolean;
     distance: number;
   };
+  indexMiddleTogether: {
+    active: boolean;
+    distance: number;
+  };
   motion: Vector2;
 }
 
@@ -74,6 +78,7 @@ export interface TwoHandTransform {
   rotationXDelta: number;
   rotationYDelta: number;
   depthDelta: number;
+  scaleEnabled: boolean;
 }
 
 export interface GestureEvent {

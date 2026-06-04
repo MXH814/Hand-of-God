@@ -459,16 +459,16 @@ function detectIndexCrossDelete(timestamp: number) {
     return;
   }
 
-  const deletedId = shapeScene.deleteCubeAtScreenPoint(intersection.x, intersection.y);
+  const deletedId = shapeScene.deleteFrontmostAtScreenPoint(intersection.x, intersection.y);
   if (!deletedId) {
-    setEventHud("indexCross", `cross at x ${Math.round(intersection.x)} / y ${Math.round(intersection.y)}: no cube`);
+    setEventHud("indexCross", `cross at x ${Math.round(intersection.x)} / y ${Math.round(intersection.y)}: no shape`);
     return;
   }
 
   lastIndexCrossDeleteAt = timestamp;
   refreshObjectCount();
   setInteractionMode("idle");
-  setEventHud("cubeDeleted", `${deletedId} deleted by crossed index fingers`);
+  setEventHud("shapeDeleted", `${deletedId} deleted by crossed index fingers`);
 }
 
 function isFingerExtended(hand: AnalyzedHand, name: "index") {
@@ -697,7 +697,7 @@ function refreshObjectCount() {
 
 function formatEventDetail(event: GestureEvent) {
   if (event.transform) {
-    return `scale ${event.transform.scaleDelta.toFixed(2)} / rot x ${event.transform.rotationXDelta.toFixed(2)} / y ${event.transform.rotationYDelta.toFixed(2)} / z ${event.transform.rotationDelta.toFixed(2)} / depth ${event.transform.depthDelta.toFixed(2)}`;
+    return `scale ${event.transform.scaleDelta.toFixed(2)} ${event.transform.scaleEnabled ? "on" : "off"} / rot x ${event.transform.rotationXDelta.toFixed(2)} / y ${event.transform.rotationYDelta.toFixed(2)} / z ${event.transform.rotationDelta.toFixed(2)} / depth ${event.transform.depthDelta.toFixed(2)}`;
   }
   const point = event.screenPoint ?? event.mappedPoint;
   if (point) {
