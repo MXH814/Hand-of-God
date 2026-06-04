@@ -126,6 +126,14 @@ npm run dev
 - 相关文件：`src/interactionMapper.ts`、`src/shapeScene.ts`、`src/gestureAnalyzer.ts`、`src/calibrationManager.ts`、`src/gestureEventEngine.ts`、`src/types.ts`
 - 参考：自研规则，基于 MediaPipe landmark 数据；参考 landmark-driven 控制思路：Codrops Webcam 3D HandControls, https://tympanus.net/Tutorials/webcam-3D-handcontrols/
 
+### 固定 AR 舞台布局
+
+- 功能：手势移动、旋转、缩放几何体时，摄像头窗口、骨架画布和 Three.js 叠加层保持固定，不再因为右侧 HUD 文本、手部列表或对象计数变化而抖动。
+- 技术：CSS Grid 固定视口布局、右侧调试面板内部滚动、`aspect-ratio`、`contain: layout paint size`。
+- 算法/规则：桌面布局下 `html/body/#app` 锁定为视口高度并隐藏页面级滚动；`app-shell` 使用两行 grid，把顶部栏和工作区分离；右侧调试内容只在 `.debug-panel` 内滚动；AR 舞台使用稳定宽度和 16:9 比例，并通过 containment 隔离内部叠加层，避免实时 HUD 更新参与外部布局计算。窄屏布局仍恢复页面滚动，保证移动端可访问完整调试内容。
+- 相关文件：`src/styles.css`
+- 参考：自研布局规则。
+
 ## Notes
 
 当前 AR 几何体是屏幕平面叠加原型，不包含真实深度遮挡、真实世界平面检测、物理碰撞、重力、小球玩法或完整游戏关卡。

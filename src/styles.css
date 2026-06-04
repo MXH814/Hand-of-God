@@ -14,9 +14,15 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#app {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   min-width: 320px;
-  min-height: 100vh;
   margin: 0;
 }
 
@@ -35,8 +41,11 @@ button:disabled {
 }
 
 .app-shell {
-  min-height: 100vh;
+  display: grid;
+  height: 100vh;
+  grid-template-rows: auto minmax(0, 1fr);
   padding: 18px;
+  overflow: hidden;
 }
 
 .top-bar {
@@ -78,6 +87,7 @@ h1 {
 .workspace {
   display: grid;
   width: min(1680px, 100%);
+  min-height: 0;
   grid-template-columns: minmax(720px, 1fr) 330px;
   align-items: start;
   gap: 16px;
@@ -87,9 +97,10 @@ h1 {
 .ar-stage {
   position: relative;
   overflow: hidden;
-  width: 100%;
-  min-height: 520px;
+  width: min(100%, calc(177.777vh - 199px));
+  min-width: 0;
   aspect-ratio: 16 / 9;
+  contain: layout paint size;
   border: 1px solid #9fb5aa;
   border-radius: 8px;
   background:
@@ -265,8 +276,8 @@ video {
 
 .debug-panel {
   display: flex;
-  max-height: calc(100vh - 110px);
-  min-height: 520px;
+  height: calc(100vh - 112px);
+  min-height: 0;
   flex-direction: column;
   gap: 12px;
   overflow: auto;
@@ -511,12 +522,30 @@ video {
 }
 
 @media (max-width: 1180px) {
+  html,
+  body,
+  #app {
+    height: auto;
+    overflow: auto;
+  }
+
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
   .workspace {
     grid-template-columns: 1fr;
   }
 
+  .ar-stage {
+    height: auto;
+    min-height: auto;
+  }
+
   .debug-panel {
-    max-height: none;
+    height: auto;
     min-height: 0;
     border-left: 0;
     border-top: 1px solid #c7d5ce;
