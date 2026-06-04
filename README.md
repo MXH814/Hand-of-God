@@ -7,6 +7,7 @@
 - Vite + TypeScript
 - Google MediaPipe Tasks Vision Hand Landmarker
 - Browser camera via `getUserMedia`
+- Local MediaPipe model and wasm assets under `public/vendor/mediapipe`
 
 ## Development
 
@@ -15,18 +16,26 @@ npm install
 npm run dev
 ```
 
-打开 Vite 输出的本地地址后，允许浏览器摄像头权限即可开始识别。
+打开 Vite 输出的本地地址后，点击 `Start`，允许浏览器摄像头权限即可开始识别。
 
-如果 Windows 环境里 `vite` shim 被权限拦截，当前 `npm run dev` 已改为显式调用 `node ./node_modules/vite/bin/vite.js`，不需要额外处理。
+也可以直接双击 `start-project.bat` 启动项目。脚本会自动进入项目目录，缺少依赖时先执行 `npm install`，然后启动本地服务并打开 `http://127.0.0.1:5173/`。
 
-## Debug Panel
+## Implemented Features
 
-第一版只实现基础手势识别调试能力：
+当前第一版只实现基础手势识别调试能力，不包含游戏玩法或手势驱动页面缩放。
 
+- 摄像头启动/停止控制。
 - 摄像头画面叠加 MediaPipe Hands 21 个关节点和骨架连接。
 - 最多同时识别两只手，并显示左右手标签与置信度。
-- 显示拇指食指捏合状态、归一化捏合距离、手掌朝向、手部运动向量和伸展手指列表。
-- 支持镜像画面和一阶低通平滑强度调节。
+- 显示拇指食指捏合状态和归一化捏合距离。
+- 显示手掌朝向：`camera`、`away`、`side`。
+- 显示手部运动向量：`Motion x/y`。
+- 显示伸展手指列表：`thumb`、`index`、`middle`、`ring`、`pinky`。
+- 支持镜像画面开关。
+- 支持一阶低通平滑强度调节，降低运动向量抖动。
+- MediaPipe 模型和 wasm 已本地托管，避免启动时依赖外网 CDN。
+
+如果浏览器页面在张开手掌时出现缩放，那不是本项目代码实现的功能。本项目没有监听手势去修改页面缩放、浏览器缩放或 CSS scale；这种情况更可能来自系统/浏览器/触控板/扩展的缩放手势。
 
 ## Verification
 
@@ -36,6 +45,8 @@ npm run build
 
 手动演示时建议依次验证：
 
+- 点击 `Start` 后状态从 `Idle` 变为 `Tracking`。
+- 摄像头画面启动后，中间的 `Click Start to enable camera` 提示消失。
 - 单手进入画面后出现 21 点骨架。
 - 双手进入画面后出现两组数据。
 - 拇指和食指靠近时 `Pinch` 从 `open` 变为 `active`。
@@ -44,7 +55,13 @@ npm run build
 
 ## Git Workflow
 
-项目使用 `main` 作为主分支，功能按小步提交管理。远端仓库计划为 `https://github.com/MXH814/hci-gesture-game`。
+项目使用 `main` 作为主分支，功能按小步提交管理。远端仓库为 `https://github.com/MXH814/hci-gesture-game`。
+
+本地资料文件不会推送到 GitHub：
+
+- `Doc.pdf`
+- `1.png`
+- `课件/`
 
 推荐提交节奏：
 

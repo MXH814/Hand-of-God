@@ -122,6 +122,10 @@ canvas {
   font-weight: 800;
 }
 
+.empty-state[hidden] {
+  display: none;
+}
+
 .debug-panel {
   display: flex;
   min-height: 420px;
