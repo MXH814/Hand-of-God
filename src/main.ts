@@ -25,7 +25,7 @@ app.innerHTML = `
       <div class="video-shell">
         <video id="camera" playsinline muted></video>
         <canvas id="overlay"></canvas>
-        <div class="empty-state" id="empty-state">Camera off</div>
+        <div class="empty-state" id="empty-state">Click Start to enable camera</div>
       </div>
 
       <aside class="debug-panel">
@@ -117,22 +117,21 @@ async function startCamera() {
   setStatus("Loading model");
 
   try {
-    tracker = new HandTracker(video, renderFrame, setStatus, trackerOptions);
+    tracker = new HandTracker(video, renderFrame, setStatus, setStatus, trackerOptions);
     await tracker.start();
     running = true;
     emptyState.hidden = true;
     toggleLabel.textContent = "Stop";
     replaceIcon(toggleButton, CameraOff);
-    setStatus("Tracking");
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : "Camera failed");
-    stopCamera();
+    const message = error instanceof Error ? error.message : "Camera failed";
+    stopCamera(message);
   } finally {
     toggleButton.disabled = false;
   }
 }
 
-function stopCamera() {
+function stopCamera(status = "Idle") {
   tracker?.stop();
   tracker = undefined;
   running = false;
@@ -145,7 +144,7 @@ function stopCamera() {
   handCountNode.textContent = "0";
   toggleLabel.textContent = "Start";
   replaceIcon(toggleButton, Camera);
-  setStatus("Idle");
+  setStatus(status);
 }
 
 function renderFrame(frame: TrackingFrame) {

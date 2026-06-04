@@ -5,10 +5,9 @@ import {
 } from "@mediapipe/tasks-vision";
 import type { RawHand, TrackingFrame } from "./types";
 
-const WASM_BASE =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm";
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
+const WASM_BASE = "/vendor/mediapipe/wasm";
+const MODEL_URL = "/vendor/mediapipe/models/hand_landmarker.task";
+const MODEL_LOAD_TIMEOUT_MS = 25000;
 
 export interface HandTrackerOptions {
   numHands: number;
@@ -28,29 +27,31 @@ export class HandTracker {
     private readonly video: HTMLVideoElement,
     private readonly onFrame: (frame: TrackingFrame) => void,
     private readonly onError: (message: string) => void,
+    private readonly onStatus: (message: string) => void,
     private options: HandTrackerOptions,
   ) {}
 
   async initialize() {
-    const vision = await FilesetResolver.forVisionTasks(WASM_BASE);
-    this.landmarker = await HandLandmarker.createFromOptions(vision, {
+    const vision = await withTimeout(
+      FilesetResolver.forVisionTasks(WASM_BASE),
+      MODEL_LOAD_TIMEOUT_MS,
+      "MediaPipe wasm loading timed out.",
+    );
+    this.landmarker = await withTimeout(HandLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath: MODEL_URL,
-        delegate: "GPU",
+        delegate: "CPU",
       },
       runningMode: "VIDEO",
       numHands: this.options.numHands,
       minHandDetectionConfidence: this.options.minHandDetectionConfidence,
       minHandPresenceConfidence: this.options.minHandPresenceConfidence,
       minTrackingConfidence: this.options.minTrackingConfidence,
-    });
+    }), MODEL_LOAD_TIMEOUT_MS, "Hand landmark model loading timed out.");
   }
 
   async start() {
-    if (!this.landmarker) {
-      await this.initialize();
-    }
-
+    this.onStatus("Requesting camera");
     this.stream = await navigator.mediaDevices.getUserMedia({
       video: {
         width: { ideal: 1280 },
@@ -62,7 +63,14 @@ export class HandTracker {
 
     this.video.srcObject = this.stream;
     await this.video.play();
+
+    if (!this.landmarker) {
+      this.onStatus("Loading local model");
+      await this.initialize();
+    }
+
     this.lastFpsTimestamp = performance.now();
+    this.onStatus("Tracking");
     this.tick();
   }
 
@@ -130,4 +138,15 @@ export class HandTracker {
       videoHeight: this.video.videoHeight,
     };
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+
+    promise
+      .then((value) => resolve(value))
+      .catch((error: unknown) => reject(error))
+      .finally(() => window.clearTimeout(timeout));
+  });
 }
