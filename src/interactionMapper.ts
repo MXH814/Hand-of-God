@@ -25,6 +25,16 @@ export class InteractionMapper {
     return hands.map((hand) => this.mapHand(hand, bounds));
   }
 
+  mapLandmark(hand: AnalyzedHand, landmarkIndex: number, bounds: DOMRect): Vector2 {
+    const landmark = hand.landmarks[landmarkIndex];
+    const normalizedX = this.mirror ? 1 - landmark.x : landmark.x;
+
+    return {
+      x: bounds.left + normalizedX * bounds.width,
+      y: bounds.top + landmark.y * bounds.height,
+    };
+  }
+
   toScenePoint(point: MappedHandPoint, bounds: DOMRect): Vector2 {
     return {
       x: ((point.x - bounds.left) / bounds.width - 0.5) * 6,

@@ -278,8 +278,47 @@ export class ShapeScene {
     return this.selectAtScreenPoint(clientX, clientY);
   }
 
+  deleteCubeAtScreenPoint(clientX: number, clientY: number) {
+    const id = this.getHitObjectId(clientX, clientY);
+    if (!id) {
+      return undefined;
+    }
+
+    const state = this.objectState.get(id);
+    if (state?.type !== "cube") {
+      return undefined;
+    }
+
+    const mesh = this.objects.get(id);
+    if (!mesh) {
+      return undefined;
+    }
+
+    this.scene.remove(mesh);
+    mesh.geometry.dispose();
+    disposeMaterial(mesh.material);
+    this.objects.delete(id);
+    this.objectState.delete(id);
+    if (this.selectedObjectId === id) {
+      this.selectedObjectId = undefined;
+      this.transformBase = undefined;
+      this.singleHandBase = undefined;
+    }
+
+    return id;
+  }
+
   getSceneObjects(): SceneObject[] {
     return [...this.objectState.values()];
+  }
+
+  private getHitObjectId(clientX: number, clientY: number) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hits = this.raycaster.intersectObjects([...this.objects.values()]);
+    return hits[0]?.object.userData.objectId as string | undefined;
   }
 
   private selectObject(id: string) {

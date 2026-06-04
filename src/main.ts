@@ -18,6 +18,8 @@ import type {
 } from "./types";
 
 const TRAY_HOLD_MS = 1000;
+const INDEX_CROSS_DELETE_COOLDOWN_MS = 900;
+const INDEX_CROSS_MIN_ANGLE = Math.PI / 5;
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -165,6 +167,7 @@ let trayHold:
     }
   | undefined;
 let armedTrayShape: ShapeType | undefined;
+let lastIndexCrossDeleteAt = 0;
 
 mountIcons();
 renderShapeLibrary();
@@ -287,6 +290,7 @@ function renderFrame(frame: TrackingFrame) {
   resizeCanvas(frame.videoWidth, frame.videoHeight);
   drawHands(latestHands, frame.videoWidth, frame.videoHeight);
   applyGestureEvents(events);
+  detectIndexCrossDelete(frame.timestamp);
   renderCalibration();
   fpsNode.textContent = frame.fps.toFixed(1);
   handCountNode.textContent = String(latestHands.length);
@@ -425,6 +429,83 @@ function drawHands(hands: AnalyzedHand[], width: number, height: number) {
       context.fill();
     });
   }
+}
+
+function detectIndexCrossDelete(timestamp: number) {
+  if (!calibration.isInteractive() || timestamp - lastIndexCrossDeleteAt < INDEX_CROSS_DELETE_COOLDOWN_MS) {
+    return;
+  }
+
+  const candidates = latestHands.filter((hand) => hand.score >= 0.55 && isFingerExtended(hand, "index"));
+  if (candidates.length < 2) {
+    return;
+  }
+
+  const stageBounds = arStage.getBoundingClientRect();
+  const [first, second] = candidates
+    .slice(0, 2)
+    .map((hand) => ({
+      hand,
+      start: mapper.mapLandmark(hand, 5, stageBounds),
+      end: mapper.mapLandmark(hand, 8, stageBounds),
+    }));
+  const intersection = getSegmentIntersection(first.start, first.end, second.start, second.end);
+  if (!intersection) {
+    return;
+  }
+
+  const angle = getLineAngle(first.start, first.end, second.start, second.end);
+  if (angle < INDEX_CROSS_MIN_ANGLE) {
+    return;
+  }
+
+  const deletedId = shapeScene.deleteCubeAtScreenPoint(intersection.x, intersection.y);
+  if (!deletedId) {
+    setEventHud("indexCross", `cross at x ${Math.round(intersection.x)} / y ${Math.round(intersection.y)}: no cube`);
+    return;
+  }
+
+  lastIndexCrossDeleteAt = timestamp;
+  refreshObjectCount();
+  setInteractionMode("idle");
+  setEventHud("cubeDeleted", `${deletedId} deleted by crossed index fingers`);
+}
+
+function isFingerExtended(hand: AnalyzedHand, name: "index") {
+  return hand.fingers.some((finger) => finger.name === name && finger.extended);
+}
+
+function getSegmentIntersection(a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }, d: { x: number; y: number }) {
+  const denominator = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
+  if (Math.abs(denominator) < 0.001) {
+    return undefined;
+  }
+
+  const t = ((a.x - c.x) * (c.y - d.y) - (a.y - c.y) * (c.x - d.x)) / denominator;
+  const u = -((a.x - b.x) * (a.y - c.y) - (a.y - b.y) * (a.x - c.x)) / denominator;
+
+  if (t < 0 || t > 1 || u < 0 || u > 1) {
+    return undefined;
+  }
+
+  return {
+    x: a.x + t * (b.x - a.x),
+    y: a.y + t * (b.y - a.y),
+  };
+}
+
+function getLineAngle(a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }, d: { x: number; y: number }) {
+  const angleA = Math.atan2(b.y - a.y, b.x - a.x);
+  const angleB = Math.atan2(d.y - c.y, d.x - c.x);
+  const diff = Math.abs(normalizeAngle(angleA - angleB));
+  return Math.min(diff, Math.PI - diff);
+}
+
+function normalizeAngle(angle: number) {
+  let normalized = angle;
+  while (normalized > Math.PI) normalized -= Math.PI * 2;
+  while (normalized < -Math.PI) normalized += Math.PI * 2;
+  return normalized;
 }
 
 function renderShapeLibrary() {

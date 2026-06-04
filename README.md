@@ -78,6 +78,14 @@ npm run dev
 - 相关文件：`src/shapeScene.ts`、`src/shapeLibrary.ts`、`src/main.ts`
 - 参考：Three.js, https://github.com/mrdoob/three.js；Codrops Creating a 3D Hand Controller, https://tympanus.net/codrops/2024/10/24/creating-a-3d-hand-controller-using-a-webcam-with-mediapipe-and-three-js/
 
+### 双食指交叉删除立方体
+
+- 功能：双手食指交叉时，交叉点命中的立方体会被删除；交叉点没有命中立方体时只显示调试提示，不删除其他几何体。
+- 技术：MediaPipe 21 点关键点、线段相交检测、Three.js raycaster。
+- 算法/规则：每只手取食指根部 `5` 到食指尖 `8` 作为食指线段；两只手食指均伸展、两条线段在 `ar-stage` 屏幕坐标内相交且夹角大于阈值时，使用交叉点做 Three.js 命中测试；只允许删除 `cube` 类型对象，并设置 900ms 冷却避免一次交叉连续删除多个立方体。
+- 相关文件：`src/main.ts`、`src/shapeScene.ts`、`src/interactionMapper.ts`
+- 参考：自研规则，基于 MediaPipe landmark 数据。
+
 ### 调试 HUD
 
 - 功能：显示 FPS、识别到的手数量、对象数量、当前交互模式、手势事件、Pinch/Palm/Motion/Fingers 等调试信息。
@@ -125,6 +133,7 @@ npm run build
 - 几何体直接显示在摄像头画面上，不出现独立 3D 分屏或坐标图。
 - Pinch 已生成对象可选中并移动。
 - 双手都捏合后可控制选中几何体的位置、缩放和三轴旋转；双手前后移动时应能看到 X/Y 轴旋转响应。
+- 双手食指交叉时，如果交叉点落在某个立方体上，该立方体会被删除；球体、圆柱、圆锥和圆环不会被这个手势删除。
 - 右侧面板内容变化不影响摄像头主舞台尺寸。
 
 ## Git Workflow
