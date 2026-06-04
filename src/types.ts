@@ -10,6 +10,8 @@ export type GestureEventType =
   | "twoHandTransformMove"
   | "twoHandTransformEnd";
 export type ShapeType = "cube" | "sphere" | "cylinder" | "cone" | "torus";
+export type CalibrationStage = "idle" | "openHand" | "pinch" | "ready" | "skipped";
+export type InteractionMode = "idle" | "draggingShape" | "movingObject" | "twoHandTransform";
 
 export interface Vector2 {
   x: number;
@@ -74,8 +76,18 @@ export interface GestureEvent {
   timestamp: number;
   primaryHand?: AnalyzedHand;
   mappedPoint?: MappedHandPoint;
+  screenPoint?: Vector2;
   transform?: TwoHandTransform;
   confidence: GestureConfidence;
+  calibratedConfidence?: GestureConfidence;
+}
+
+export interface CalibrationProfile {
+  openPalmSpan: number;
+  pinchDistance: number;
+  pinchThreshold: number;
+  confidenceBaseline: number;
+  createdAt: number;
 }
 
 export interface SceneObject {

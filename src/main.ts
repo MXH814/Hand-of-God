@@ -1,6 +1,7 @@
 import "./styles.css";
 import { Camera, CameraOff, createElement, FlipHorizontal, RotateCcw } from "lucide";
 import { HandLandmarker } from "@mediapipe/tasks-vision";
+import { CalibrationManager } from "./calibrationManager";
 import { GestureAnalyzer } from "./gestureAnalyzer";
 import { GestureEventEngine } from "./gestureEventEngine";
 import { HandTracker, type HandTrackerOptions } from "./handTracker";
@@ -10,6 +11,7 @@ import { ShapeScene } from "./shapeScene";
 import type {
   AnalyzedHand,
   GestureEvent,
+  InteractionMode,
   MappedHandPoint,
   ShapeType,
   TrackingFrame,
@@ -26,25 +28,31 @@ app.innerHTML = `
     <header class="top-bar">
       <div>
         <p class="eyebrow">HCI Gesture Game</p>
-        <h1>Gesture Geometry Sandbox</h1>
+        <h1>Gesture AR Workspace</h1>
       </div>
       <div class="status-pill" id="status">Idle</div>
     </header>
 
     <section class="workspace">
-      <div class="viewport-stack">
-        <div class="video-shell" id="video-shell">
-          <video id="camera" playsinline muted></video>
-          <canvas id="overlay"></canvas>
-          <div class="empty-state" id="empty-state">Click Start to enable camera</div>
-        </div>
-        <div class="scene-shell">
-          <div class="scene-header">
-            <span>3D Sandbox</span>
-            <strong id="object-count">0 objects</strong>
+      <div class="ar-stage" id="ar-stage">
+        <video id="camera" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="empty-state" id="empty-state">Click Start to enable camera</div>
+
+        <div class="calibration-layer" id="calibration-layer" hidden>
+          <div class="calibration-card">
+            <span class="metric-label">Calibration</span>
+            <strong id="calibration-title">Calibration idle</strong>
+            <p id="calibration-detail">Start camera to calibrate hand gestures.</p>
+            <div class="progress-track"><span id="calibration-progress"></span></div>
+            <div class="calibration-actions">
+              <button class="secondary-button" id="skip-calibration" type="button">Skip</button>
+              <button class="secondary-button" id="recalibrate-overlay" type="button">Calibrate</button>
+            </div>
           </div>
-          <div class="scene-viewport" id="scene-viewport"></div>
         </div>
+
+        <div class="shape-tray" id="shape-library"></div>
       </div>
 
       <aside class="debug-panel">
@@ -58,12 +66,23 @@ app.innerHTML = `
           </button>
         </div>
 
-        <div class="shape-library" id="shape-library"></div>
+        <button class="secondary-button full-width" id="recalibrate-panel" type="button">Calibrate</button>
 
         <div class="event-panel">
           <span class="metric-label">Gesture Event</span>
           <strong id="event-name">none</strong>
           <p id="event-detail">Waiting for hand input</p>
+        </div>
+
+        <div class="metric-grid">
+          <div>
+            <span class="metric-label">Objects</span>
+            <strong id="object-count">0</strong>
+          </div>
+          <div>
+            <span class="metric-label">Mode</span>
+            <strong id="interaction-mode">idle</strong>
+          </div>
         </div>
 
         <div class="control-row">
@@ -96,8 +115,7 @@ app.innerHTML = `
 
 const video = getElement<HTMLVideoElement>("camera");
 const canvas = getElement<HTMLCanvasElement>("overlay");
-const videoShell = getElement<HTMLDivElement>("video-shell");
-const sceneViewport = getElement<HTMLDivElement>("scene-viewport");
+const arStage = getElement<HTMLDivElement>("ar-stage");
 const emptyState = getElement<HTMLDivElement>("empty-state");
 const statusNode = getElement<HTMLDivElement>("status");
 const toggleButton = getElement<HTMLButtonElement>("toggle-camera");
@@ -112,11 +130,20 @@ const shapeLibrary = getElement<HTMLDivElement>("shape-library");
 const eventName = getElement<HTMLElement>("event-name");
 const eventDetail = getElement<HTMLParagraphElement>("event-detail");
 const objectCount = getElement<HTMLElement>("object-count");
+const interactionModeNode = getElement<HTMLElement>("interaction-mode");
+const calibrationLayer = getElement<HTMLDivElement>("calibration-layer");
+const calibrationTitle = getElement<HTMLElement>("calibration-title");
+const calibrationDetail = getElement<HTMLParagraphElement>("calibration-detail");
+const calibrationProgress = getElement<HTMLSpanElement>("calibration-progress");
+const skipCalibrationButton = getElement<HTMLButtonElement>("skip-calibration");
+const recalibrateOverlayButton = getElement<HTMLButtonElement>("recalibrate-overlay");
+const recalibratePanelButton = getElement<HTMLButtonElement>("recalibrate-panel");
 
 const analyzer = new GestureAnalyzer();
 const mapper = new InteractionMapper();
+const calibration = new CalibrationManager();
 const eventEngine = new GestureEventEngine();
-const shapeScene = new ShapeScene({ container: sceneViewport, library: SHAPE_LIBRARY });
+const shapeScene = new ShapeScene({ stageElement: arStage, library: SHAPE_LIBRARY });
 const trackerOptions: HandTrackerOptions = {
   numHands: 2,
   minHandDetectionConfidence: 0.55,
@@ -126,13 +153,16 @@ const trackerOptions: HandTrackerOptions = {
 let tracker: HandTracker | undefined;
 let running = false;
 let latestHands: AnalyzedHand[] = [];
-let activeDraggedShape: ShapeType | undefined;
 let latestMappedPoints: MappedHandPoint[] = [];
+let activeDraggedShape: ShapeType | undefined;
+let interactionMode: InteractionMode = "idle";
 
 mountIcons();
 renderShapeLibrary();
 setMirror(true);
 renderHandsList([]);
+renderCalibration();
+setInteractionMode("idle");
 
 toggleButton.addEventListener("click", async () => {
   if (running) {
@@ -146,6 +176,7 @@ toggleButton.addEventListener("click", async () => {
 resetButton.addEventListener("click", () => {
   analyzer.reset();
   eventEngine.reset();
+  setInteractionMode("idle");
   setEventHud("reset", "Smoothing and event state cleared");
 });
 
@@ -153,8 +184,21 @@ mirrorInput.addEventListener("change", () => {
   setMirror(mirrorInput.checked);
 });
 
-sceneViewport.addEventListener("click", (event) => {
-  const selected = shapeScene.selectAt(event.clientX, event.clientY);
+skipCalibrationButton.addEventListener("click", () => {
+  calibration.skip();
+  renderCalibration();
+  setStatus("Skipped calibration");
+});
+
+recalibrateOverlayButton.addEventListener("click", startCalibration);
+recalibratePanelButton.addEventListener("click", startCalibration);
+
+arStage.addEventListener("click", (event) => {
+  if (isInsideShapeTray(event.clientX, event.clientY)) {
+    return;
+  }
+
+  const selected = shapeScene.selectAtScreenPoint(event.clientX, event.clientY);
   if (selected) {
     refreshObjectCount();
     setEventHud("sceneSelect", selected);
@@ -174,12 +218,27 @@ async function startCamera() {
     emptyState.hidden = true;
     toggleLabel.textContent = "Stop";
     replaceIcon(toggleButton, CameraOff);
+    startCalibration();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Camera failed";
     stopCamera(message);
   } finally {
     toggleButton.disabled = false;
   }
+}
+
+function startCalibration() {
+  if (!running) {
+    setEventHud("calibration", "Start camera before calibration");
+    return;
+  }
+
+  analyzer.reset();
+  eventEngine.reset();
+  calibration.start();
+  setInteractionMode("idle");
+  renderCalibration();
+  setStatus("Calibrating");
 }
 
 function stopCamera(status = "Idle") {
@@ -191,26 +250,34 @@ function stopCamera(status = "Idle") {
   activeDraggedShape = undefined;
   analyzer.reset();
   eventEngine.reset();
+  calibration.reset();
   shapeScene.setPreview(undefined);
   clearCanvas();
   renderHandsList([]);
+  renderCalibration();
   emptyState.hidden = false;
   fpsNode.textContent = "0.0";
   handCountNode.textContent = "0";
   toggleLabel.textContent = "Start";
   replaceIcon(toggleButton, Camera);
+  setInteractionMode("idle");
   setStatus(status);
   setEventHud("none", "Waiting for hand input");
 }
 
 function renderFrame(frame: TrackingFrame) {
   const smoothing = Number(smoothingInput.value);
-  latestHands = analyzer.analyze(frame.hands, smoothing);
-  latestMappedPoints = mapper.mapHands(latestHands, videoShell.getBoundingClientRect());
-  const events = eventEngine.update(latestHands, latestMappedPoints, frame.timestamp);
+  latestHands = analyzer.analyze(frame.hands, smoothing, calibration.getPinchThreshold());
+  calibration.update(latestHands, frame.timestamp);
+  latestMappedPoints = mapper.mapHands(latestHands, arStage.getBoundingClientRect());
+  const events = calibration.isInteractive()
+    ? eventEngine.update(latestHands, latestMappedPoints, frame.timestamp, calibration.getProfile())
+    : [];
+
   resizeCanvas(frame.videoWidth, frame.videoHeight);
   drawHands(latestHands, frame.videoWidth, frame.videoHeight);
   applyGestureEvents(events);
+  renderCalibration();
   fpsNode.textContent = frame.fps.toFixed(1);
   handCountNode.textContent = String(latestHands.length);
   renderHandsList(latestHands);
@@ -221,72 +288,84 @@ function applyGestureEvents(events: GestureEvent[]) {
     setEventHud(event.type, formatEventDetail(event));
 
     if (event.type === "pinchStart" || event.type === "pinchMove") {
-      handlePinchDrag(event);
+      handlePinch(event);
     }
 
     if (event.type === "pinchEnd") {
-      finishPinchDrag(event);
+      finishPinch(event);
+    }
+
+    if (event.type === "twoHandTransformStart") {
+      setInteractionMode("twoHandTransform");
     }
 
     if (event.type === "twoHandTransformMove" && event.transform) {
-      const scenePoint = mapper.toScenePoint(
-        {
-          handId: "two-hand-center",
-          handedness: "Unknown",
-          x: event.transform.center.x,
-          y: event.transform.center.y,
-        },
-        sceneViewport.getBoundingClientRect(),
+      shapeScene.applyTransformAtScreenPoint(
+        event.transform.center.x,
+        event.transform.center.y,
+        event.transform.scaleDelta,
+        event.transform.rotationDelta,
       );
-      shapeScene.applyTransform(scenePoint, event.transform.scaleDelta, event.transform.rotationDelta);
+      refreshObjectCount();
+    }
+
+    if (event.type === "twoHandTransformEnd") {
+      setInteractionMode("idle");
+    }
+  }
+}
+
+function handlePinch(event: GestureEvent) {
+  const point = event.screenPoint ?? event.mappedPoint;
+  if (!point) {
+    return;
+  }
+
+  if (event.type === "pinchStart") {
+    activeDraggedShape = getShapeUnderPoint(point.x, point.y);
+    if (activeDraggedShape) {
+      setInteractionMode("draggingShape");
+      shapeScene.setPreviewAtScreenPoint(activeDraggedShape, point.x, point.y);
+      return;
+    }
+
+    const selected = shapeScene.selectAtScreenPoint(point.x, point.y);
+    if (selected) {
+      setInteractionMode("movingObject");
+      setEventHud("objectSelected", selected);
+    }
+  }
+
+  if (event.type === "pinchMove") {
+    if (interactionMode === "draggingShape" && activeDraggedShape) {
+      shapeScene.setPreviewAtScreenPoint(activeDraggedShape, point.x, point.y);
+      return;
+    }
+
+    if (interactionMode === "movingObject") {
+      shapeScene.moveSelectedAtScreenPoint(point.x, point.y);
       refreshObjectCount();
     }
   }
 }
 
-function handlePinchDrag(event: GestureEvent) {
-  if (!event.mappedPoint) {
-    return;
-  }
+function finishPinch(event: GestureEvent) {
+  const point = event.screenPoint ?? event.mappedPoint;
 
-  if (!activeDraggedShape) {
-    activeDraggedShape = getShapeUnderPoint(event.mappedPoint.x, event.mappedPoint.y);
-  }
-
-  if (!activeDraggedShape) {
-    shapeScene.selectAt(event.mappedPoint.x, event.mappedPoint.y);
-    return;
-  }
-
-  const scenePoint = mapper.toScenePoint(event.mappedPoint, sceneViewport.getBoundingClientRect());
-  shapeScene.setPreview(activeDraggedShape, scenePoint);
-}
-
-function finishPinchDrag(event: GestureEvent) {
-  if (!activeDraggedShape || !event.mappedPoint) {
-    activeDraggedShape = undefined;
-    shapeScene.setPreview(undefined);
-    return;
-  }
-
-  const sceneBounds = sceneViewport.getBoundingClientRect();
-  const insideScene =
-    event.mappedPoint.x >= sceneBounds.left &&
-    event.mappedPoint.x <= sceneBounds.right &&
-    event.mappedPoint.y >= sceneBounds.top &&
-    event.mappedPoint.y <= sceneBounds.bottom;
-
-  if (insideScene) {
-    const scenePoint = mapper.toScenePoint(event.mappedPoint, sceneBounds);
-    const id = shapeScene.addShape(activeDraggedShape, scenePoint);
-    if (id) {
-      setEventHud("shapeCreated", `${activeDraggedShape} -> ${id}`);
-      refreshObjectCount();
+  if (interactionMode === "draggingShape" && activeDraggedShape && point) {
+    const insideStage = isInsideStage(point.x, point.y);
+    if (insideStage && !isInsideShapeTray(point.x, point.y)) {
+      const id = shapeScene.addShapeAtScreenPoint(activeDraggedShape, point.x, point.y);
+      if (id) {
+        setEventHud("shapeCreated", `${activeDraggedShape} -> ${id}`);
+        refreshObjectCount();
+      }
     }
   }
 
   activeDraggedShape = undefined;
   shapeScene.setPreview(undefined);
+  setInteractionMode("idle");
 }
 
 function drawHands(hands: AnalyzedHand[], width: number, height: number) {
@@ -302,7 +381,7 @@ function drawHands(hands: AnalyzedHand[], width: number, height: number) {
   for (const hand of hands) {
     const accent = hand.handedness === "Left" ? "#0f8b8d" : "#d1495b";
 
-    context.strokeStyle = "rgba(28, 40, 35, 0.72)";
+    context.strokeStyle = "rgba(232, 240, 235, 0.82)";
     for (const connection of HandLandmarker.HAND_CONNECTIONS) {
       const from = hand.landmarks[connection.start];
       const to = hand.landmarks[connection.end];
@@ -323,23 +402,21 @@ function drawHands(hands: AnalyzedHand[], width: number, height: number) {
 
 function renderShapeLibrary() {
   shapeLibrary.innerHTML = `
-    <span class="metric-label">Shape Library</span>
-    <div class="shape-grid">
-      ${SHAPE_LIBRARY.map(
-        (shape) => `
-          <button class="shape-button" type="button" data-shape="${shape.type}">
-            <span class="shape-swatch" style="background: ${shape.color}"></span>
-            <span>${shape.label}</span>
-          </button>
-        `,
-      ).join("")}
-    </div>
+    ${SHAPE_LIBRARY.map(
+      (shape) => `
+        <button class="shape-button" type="button" data-shape="${shape.type}">
+          <span class="shape-swatch" style="background: ${shape.color}"></span>
+          <span>${shape.label}</span>
+        </button>
+      `,
+    ).join("")}
   `;
 
   for (const button of shapeLibrary.querySelectorAll<HTMLButtonElement>("[data-shape]")) {
     button.addEventListener("click", () => {
       const type = button.dataset.shape as ShapeType;
-      const id = shapeScene.addShape(type, { x: 0, y: 0 });
+      const rect = arStage.getBoundingClientRect();
+      const id = shapeScene.addShapeAtScreenPoint(type, rect.left + rect.width / 2, rect.top + rect.height / 2);
       if (id) {
         refreshObjectCount();
         setEventHud("shapeCreated", `${type} -> ${id}`);
@@ -382,11 +459,34 @@ function renderHand(hand: AnalyzedHand) {
       <dl>
         <div><dt>Pinch</dt><dd class="${hand.pinch.active ? "hot" : ""}">${hand.pinch.active ? "active" : "open"} / ${hand.pinch.distance.toFixed(2)}</dd></div>
         <div><dt>Palm</dt><dd>${hand.palmFacing}</dd></div>
-        <div><dt>Motion</dt><dd>x ${formatMotion(hand.motion.x)} · y ${formatMotion(hand.motion.y)}</dd></div>
+        <div><dt>Motion</dt><dd>x ${formatMotion(hand.motion.x)} / y ${formatMotion(hand.motion.y)}</dd></div>
         <div><dt>Fingers</dt><dd>${activeFingers || "none"}</dd></div>
       </dl>
     </article>
   `;
+}
+
+function renderCalibration() {
+  const state = calibration.getState();
+  calibrationLayer.hidden = !running || calibration.isInteractive();
+  calibrationTitle.textContent = state.prompt;
+  calibrationProgress.style.width = `${Math.round(state.progress * 100)}%`;
+
+  if (running && state.stage !== "idle") {
+    setStatus(state.prompt);
+  }
+
+  if (state.stage === "openHand") {
+    calibrationDetail.textContent = "Open your hand and hold it steady for 1 second.";
+  } else if (state.stage === "pinch") {
+    calibrationDetail.textContent = "Touch thumb and index finger together and hold for 1 second.";
+  } else if (state.stage === "ready") {
+    calibrationDetail.textContent = `Ready. Pinch threshold ${state.profile?.pinchThreshold.toFixed(2) ?? "0.45"}.`;
+  } else if (state.stage === "skipped") {
+    calibrationDetail.textContent = "Using default gesture thresholds.";
+  } else {
+    calibrationDetail.textContent = "Start camera to calibrate hand gestures.";
+  }
 }
 
 function resizeCanvas(width: number, height: number) {
@@ -411,6 +511,11 @@ function setStatus(message: string) {
   statusNode.textContent = message;
 }
 
+function setInteractionMode(mode: InteractionMode) {
+  interactionMode = mode;
+  interactionModeNode.textContent = mode;
+}
+
 function setEventHud(name: string, detail: string) {
   eventName.textContent = name;
   eventDetail.textContent = detail;
@@ -418,24 +523,33 @@ function setEventHud(name: string, detail: string) {
 
 function refreshObjectCount() {
   const count = shapeScene.getSceneObjects().length;
-  objectCount.textContent = `${count} ${count === 1 ? "object" : "objects"}`;
+  objectCount.textContent = String(count);
 }
 
 function formatEventDetail(event: GestureEvent) {
   if (event.transform) {
-    return `scale ${event.transform.scaleDelta.toFixed(2)} · rotate ${event.transform.rotationDelta.toFixed(2)}`;
+    return `scale ${event.transform.scaleDelta.toFixed(2)} / rotate ${event.transform.rotationDelta.toFixed(2)}`;
   }
-  if (event.mappedPoint) {
-    return `x ${Math.round(event.mappedPoint.x)} · y ${Math.round(event.mappedPoint.y)} · pinch ${event.confidence.pinch.toFixed(2)}`;
+  const point = event.screenPoint ?? event.mappedPoint;
+  if (point) {
+    return `x ${Math.round(point.x)} / y ${Math.round(point.y)} / pinch ${event.confidence.pinch.toFixed(2)}`;
   }
-  return `pinch ${event.confidence.pinch.toFixed(2)} · two-hand ${event.confidence.twoHandTransform.toFixed(2)}`;
+  return `pinch ${event.confidence.pinch.toFixed(2)} / two-hand ${event.confidence.twoHandTransform.toFixed(2)}`;
+}
+
+function isInsideStage(x: number, y: number) {
+  const rect = arStage.getBoundingClientRect();
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function isInsideShapeTray(x: number, y: number) {
+  const rect = shapeLibrary.getBoundingClientRect();
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
 function mountIcons() {
   replaceIcon(toggleButton, Camera);
-  getElement<HTMLSpanElement>("reset").querySelector("[data-icon='reset']")?.appendChild(
-    createElement(RotateCcw, iconAttrs()),
-  );
+  resetButton.querySelector("[data-icon='reset']")?.appendChild(createElement(RotateCcw, iconAttrs()));
   const mirrorLabel = mirrorInput.closest("label");
   mirrorLabel?.prepend(createElement(FlipHorizontal, iconAttrs()));
 }

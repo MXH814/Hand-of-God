@@ -32,13 +32,13 @@ interface PreviousHand {
 export class GestureAnalyzer {
   private previousHands = new Map<string, PreviousHand>();
 
-  analyze(hands: RawHand[], smoothing: number): AnalyzedHand[] {
+  analyze(hands: RawHand[], smoothing: number, pinchThreshold = 0.45): AnalyzedHand[] {
     const alpha = Math.min(Math.max(smoothing, 0), 0.95);
     const currentIds = new Set<string>();
 
     const analyzed = hands.map((hand) => {
       currentIds.add(hand.id);
-      return this.analyzeHand(hand, alpha);
+      return this.analyzeHand(hand, alpha, pinchThreshold);
     });
 
     for (const id of this.previousHands.keys()) {
@@ -54,7 +54,7 @@ export class GestureAnalyzer {
     this.previousHands.clear();
   }
 
-  private analyzeHand(hand: RawHand, smoothing: number): AnalyzedHand {
+  private analyzeHand(hand: RawHand, smoothing: number, pinchThreshold: number): AnalyzedHand {
     const center = average([
       toVector3(hand.landmarks[0]),
       toVector3(hand.landmarks[5]),
@@ -90,7 +90,7 @@ export class GestureAnalyzer {
       palmNormal,
       palmFacing: classifyPalmFacing(palmNormal),
       fingers: getFingerStates(hand),
-      pinch: getPinch(hand),
+      pinch: getPinch(hand, pinchThreshold),
       motion,
     };
   }
@@ -123,12 +123,12 @@ function getFingerStates(hand: RawHand): FingerState[] {
   });
 }
 
-function getPinch(hand: RawHand) {
+function getPinch(hand: RawHand, threshold: number) {
   const palmSpan = distance(hand.landmarks[5], hand.landmarks[17]) || 1;
   const normalizedDistance = distance(hand.landmarks[4], hand.landmarks[8]) / palmSpan;
 
   return {
-    active: normalizedDistance < 0.45,
+    active: normalizedDistance < threshold,
     distance: normalizedDistance,
   };
 }

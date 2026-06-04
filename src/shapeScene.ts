@@ -2,13 +2,15 @@ import * as THREE from "three";
 import type { SceneObject, ShapeLibraryItem, ShapeType, Vector2 } from "./types";
 
 interface ShapeControllerOptions {
-  container: HTMLElement;
+  stageElement: HTMLElement;
   library: ShapeLibraryItem[];
 }
 
+const WORLD_SCALE = 140;
+
 export class ShapeScene {
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 100);
+  private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
   private readonly renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2();
@@ -21,11 +23,11 @@ export class ShapeScene {
   constructor(private readonly options: ShapeControllerOptions) {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0);
-    this.options.container.appendChild(this.renderer.domElement);
-    this.camera.position.set(0, 2.2, 7);
+    this.renderer.domElement.className = "shape-canvas";
+    this.options.stageElement.appendChild(this.renderer.domElement);
+    this.camera.position.set(0, 0, 10);
     this.camera.lookAt(0, 0, 0);
-    this.scene.background = new THREE.Color("#13221b");
-    this.addReferenceObjects();
+    this.addLights();
     this.resize();
     this.animate();
   }
@@ -37,12 +39,30 @@ export class ShapeScene {
   }
 
   resize() {
-    const rect = this.options.container.getBoundingClientRect();
+    const rect = this.options.stageElement.getBoundingClientRect();
     const width = Math.max(1, Math.floor(rect.width));
     const height = Math.max(1, Math.floor(rect.height));
-    this.camera.aspect = width / height;
+    const worldWidth = width / WORLD_SCALE;
+    const worldHeight = height / WORLD_SCALE;
+
+    this.camera.left = -worldWidth / 2;
+    this.camera.right = worldWidth / 2;
+    this.camera.top = worldHeight / 2;
+    this.camera.bottom = -worldHeight / 2;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+  }
+
+  screenToWorldPoint(clientX: number, clientY: number): Vector2 {
+    const rect = this.options.stageElement.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - rect.width / 2) / WORLD_SCALE,
+      y: -(clientY - rect.top - rect.height / 2) / WORLD_SCALE,
+    };
+  }
+
+  addShapeAtScreenPoint(type: ShapeType, clientX: number, clientY: number) {
+    return this.addShape(type, this.screenToWorldPoint(clientX, clientY));
   }
 
   addShape(type: ShapeType, point: Vector2) {
@@ -71,6 +91,15 @@ export class ShapeScene {
     return id;
   }
 
+  setPreviewAtScreenPoint(type: ShapeType | undefined, clientX?: number, clientY?: number) {
+    if (!type || clientX === undefined || clientY === undefined) {
+      this.setPreview(undefined);
+      return;
+    }
+
+    this.setPreview(type, this.screenToWorldPoint(clientX, clientY));
+  }
+
   setPreview(type: ShapeType | undefined, point?: Vector2) {
     if (!type || !point) {
       if (this.previewMesh) {
@@ -94,7 +123,11 @@ export class ShapeScene {
       this.scene.add(this.previewMesh);
     }
 
-    this.previewMesh.position.set(point.x, point.y, 0.2);
+    this.previewMesh.position.set(point.x, point.y, 0.3);
+  }
+
+  applyTransformAtScreenPoint(clientX: number, clientY: number, scaleDelta: number, rotationDelta: number) {
+    this.applyTransform(this.screenToWorldPoint(clientX, clientY), scaleDelta, rotationDelta);
   }
 
   applyTransform(center: Vector2, scaleDelta: number, rotationDelta: number) {
@@ -104,14 +137,26 @@ export class ShapeScene {
     }
 
     mesh.position.set(center.x, center.y, mesh.position.z);
-    const nextScale = clamp(mesh.scale.x * (1 + (scaleDelta - 1) * 0.12), 0.35, 3.2);
+    const nextScale = clamp(mesh.scale.x * (1 + (scaleDelta - 1) * 0.12), 0.35, 3.4);
     mesh.scale.setScalar(nextScale);
     mesh.rotation.z += rotationDelta;
-    mesh.rotation.x += rotationDelta * 0.18;
+    mesh.rotation.x += rotationDelta * 0.12;
     this.syncState(mesh);
   }
 
-  selectAt(clientX: number, clientY: number) {
+  moveSelectedAtScreenPoint(clientX: number, clientY: number) {
+    const mesh = this.getSelectedMesh();
+    if (!mesh) {
+      return false;
+    }
+
+    const point = this.screenToWorldPoint(clientX, clientY);
+    mesh.position.set(point.x, point.y, mesh.position.z);
+    this.syncState(mesh);
+    return true;
+  }
+
+  selectAtScreenPoint(clientX: number, clientY: number) {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
@@ -122,6 +167,10 @@ export class ShapeScene {
       this.selectObject(id);
     }
     return id;
+  }
+
+  selectAt(clientX: number, clientY: number) {
+    return this.selectAtScreenPoint(clientX, clientY);
   }
 
   getSceneObjects(): SceneObject[] {
@@ -166,30 +215,22 @@ export class ShapeScene {
   private createMesh(item: ShapeLibraryItem, preview = false) {
     const material = new THREE.MeshStandardMaterial({
       color: item.color,
-      roughness: 0.48,
-      metalness: 0.18,
+      roughness: 0.45,
+      metalness: 0.14,
       transparent: preview,
       opacity: preview ? 0.55 : 1,
     });
     const mesh = new THREE.Mesh(createGeometry(item.type), material);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
     return mesh;
   }
 
-  private addReferenceObjects() {
-    const ambient = new THREE.AmbientLight("#ffffff", 0.82);
-    const key = new THREE.DirectionalLight("#ffffff", 1.2);
-    key.position.set(3, 4, 5);
+  private addLights() {
+    const ambient = new THREE.AmbientLight("#ffffff", 0.88);
+    const key = new THREE.DirectionalLight("#ffffff", 1.1);
+    key.position.set(2, 3, 5);
     this.scene.add(ambient, key);
-
-    const grid = new THREE.GridHelper(8, 16, "#6f8579", "#30423a");
-    grid.position.y = -1.7;
-    this.scene.add(grid);
-
-    const axes = new THREE.AxesHelper(1.4);
-    axes.position.set(-3.25, -1.65, 0);
-    this.scene.add(axes);
   }
 
   private animate = () => {
@@ -208,7 +249,7 @@ function createGeometry(type: ShapeType) {
     case "cube":
       return new THREE.BoxGeometry(1.1, 1.1, 1.1);
     case "sphere":
-      return new THREE.SphereGeometry(0.7, 36, 24);
+      return new THREE.SphereGeometry(0.72, 36, 24);
     case "cylinder":
       return new THREE.CylinderGeometry(0.55, 0.55, 1.4, 36);
     case "cone":

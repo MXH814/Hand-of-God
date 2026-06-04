@@ -1,5 +1,6 @@
 import type {
   AnalyzedHand,
+  CalibrationProfile,
   GestureConfidence,
   GestureEvent,
   MappedHandPoint,
@@ -37,13 +38,18 @@ export class GestureEventEngine {
     previousAngle: 0,
   };
 
-  update(hands: AnalyzedHand[], mappedPoints: MappedHandPoint[], timestamp: number): GestureEvent[] {
+  update(
+    hands: AnalyzedHand[],
+    mappedPoints: MappedHandPoint[],
+    timestamp: number,
+    profile?: CalibrationProfile,
+  ): GestureEvent[] {
     const events: GestureEvent[] = [];
     const primaryHand = choosePrimaryHand(hands);
     const primaryPoint = primaryHand
       ? mappedPoints.find((point) => point.handId === primaryHand.id)
       : undefined;
-    const confidence = getConfidence(hands);
+    const confidence = getConfidence(hands, profile?.pinchThreshold ?? 0.45);
 
     this.updatePinch(primaryHand, primaryPoint, timestamp, confidence, events);
     this.updateTwoHand(hands, mappedPoints, timestamp, confidence, events);
@@ -87,7 +93,9 @@ export class GestureEventEngine {
         timestamp,
         primaryHand: hand,
         mappedPoint: point,
+        screenPoint: point,
         confidence,
+        calibratedConfidence: confidence,
       });
       return;
     }
@@ -98,7 +106,9 @@ export class GestureEventEngine {
         timestamp,
         primaryHand: hand,
         mappedPoint: point,
+        screenPoint: point,
         confidence,
+        calibratedConfidence: confidence,
       });
       return;
     }
@@ -111,7 +121,9 @@ export class GestureEventEngine {
         timestamp,
         primaryHand: hand,
         mappedPoint: point,
+        screenPoint: point,
         confidence,
+        calibratedConfidence: confidence,
       });
     }
   }
@@ -175,12 +187,13 @@ function choosePrimaryHand(hands: AnalyzedHand[]) {
   return hands.find((hand) => hand.handedness === "Right") ?? hands[0];
 }
 
-function getConfidence(hands: AnalyzedHand[]): GestureConfidence {
+function getConfidence(hands: AnalyzedHand[], pinchThreshold: number): GestureConfidence {
   const primary = choosePrimaryHand(hands);
   const pinchDistance = primary?.pinch.distance ?? 1;
+  const confidenceWindow = 0.24;
 
   return {
-    pinch: primary ? clamp01((0.7 - pinchDistance) / 0.45) * primary.score : 0,
+    pinch: primary ? clamp01((pinchThreshold + confidenceWindow - pinchDistance) / confidenceWindow) * primary.score : 0,
     twoHandTransform:
       hands.length >= 2 ? clamp01((hands[0].score + hands[1].score) / 2) : 0,
   };
