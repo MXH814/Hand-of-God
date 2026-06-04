@@ -19,6 +19,11 @@ export class ShapeScene {
   private selectedObjectId?: string;
   private animationFrame = 0;
   private previewMesh?: THREE.Mesh;
+  private transformBase?: {
+    objectId: string;
+    scale: number;
+    rotation: THREE.Euler;
+  };
 
   constructor(private readonly options: ShapeControllerOptions) {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -130,17 +135,42 @@ export class ShapeScene {
     this.applyTransform(this.screenToWorldPoint(clientX, clientY), scaleDelta, rotationDelta);
   }
 
+  beginTransform() {
+    const mesh = this.getSelectedMesh();
+    const objectId = this.selectedObjectId;
+    if (!mesh || !objectId) {
+      this.transformBase = undefined;
+      return;
+    }
+
+    this.transformBase = {
+      objectId,
+      scale: mesh.scale.x,
+      rotation: mesh.rotation.clone(),
+    };
+  }
+
+  endTransform() {
+    this.transformBase = undefined;
+  }
+
   applyTransform(center: Vector2, scaleDelta: number, rotationDelta: number) {
     const mesh = this.getSelectedMesh();
     if (!mesh) {
       return;
     }
 
-    mesh.position.set(center.x, center.y, mesh.position.z);
-    const nextScale = clamp(mesh.scale.x * (1 + (scaleDelta - 1) * 0.12), 0.35, 3.4);
+    const base =
+      this.transformBase && this.transformBase.objectId === this.selectedObjectId
+        ? this.transformBase
+        : { scale: mesh.scale.x, rotation: mesh.rotation };
+    const currentWorld = new THREE.Vector2(mesh.position.x, mesh.position.y);
+    currentWorld.lerp(new THREE.Vector2(center.x, center.y), 0.45);
+    mesh.position.set(currentWorld.x, currentWorld.y, mesh.position.z);
+    const nextScale = clamp(base.scale * scaleDelta, 0.35, 3.4);
     mesh.scale.setScalar(nextScale);
-    mesh.rotation.z += rotationDelta;
-    mesh.rotation.x += rotationDelta * 0.12;
+    mesh.rotation.z = base.rotation.z + rotationDelta;
+    mesh.rotation.x = base.rotation.x + rotationDelta * 0.08;
     this.syncState(mesh);
   }
 
@@ -151,7 +181,9 @@ export class ShapeScene {
     }
 
     const point = this.screenToWorldPoint(clientX, clientY);
-    mesh.position.set(point.x, point.y, mesh.position.z);
+    const currentWorld = new THREE.Vector2(mesh.position.x, mesh.position.y);
+    currentWorld.lerp(new THREE.Vector2(point.x, point.y), 0.55);
+    mesh.position.set(currentWorld.x, currentWorld.y, mesh.position.z);
     this.syncState(mesh);
     return true;
   }

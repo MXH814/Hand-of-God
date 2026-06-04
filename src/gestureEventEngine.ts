@@ -25,7 +25,7 @@ interface TwoHandState {
   startFrames: number;
   endFrames: number;
   baselineDistance: number;
-  previousAngle: number;
+  baselineAngle: number;
 }
 
 export class GestureEventEngine {
@@ -35,7 +35,7 @@ export class GestureEventEngine {
     startFrames: 0,
     endFrames: 0,
     baselineDistance: 1,
-    previousAngle: 0,
+    baselineAngle: 0,
   };
 
   update(
@@ -64,7 +64,7 @@ export class GestureEventEngine {
       startFrames: 0,
       endFrames: 0,
       baselineDistance: 1,
-      previousAngle: 0,
+      baselineAngle: 0,
     };
   }
 
@@ -135,7 +135,7 @@ export class GestureEventEngine {
     confidence: GestureConfidence,
     events: GestureEvent[],
   ) {
-    const pair = getTwoHandPair(hands, mappedPoints);
+    const pair = getTwoHandPinchPair(hands, mappedPoints);
     const canTransform = Boolean(pair && confidence.twoHandTransform >= 0.55);
 
     if (canTransform) {
@@ -159,14 +159,13 @@ export class GestureEventEngine {
     if (!this.twoHandState.active && canTransform && this.twoHandState.startFrames >= TWO_HAND_START_FRAMES) {
       this.twoHandState.active = true;
       this.twoHandState.baselineDistance = transform.distance || 1;
-      this.twoHandState.previousAngle = transform.angle;
+      this.twoHandState.baselineAngle = transform.angle;
       events.push({ type: "twoHandTransformStart", timestamp, transform, confidence });
       return;
     }
 
     if (this.twoHandState.active && canTransform) {
       const moveTransform = getTwoHandTransform(pair.left, pair.right, this.twoHandState);
-      this.twoHandState.previousAngle = moveTransform.angle;
       events.push({
         type: "twoHandTransformMove",
         timestamp,
@@ -184,7 +183,12 @@ export class GestureEventEngine {
 }
 
 function choosePrimaryHand(hands: AnalyzedHand[]) {
-  return hands.find((hand) => hand.handedness === "Right") ?? hands[0];
+  return (
+    hands.find((hand) => hand.pinch.active && hand.handedness === "Right") ??
+    hands.find((hand) => hand.pinch.active) ??
+    hands.find((hand) => hand.handedness === "Right") ??
+    hands[0]
+  );
 }
 
 function getConfidence(hands: AnalyzedHand[], pinchThreshold: number): GestureConfidence {
@@ -199,12 +203,17 @@ function getConfidence(hands: AnalyzedHand[], pinchThreshold: number): GestureCo
   };
 }
 
-function getTwoHandPair(hands: AnalyzedHand[], mappedPoints: MappedHandPoint[]) {
+function getTwoHandPinchPair(hands: AnalyzedHand[], mappedPoints: MappedHandPoint[]) {
   if (hands.length < 2) {
     return undefined;
   }
 
-  const sortedHands = [...hands].sort((a, b) => {
+  const pinchingHands = hands.filter((hand) => hand.pinch.active && hand.score >= 0.55);
+  if (pinchingHands.length < 2) {
+    return undefined;
+  }
+
+  const sortedHands = [...pinchingHands].sort((a, b) => {
     if (a.handedness === "Left" && b.handedness !== "Left") return -1;
     if (a.handedness !== "Left" && b.handedness === "Left") return 1;
     return b.score - a.score;
@@ -234,7 +243,7 @@ function getTwoHandTransform(
     distance,
     angle,
     scaleDelta: clamp(distance / (state.baselineDistance || distance || 1), 0.35, 3),
-    rotationDelta: normalizeAngle(angle - state.previousAngle),
+    rotationDelta: normalizeAngle(angle - state.baselineAngle),
   };
 }
 

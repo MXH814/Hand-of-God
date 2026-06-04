@@ -17,6 +17,8 @@ import type {
   TrackingFrame,
 } from "./types";
 
+const TRAY_HOLD_MS = 1000;
+
 const app = document.querySelector<HTMLDivElement>("#app");
 
 if (!app) {
@@ -156,6 +158,13 @@ let latestHands: AnalyzedHand[] = [];
 let latestMappedPoints: MappedHandPoint[] = [];
 let activeDraggedShape: ShapeType | undefined;
 let interactionMode: InteractionMode = "idle";
+let trayHold:
+  | {
+      shape: ShapeType;
+      startedAt: number;
+    }
+  | undefined;
+let armedTrayShape: ShapeType | undefined;
 
 mountIcons();
 renderShapeLibrary();
@@ -248,6 +257,7 @@ function stopCamera(status = "Idle") {
   latestHands = [];
   latestMappedPoints = [];
   activeDraggedShape = undefined;
+  clearTrayHold();
   analyzer.reset();
   eventEngine.reset();
   calibration.reset();
@@ -296,6 +306,7 @@ function applyGestureEvents(events: GestureEvent[]) {
     }
 
     if (event.type === "twoHandTransformStart") {
+      shapeScene.beginTransform();
       setInteractionMode("twoHandTransform");
     }
 
@@ -310,6 +321,7 @@ function applyGestureEvents(events: GestureEvent[]) {
     }
 
     if (event.type === "twoHandTransformEnd") {
+      shapeScene.endTransform();
       setInteractionMode("idle");
     }
   }
@@ -322,10 +334,9 @@ function handlePinch(event: GestureEvent) {
   }
 
   if (event.type === "pinchStart") {
-    activeDraggedShape = getShapeUnderPoint(point.x, point.y);
-    if (activeDraggedShape) {
-      setInteractionMode("draggingShape");
-      shapeScene.setPreviewAtScreenPoint(activeDraggedShape, point.x, point.y);
+    const trayShape = getShapeUnderPoint(point.x, point.y);
+    if (trayShape) {
+      startTrayHold(trayShape, event.timestamp);
       return;
     }
 
@@ -337,6 +348,10 @@ function handlePinch(event: GestureEvent) {
   }
 
   if (event.type === "pinchMove") {
+    if (updateTrayHold(point.x, point.y, event.timestamp)) {
+      return;
+    }
+
     if (interactionMode === "draggingShape" && activeDraggedShape) {
       shapeScene.setPreviewAtScreenPoint(activeDraggedShape, point.x, point.y);
       return;
@@ -365,6 +380,7 @@ function finishPinch(event: GestureEvent) {
 
   activeDraggedShape = undefined;
   shapeScene.setPreview(undefined);
+  clearTrayHold();
   setInteractionMode("idle");
 }
 
@@ -405,6 +421,7 @@ function renderShapeLibrary() {
     ${SHAPE_LIBRARY.map(
       (shape) => `
         <button class="shape-button" type="button" data-shape="${shape.type}">
+          <span class="shape-progress"></span>
           <span class="shape-swatch" style="background: ${shape.color}"></span>
           <span>${shape.label}</span>
         </button>
@@ -433,6 +450,66 @@ function getShapeUnderPoint(x: number, y: number) {
     }
   }
   return undefined;
+}
+
+function startTrayHold(shape: ShapeType, timestamp: number) {
+  trayHold = { shape, startedAt: timestamp };
+  armedTrayShape = undefined;
+  activeDraggedShape = undefined;
+  setInteractionMode("idle");
+  updateTrayHighlight(shape, 0, false);
+  setEventHud("trayHold", `${shape}: hold pinch for 1s`);
+}
+
+function updateTrayHold(x: number, y: number, timestamp: number) {
+  const shape = getShapeUnderPoint(x, y);
+
+  if (interactionMode === "draggingShape") {
+    return false;
+  }
+
+  if (trayHold && shape === trayHold.shape) {
+    const progress = Math.min((timestamp - trayHold.startedAt) / TRAY_HOLD_MS, 1);
+    armedTrayShape = progress >= 1 ? trayHold.shape : undefined;
+    updateTrayHighlight(trayHold.shape, progress, progress >= 1);
+    setEventHud(progress >= 1 ? "shapeArmed" : "trayHold", `${trayHold.shape}: ${Math.round(progress * 100)}%`);
+    return true;
+  }
+
+  if (trayHold && armedTrayShape && !shape) {
+    activeDraggedShape = armedTrayShape;
+    setInteractionMode("draggingShape");
+    updateTrayHighlight(armedTrayShape, 1, true);
+    shapeScene.setPreviewAtScreenPoint(activeDraggedShape, x, y);
+    setEventHud("shapeDrag", `${activeDraggedShape}: move out and release`);
+    return true;
+  }
+
+  if (shape) {
+    startTrayHold(shape, timestamp);
+    return true;
+  }
+
+  if (trayHold) {
+    clearTrayHold();
+  }
+
+  return false;
+}
+
+function clearTrayHold() {
+  trayHold = undefined;
+  armedTrayShape = undefined;
+  updateTrayHighlight(undefined, 0, false);
+}
+
+function updateTrayHighlight(shape: ShapeType | undefined, progress: number, armed: boolean) {
+  for (const button of shapeLibrary.querySelectorAll<HTMLButtonElement>("[data-shape]")) {
+    const isTarget = button.dataset.shape === shape;
+    button.classList.toggle("is-holding", isTarget && progress > 0 && !armed);
+    button.classList.toggle("is-armed", isTarget && armed);
+    button.style.setProperty("--hold-progress", isTarget ? `${Math.round(progress * 100)}%` : "0%");
+  }
 }
 
 function renderHandsList(hands: AnalyzedHand[]) {

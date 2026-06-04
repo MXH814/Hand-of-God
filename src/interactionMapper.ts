@@ -8,13 +8,14 @@ export class InteractionMapper {
   }
 
   mapHand(hand: AnalyzedHand, bounds: DOMRect): MappedHandPoint {
-    const normalizedX = this.mirror ? 1 - hand.center.x : hand.center.x;
+    const pinchPoint = getPinchPoint(hand);
+    const normalizedX = this.mirror ? 1 - pinchPoint.x : pinchPoint.x;
 
     return {
       handId: hand.id,
       handedness: hand.handedness,
       x: bounds.left + normalizedX * bounds.width,
-      y: bounds.top + hand.center.y * bounds.height,
+      y: bounds.top + pinchPoint.y * bounds.height,
     };
   }
 
@@ -28,4 +29,14 @@ export class InteractionMapper {
       y: -((point.y - bounds.top) / bounds.height - 0.5) * 3.4,
     };
   }
+}
+
+function getPinchPoint(hand: AnalyzedHand): Vector2 {
+  const thumbTip = hand.landmarks[4];
+  const indexTip = hand.landmarks[8];
+
+  return {
+    x: (thumbTip.x + indexTip.x) / 2,
+    y: (thumbTip.y + indexTip.y) / 2,
+  };
 }

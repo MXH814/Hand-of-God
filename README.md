@@ -58,25 +58,25 @@ npm run dev
 
 - 功能：把连续帧状态转换成 `pinchStart`、`pinchMove`、`pinchEnd`、`twoHandTransformStart`、`twoHandTransformMove`、`twoHandTransformEnd`。
 - 技术：TypeScript 状态机。
-- 算法/规则：使用持续帧阈值、防抖和置信度评分；Pinch 置信度由校准后的捏合阈值、当前捏合距离和检测分数共同决定；双手变换置信度由两只手检测分数平均得到。
+- 算法/规则：使用持续帧阈值、防抖和置信度评分；Pinch 置信度由校准后的捏合阈值、当前捏合距离和检测分数共同决定；双手变换只在两只手都处于捏合状态时启动，避免张手或路过画面时误触。
 - 相关文件：`src/gestureEventEngine.ts`、`src/types.ts`
-- 参考：自研规则。
+- 参考：自研规则；参考 landmark-driven 控制思路：Codrops Webcam 3D HandControls, https://tympanus.net/Tutorials/webcam-3D-handcontrols/
 
 ### AR 统一坐标映射
 
 - 功能：把摄像头归一化手部坐标映射到同一个 `ar-stage` 页面坐标系，用于命中底部托盘、拖拽几何体和控制 3D 对象。
 - 技术：`DOMRect`、镜像坐标转换、Three.js orthographic camera。
-- 算法/规则：镜像模式下水平坐标取 `1 - x`；手势点按 `ar-stage` 宽高映射到屏幕坐标；Three.js 使用透明正交相机把屏幕点转换到摄像头画面平面。
+- 算法/规则：交互点使用 MediaPipe 21 点中的拇指尖 4 和食指尖 8 的中点，而不是手掌中心；镜像模式下水平坐标取 `1 - x`；手势点按 `ar-stage` 宽高映射到屏幕坐标；Three.js 使用透明正交相机把屏幕点转换到摄像头画面平面。
 - 相关文件：`src/interactionMapper.ts`、`src/shapeScene.ts`、`src/main.ts`
-- 参考：自研规则。
+- 参考：自研规则；参考开源项目 Colliding Scopes threejs-handtracking-101, https://github.com/collidingScopes/threejs-handtracking-101
 
 ### AR 叠加式几何体交互
 
 - 功能：摄像头画面作为底层，3D 几何体直接叠加显示在画面上；底部托盘提供 Cube、Sphere、Cylinder、Cone、Torus。
 - 技术：Three.js transparent WebGL renderer、orthographic camera、geometry、raycaster。
-- 算法/规则：单手 Pinch 命中底部托盘按钮后进入拖拽预览，松开后在手部所在画面位置生成几何体；Pinch 已生成对象可选中并移动；双手中心控制选中对象位置，双手距离控制缩放，双手连线角度控制屏幕平面旋转。
+- 算法/规则：单手 Pinch 命中底部托盘按钮后必须保持 1 秒，按钮进度条填满并高亮后才进入 armed 状态；保持捏合并离开托盘后出现拖拽预览，松开后在手部所在画面位置生成几何体；Pinch 已生成对象可选中并移动；双手捏合时用两只手的捏合点中心控制位置、两点距离控制绝对缩放、两点角度控制绝对旋转，减少逐帧命令叠加带来的僵硬和漂移。
 - 相关文件：`src/shapeScene.ts`、`src/shapeLibrary.ts`、`src/main.ts`
-- 参考：Three.js, https://github.com/mrdoob/three.js
+- 参考：Three.js, https://github.com/mrdoob/three.js；Codrops Creating a 3D Hand Controller, https://tympanus.net/codrops/2024/10/24/creating-a-3d-hand-controller-using-a-webcam-with-mediapipe-and-three-js/
 
 ### 调试 HUD
 
@@ -121,10 +121,10 @@ npm run build
 - 摄像头启动后，中间的 `Click Start to enable camera` 提示消失。
 - 单手进入画面后出现 21 点骨架。
 - 拇指和食指靠近时 `Pinch` 从 `open` 变为 `active`。
-- 底部五类几何体可点击生成，也可用单手 Pinch 从托盘拖出。
+- 底部五类几何体可点击生成；也可用单手 Pinch 在某个托盘按钮上保持 1 秒，按钮高亮后继续捏住并移出托盘，松开生成对应几何体。
 - 几何体直接显示在摄像头画面上，不出现独立 3D 分屏或坐标图。
 - Pinch 已生成对象可选中并移动。
-- 双手进入画面后可控制选中几何体的位置、缩放和旋转。
+- 双手都捏合后可控制选中几何体的位置、缩放和旋转。
 - 右侧面板内容变化不影响摄像头主舞台尺寸。
 
 ## Git Workflow

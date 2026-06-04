@@ -280,8 +280,39 @@ video {
 }
 
 .shape-button {
+  position: relative;
+  overflow: hidden;
   min-width: 0;
   padding: 0 10px;
+}
+
+.shape-button > span:not(.shape-progress) {
+  position: relative;
+  z-index: 1;
+}
+
+.shape-progress {
+  position: absolute;
+  inset: auto 0 0;
+  width: var(--hold-progress, 0%);
+  height: 5px;
+  background: #f7b801;
+  transition: width 80ms linear;
+}
+
+.shape-button.is-holding {
+  border-color: #f7b801;
+}
+
+.shape-button.is-armed {
+  border-color: #0f8b8d;
+  background: #e7f6f4;
+  box-shadow: 0 0 0 3px rgba(15, 139, 141, 0.16);
+}
+
+.shape-button.is-armed .shape-progress {
+  width: 100%;
+  background: #0f8b8d;
 }
 
 .shape-swatch {
