@@ -36,16 +36,16 @@ button:disabled {
 
 .app-shell {
   min-height: 100vh;
-  padding: 24px;
+  padding: 20px;
 }
 
 .top-bar {
   display: flex;
-  width: min(1280px, 100%);
+  width: min(1440px, 100%);
   align-items: end;
   justify-content: space-between;
   gap: 16px;
-  margin: 0 auto 18px;
+  margin: 0 auto 16px;
 }
 
 .eyebrow {
@@ -59,12 +59,12 @@ button:disabled {
 
 h1 {
   margin: 0;
-  font-size: clamp(1.55rem, 3vw, 2.5rem);
+  font-size: clamp(1.55rem, 3vw, 2.45rem);
   letter-spacing: 0;
 }
 
 .status-pill {
-  min-width: 118px;
+  min-width: 128px;
   padding: 9px 13px;
   border: 1px solid #bfd0c7;
   border-radius: 999px;
@@ -75,13 +75,27 @@ h1 {
   text-align: center;
 }
 
-.stage {
+.workspace {
   display: grid;
-  width: min(1280px, 100%);
-  grid-template-columns: minmax(0, 1fr) 340px;
+  width: min(1440px, 100%);
+  grid-template-columns: minmax(0, 1fr) 360px;
   align-items: start;
   gap: 18px;
   margin: 0 auto;
+}
+
+.viewport-stack {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.78fr) minmax(360px, 1.22fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.video-shell,
+.scene-shell {
+  overflow: hidden;
+  border: 1px solid #b8c9c0;
+  border-radius: 8px;
 }
 
 .video-shell {
@@ -89,17 +103,47 @@ h1 {
   aspect-ratio: 16 / 9;
   width: 100%;
   min-height: 0;
-  overflow: hidden;
-  border: 1px solid #b8c9c0;
-  border-radius: 8px;
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px),
     linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px), #1b2721;
   background-size: 40px 40px;
 }
 
+.scene-shell {
+  display: grid;
+  min-height: 520px;
+  grid-template-rows: auto minmax(440px, 1fr);
+  background: #13221b;
+}
+
+.scene-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  color: #eff7f1;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.scene-header strong {
+  color: #b7cec3;
+  font-size: 0.8rem;
+}
+
+.scene-viewport {
+  position: relative;
+  min-height: 440px;
+}
+
+.scene-viewport canvas {
+  position: absolute;
+  inset: 0;
+}
+
 video,
-canvas {
+#overlay {
   position: absolute;
   inset: 0;
   display: block;
@@ -112,7 +156,7 @@ video {
   object-fit: contain;
 }
 
-canvas {
+#overlay {
   pointer-events: none;
 }
 
@@ -135,9 +179,9 @@ canvas {
 
 .debug-panel {
   display: flex;
-  min-height: 420px;
+  min-height: 520px;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   border-left: 1px solid #c7d5ce;
   padding-left: 18px;
 }
@@ -154,7 +198,8 @@ canvas {
 }
 
 .primary-button,
-.icon-button {
+.icon-button,
+.shape-button {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -170,10 +215,55 @@ canvas {
   color: #ffffff;
 }
 
-.icon-button {
+.icon-button,
+.shape-button {
   background: #ffffff;
   border-color: #c6d3cc;
   color: #24342c;
+}
+
+.shape-library,
+.event-panel {
+  padding: 12px;
+  border: 1px solid #c6d3cc;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.shape-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.shape-button {
+  justify-content: flex-start;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.shape-swatch {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.event-panel strong {
+  display: block;
+  margin: 4px 0 6px;
+  color: #0f8b8d;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.event-panel p {
+  min-height: 34px;
+  margin: 0;
+  color: #52635a;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .switch,
@@ -230,7 +320,7 @@ canvas {
 
 .hands-list {
   display: grid;
-  max-height: 284px;
+  max-height: 252px;
   overflow-y: auto;
   gap: 10px;
   padding-right: 2px;
@@ -299,17 +389,8 @@ dd {
   font-weight: 800;
 }
 
-@media (max-width: 920px) {
-  .app-shell {
-    padding: 16px;
-  }
-
-  .top-bar {
-    align-items: start;
-    flex-direction: column;
-  }
-
-  .stage {
+@media (max-width: 1180px) {
+  .workspace {
     grid-template-columns: 1fr;
   }
 
@@ -322,15 +403,34 @@ dd {
   }
 }
 
-@media (max-width: 540px) {
-  .toolbar,
-  .metric-grid {
+@media (max-width: 840px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .top-bar {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .viewport-stack {
     grid-template-columns: 1fr;
   }
 
-  video,
-  canvas,
-  .video-shell {
-    min-height: 0;
+  .scene-shell {
+    min-height: 420px;
+    grid-template-rows: auto minmax(360px, 1fr);
+  }
+
+  .scene-viewport {
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 540px) {
+  .toolbar,
+  .metric-grid,
+  .shape-grid {
+    grid-template-columns: 1fr;
   }
 }

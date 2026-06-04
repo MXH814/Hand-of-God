@@ -2,8 +2,18 @@ import "./styles.css";
 import { Camera, CameraOff, createElement, FlipHorizontal, RotateCcw } from "lucide";
 import { HandLandmarker } from "@mediapipe/tasks-vision";
 import { GestureAnalyzer } from "./gestureAnalyzer";
+import { GestureEventEngine } from "./gestureEventEngine";
 import { HandTracker, type HandTrackerOptions } from "./handTracker";
-import type { AnalyzedHand, TrackingFrame } from "./types";
+import { InteractionMapper } from "./interactionMapper";
+import { SHAPE_LIBRARY } from "./shapeLibrary";
+import { ShapeScene } from "./shapeScene";
+import type {
+  AnalyzedHand,
+  GestureEvent,
+  MappedHandPoint,
+  ShapeType,
+  TrackingFrame,
+} from "./types";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -16,16 +26,25 @@ app.innerHTML = `
     <header class="top-bar">
       <div>
         <p class="eyebrow">HCI Gesture Game</p>
-        <h1>Hand Tracking Debugger</h1>
+        <h1>Gesture Geometry Sandbox</h1>
       </div>
       <div class="status-pill" id="status">Idle</div>
     </header>
 
-    <section class="stage">
-      <div class="video-shell">
-        <video id="camera" playsinline muted></video>
-        <canvas id="overlay"></canvas>
-        <div class="empty-state" id="empty-state">Click Start to enable camera</div>
+    <section class="workspace">
+      <div class="viewport-stack">
+        <div class="video-shell" id="video-shell">
+          <video id="camera" playsinline muted></video>
+          <canvas id="overlay"></canvas>
+          <div class="empty-state" id="empty-state">Click Start to enable camera</div>
+        </div>
+        <div class="scene-shell">
+          <div class="scene-header">
+            <span>3D Sandbox</span>
+            <strong id="object-count">0 objects</strong>
+          </div>
+          <div class="scene-viewport" id="scene-viewport"></div>
+        </div>
       </div>
 
       <aside class="debug-panel">
@@ -37,6 +56,14 @@ app.innerHTML = `
           <button class="icon-button" id="reset" type="button" title="Reset smoothing">
             <span data-icon="reset"></span>
           </button>
+        </div>
+
+        <div class="shape-library" id="shape-library"></div>
+
+        <div class="event-panel">
+          <span class="metric-label">Gesture Event</span>
+          <strong id="event-name">none</strong>
+          <p id="event-detail">Waiting for hand input</p>
         </div>
 
         <div class="control-row">
@@ -62,13 +89,15 @@ app.innerHTML = `
         </div>
 
         <div class="hands-list" id="hands-list"></div>
-      </div>
+      </aside>
     </section>
   </main>
 `;
 
 const video = getElement<HTMLVideoElement>("camera");
 const canvas = getElement<HTMLCanvasElement>("overlay");
+const videoShell = getElement<HTMLDivElement>("video-shell");
+const sceneViewport = getElement<HTMLDivElement>("scene-viewport");
 const emptyState = getElement<HTMLDivElement>("empty-state");
 const statusNode = getElement<HTMLDivElement>("status");
 const toggleButton = getElement<HTMLButtonElement>("toggle-camera");
@@ -79,8 +108,15 @@ const smoothingInput = getElement<HTMLInputElement>("smoothing");
 const fpsNode = getElement<HTMLElement>("fps");
 const handCountNode = getElement<HTMLElement>("hand-count");
 const handsList = getElement<HTMLDivElement>("hands-list");
+const shapeLibrary = getElement<HTMLDivElement>("shape-library");
+const eventName = getElement<HTMLElement>("event-name");
+const eventDetail = getElement<HTMLParagraphElement>("event-detail");
+const objectCount = getElement<HTMLElement>("object-count");
 
 const analyzer = new GestureAnalyzer();
+const mapper = new InteractionMapper();
+const eventEngine = new GestureEventEngine();
+const shapeScene = new ShapeScene({ container: sceneViewport, library: SHAPE_LIBRARY });
 const trackerOptions: HandTrackerOptions = {
   numHands: 2,
   minHandDetectionConfidence: 0.55,
@@ -90,9 +126,13 @@ const trackerOptions: HandTrackerOptions = {
 let tracker: HandTracker | undefined;
 let running = false;
 let latestHands: AnalyzedHand[] = [];
+let activeDraggedShape: ShapeType | undefined;
+let latestMappedPoints: MappedHandPoint[] = [];
 
 mountIcons();
+renderShapeLibrary();
 setMirror(true);
+renderHandsList([]);
 
 toggleButton.addEventListener("click", async () => {
   if (running) {
@@ -105,12 +145,23 @@ toggleButton.addEventListener("click", async () => {
 
 resetButton.addEventListener("click", () => {
   analyzer.reset();
-  setStatus("Smoothing reset");
+  eventEngine.reset();
+  setEventHud("reset", "Smoothing and event state cleared");
 });
 
 mirrorInput.addEventListener("change", () => {
   setMirror(mirrorInput.checked);
 });
+
+sceneViewport.addEventListener("click", (event) => {
+  const selected = shapeScene.selectAt(event.clientX, event.clientY);
+  if (selected) {
+    refreshObjectCount();
+    setEventHud("sceneSelect", selected);
+  }
+});
+
+window.addEventListener("resize", () => shapeScene.resize());
 
 async function startCamera() {
   toggleButton.disabled = true;
@@ -136,7 +187,11 @@ function stopCamera(status = "Idle") {
   tracker = undefined;
   running = false;
   latestHands = [];
+  latestMappedPoints = [];
+  activeDraggedShape = undefined;
   analyzer.reset();
+  eventEngine.reset();
+  shapeScene.setPreview(undefined);
   clearCanvas();
   renderHandsList([]);
   emptyState.hidden = false;
@@ -145,16 +200,93 @@ function stopCamera(status = "Idle") {
   toggleLabel.textContent = "Start";
   replaceIcon(toggleButton, Camera);
   setStatus(status);
+  setEventHud("none", "Waiting for hand input");
 }
 
 function renderFrame(frame: TrackingFrame) {
   const smoothing = Number(smoothingInput.value);
   latestHands = analyzer.analyze(frame.hands, smoothing);
+  latestMappedPoints = mapper.mapHands(latestHands, videoShell.getBoundingClientRect());
+  const events = eventEngine.update(latestHands, latestMappedPoints, frame.timestamp);
   resizeCanvas(frame.videoWidth, frame.videoHeight);
   drawHands(latestHands, frame.videoWidth, frame.videoHeight);
+  applyGestureEvents(events);
   fpsNode.textContent = frame.fps.toFixed(1);
   handCountNode.textContent = String(latestHands.length);
   renderHandsList(latestHands);
+}
+
+function applyGestureEvents(events: GestureEvent[]) {
+  for (const event of events) {
+    setEventHud(event.type, formatEventDetail(event));
+
+    if (event.type === "pinchStart" || event.type === "pinchMove") {
+      handlePinchDrag(event);
+    }
+
+    if (event.type === "pinchEnd") {
+      finishPinchDrag(event);
+    }
+
+    if (event.type === "twoHandTransformMove" && event.transform) {
+      const scenePoint = mapper.toScenePoint(
+        {
+          handId: "two-hand-center",
+          handedness: "Unknown",
+          x: event.transform.center.x,
+          y: event.transform.center.y,
+        },
+        sceneViewport.getBoundingClientRect(),
+      );
+      shapeScene.applyTransform(scenePoint, event.transform.scaleDelta, event.transform.rotationDelta);
+      refreshObjectCount();
+    }
+  }
+}
+
+function handlePinchDrag(event: GestureEvent) {
+  if (!event.mappedPoint) {
+    return;
+  }
+
+  if (!activeDraggedShape) {
+    activeDraggedShape = getShapeUnderPoint(event.mappedPoint.x, event.mappedPoint.y);
+  }
+
+  if (!activeDraggedShape) {
+    shapeScene.selectAt(event.mappedPoint.x, event.mappedPoint.y);
+    return;
+  }
+
+  const scenePoint = mapper.toScenePoint(event.mappedPoint, sceneViewport.getBoundingClientRect());
+  shapeScene.setPreview(activeDraggedShape, scenePoint);
+}
+
+function finishPinchDrag(event: GestureEvent) {
+  if (!activeDraggedShape || !event.mappedPoint) {
+    activeDraggedShape = undefined;
+    shapeScene.setPreview(undefined);
+    return;
+  }
+
+  const sceneBounds = sceneViewport.getBoundingClientRect();
+  const insideScene =
+    event.mappedPoint.x >= sceneBounds.left &&
+    event.mappedPoint.x <= sceneBounds.right &&
+    event.mappedPoint.y >= sceneBounds.top &&
+    event.mappedPoint.y <= sceneBounds.bottom;
+
+  if (insideScene) {
+    const scenePoint = mapper.toScenePoint(event.mappedPoint, sceneBounds);
+    const id = shapeScene.addShape(activeDraggedShape, scenePoint);
+    if (id) {
+      setEventHud("shapeCreated", `${activeDraggedShape} -> ${id}`);
+      refreshObjectCount();
+    }
+  }
+
+  activeDraggedShape = undefined;
+  shapeScene.setPreview(undefined);
 }
 
 function drawHands(hands: AnalyzedHand[], width: number, height: number) {
@@ -187,6 +319,43 @@ function drawHands(hands: AnalyzedHand[], width: number, height: number) {
       context.fill();
     });
   }
+}
+
+function renderShapeLibrary() {
+  shapeLibrary.innerHTML = `
+    <span class="metric-label">Shape Library</span>
+    <div class="shape-grid">
+      ${SHAPE_LIBRARY.map(
+        (shape) => `
+          <button class="shape-button" type="button" data-shape="${shape.type}">
+            <span class="shape-swatch" style="background: ${shape.color}"></span>
+            <span>${shape.label}</span>
+          </button>
+        `,
+      ).join("")}
+    </div>
+  `;
+
+  for (const button of shapeLibrary.querySelectorAll<HTMLButtonElement>("[data-shape]")) {
+    button.addEventListener("click", () => {
+      const type = button.dataset.shape as ShapeType;
+      const id = shapeScene.addShape(type, { x: 0, y: 0 });
+      if (id) {
+        refreshObjectCount();
+        setEventHud("shapeCreated", `${type} -> ${id}`);
+      }
+    });
+  }
+}
+
+function getShapeUnderPoint(x: number, y: number) {
+  for (const button of shapeLibrary.querySelectorAll<HTMLButtonElement>("[data-shape]")) {
+    const rect = button.getBoundingClientRect();
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      return button.dataset.shape as ShapeType;
+    }
+  }
+  return undefined;
 }
 
 function renderHandsList(hands: AnalyzedHand[]) {
@@ -233,12 +402,33 @@ function clearCanvas() {
 }
 
 function setMirror(enabled: boolean) {
+  mapper.setMirror(enabled);
   video.classList.toggle("mirrored", enabled);
   canvas.classList.toggle("mirrored", enabled);
 }
 
 function setStatus(message: string) {
   statusNode.textContent = message;
+}
+
+function setEventHud(name: string, detail: string) {
+  eventName.textContent = name;
+  eventDetail.textContent = detail;
+}
+
+function refreshObjectCount() {
+  const count = shapeScene.getSceneObjects().length;
+  objectCount.textContent = `${count} ${count === 1 ? "object" : "objects"}`;
+}
+
+function formatEventDetail(event: GestureEvent) {
+  if (event.transform) {
+    return `scale ${event.transform.scaleDelta.toFixed(2)} · rotate ${event.transform.rotationDelta.toFixed(2)}`;
+  }
+  if (event.mappedPoint) {
+    return `x ${Math.round(event.mappedPoint.x)} · y ${Math.round(event.mappedPoint.y)} · pinch ${event.confidence.pinch.toFixed(2)}`;
+  }
+  return `pinch ${event.confidence.pinch.toFixed(2)} · two-hand ${event.confidence.twoHandTransform.toFixed(2)}`;
 }
 
 function mountIcons() {

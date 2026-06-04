@@ -2,6 +2,14 @@ import type { Category, Landmark, NormalizedLandmark } from "@mediapipe/tasks-vi
 
 export type HandSide = "Left" | "Right" | "Unknown";
 export type FingerName = "thumb" | "index" | "middle" | "ring" | "pinky";
+export type GestureEventType =
+  | "pinchStart"
+  | "pinchMove"
+  | "pinchEnd"
+  | "twoHandTransformStart"
+  | "twoHandTransformMove"
+  | "twoHandTransformEnd";
+export type ShapeType = "cube" | "sphere" | "cylinder" | "cone" | "torus";
 
 export interface Vector2 {
   x: number;
@@ -39,6 +47,51 @@ export interface AnalyzedHand extends RawHand {
     distance: number;
   };
   motion: Vector2;
+}
+
+export interface GestureConfidence {
+  pinch: number;
+  twoHandTransform: number;
+}
+
+export interface MappedHandPoint {
+  handId: string;
+  handedness: HandSide;
+  x: number;
+  y: number;
+}
+
+export interface TwoHandTransform {
+  center: Vector2;
+  distance: number;
+  angle: number;
+  scaleDelta: number;
+  rotationDelta: number;
+}
+
+export interface GestureEvent {
+  type: GestureEventType;
+  timestamp: number;
+  primaryHand?: AnalyzedHand;
+  mappedPoint?: MappedHandPoint;
+  transform?: TwoHandTransform;
+  confidence: GestureConfidence;
+}
+
+export interface SceneObject {
+  id: string;
+  type: ShapeType;
+  position: Vector3;
+  rotation: Vector3;
+  scale: number;
+  selected: boolean;
+}
+
+export interface ShapeLibraryItem {
+  type: ShapeType;
+  label: string;
+  color: string;
+  defaultScale: number;
 }
 
 export interface TrackingFrame {

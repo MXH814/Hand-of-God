@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.22",
-    "lucide": "^1.17.0"
+    "lucide": "^1.17.0",
+    "three": "^0.184.0"
   },
   "devDependencies": {
+    "@types/three": "^0.184.1",
     "typescript": "^5.9.3",
     "vite": "^7.2.6"
   }
