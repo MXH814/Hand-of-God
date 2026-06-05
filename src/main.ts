@@ -281,6 +281,7 @@ function startCalibration() {
 
   analyzer.reset();
   eventEngine.reset();
+  shapeScene.setGameActive(false);
   calibration.start();
   setInteractionMode("idle");
   renderCalibration();
@@ -299,6 +300,7 @@ function stopCamera(status = "Idle") {
   analyzer.reset();
   eventEngine.reset();
   calibration.reset();
+  shapeScene.setGameActive(false);
   shapeScene.setPreview(undefined);
   clearCanvas();
   renderHandsList([]);
@@ -318,7 +320,11 @@ function renderFrame(frame: TrackingFrame) {
   latestHands = analyzer.analyze(frame.hands, smoothing, calibration.getPinchThreshold());
   calibration.update(latestHands, frame.timestamp);
   latestMappedPoints = mapper.mapHands(latestHands, arStage.getBoundingClientRect());
-  shapeScene.updateGameHands(latestMappedPoints, latestHands, frame.timestamp);
+  const isInteractive = calibration.isInteractive();
+  shapeScene.setGameActive(isInteractive);
+  if (isInteractive) {
+    shapeScene.updateGameHands(latestMappedPoints, latestHands, frame.timestamp);
+  }
   const events = calibration.isInteractive()
     ? eventEngine.update(latestHands, latestMappedPoints, frame.timestamp, calibration.getProfile())
     : [];
@@ -774,7 +780,9 @@ function refreshObjectCount() {
 function renderGameHud() {
   const state = shapeScene.getGameState();
   gameStatus.textContent =
-    state.status === "goal"
+    state.status === "waiting"
+      ? "Waiting for calibration"
+      : state.status === "goal"
       ? "Goal reached"
       : state.status === "fallen"
         ? "Fell off"
@@ -782,7 +790,9 @@ function renderGameHud() {
           ? "Resetting"
           : state.levelName;
   gameDetail.textContent =
-    state.status === "goal"
+    state.status === "waiting"
+      ? "Start camera and finish calibration to begin."
+      : state.status === "goal"
       ? "Nice. The ball reached the goal."
       : `${state.resetReason === "fallen" ? "Dropped and reset. " : ""}ball x ${state.ball.x.toFixed(2)} / y ${state.ball.y.toFixed(2)} / speed ${state.ball.speed.toFixed(2)} / hands ${state.activeHands}`;
 }

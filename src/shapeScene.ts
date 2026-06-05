@@ -11,6 +11,7 @@ interface ShapeControllerOptions {
 const WORLD_SCALE = 112;
 const DEPTH_STEP = 1.35;
 const GAME_DEPTH = 12;
+const DEBUG_OBJECT_DEPTH = GAME_DEPTH + 0.95;
 const BALL_RADIUS = 0.24;
 const HAND_RADIUS = 0.34;
 
@@ -28,8 +29,9 @@ interface GameHandCollider {
 
 export interface GameStateSnapshot {
   levelName: string;
-  status: "guiding" | "goal" | "resetting" | "fallen";
+  status: "waiting" | "guiding" | "goal" | "resetting" | "fallen";
   won: boolean;
+  active: boolean;
   activeHands: number;
   resetReason?: "manual" | "fallen";
   ball: {
@@ -46,6 +48,8 @@ export class ShapeScene {
   private readonly renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2();
+  private readonly interactionPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -GAME_DEPTH);
+  private readonly planeHit = new THREE.Vector3();
   private readonly physicsWorld = new CANNON.World();
   private readonly gameMaterial = new CANNON.Material("game");
   private readonly handMaterial = new CANNON.Material("hand");
@@ -95,6 +99,7 @@ export class ShapeScene {
   private deleteTargetObjectId?: string;
   private animationFrame = 0;
   private lastPhysicsTime = performance.now();
+  private gameActive = false;
   private gameWon = false;
   private gameStatus: GameStateSnapshot["status"] = "guiding";
   private lastResetAt = 0;
@@ -123,8 +128,9 @@ export class ShapeScene {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.className = "shape-canvas";
     this.options.stageElement.appendChild(this.renderer.domElement);
-    this.camera.position.set(0, 0, 30);
-    this.camera.lookAt(0, 0, 0);
+    this.camera.up.set(0, 0, 1);
+    this.camera.position.set(0, -7.4, GAME_DEPTH + 5.8);
+    this.camera.lookAt(0, 0, GAME_DEPTH);
     this.addLights();
     this.setupPhysics();
     this.setupGameLevel();
@@ -148,6 +154,21 @@ export class ShapeScene {
     this.ballBody.angularVelocity.set(0, 0, 0);
     this.ballBody.quaternion.set(0, 0, 0, 1);
     this.ballBody.wakeUp();
+  }
+
+  setGameActive(active: boolean) {
+    if (this.gameActive === active) {
+      return;
+    }
+
+    this.gameActive = active;
+    this.lastPhysicsTime = performance.now();
+    if (active) {
+      this.resetGame("manual");
+      return;
+    }
+
+    this.hideHandColliders();
   }
 
   updateGameHands(points: MappedHandPoint[], hands: AnalyzedHand[], timestamp: number) {
@@ -195,8 +216,9 @@ export class ShapeScene {
     const recentReset = performance.now() - this.lastResetAt < 900;
     return {
       levelName: this.level.name,
-      status: recentReset ? this.gameStatus : this.gameWon ? "goal" : "guiding",
+      status: !this.gameActive ? "waiting" : recentReset ? this.gameStatus : this.gameWon ? "goal" : "guiding",
       won: this.gameWon,
+      active: this.gameActive,
       activeHands: [...this.handColliders.values()].filter((collider) => collider.mesh.visible).length,
       resetReason: recentReset ? this.lastResetReason : undefined,
       ball: {
@@ -219,11 +241,24 @@ export class ShapeScene {
     this.camera.top = worldHeight / 2;
     this.camera.bottom = -worldHeight / 2;
     this.camera.updateProjectionMatrix();
+    this.camera.position.set(0, -7.4, GAME_DEPTH + 5.8);
+    this.camera.lookAt(0, 0, GAME_DEPTH);
     this.renderer.setSize(width, height, false);
   }
 
   screenToWorldPoint(clientX: number, clientY: number): Vector2 {
     const rect = this.options.stageElement.getBoundingClientRect();
+    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hit = this.raycaster.ray.intersectPlane(this.interactionPlane, this.planeHit);
+    if (hit) {
+      return {
+        x: hit.x,
+        y: hit.y,
+      };
+    }
+
     return {
       x: (clientX - rect.left - rect.width / 2) / WORLD_SCALE,
       y: -(clientY - rect.top - rect.height / 2) / WORLD_SCALE,
@@ -242,7 +277,7 @@ export class ShapeScene {
 
     const mesh = this.createMesh(item);
     const id = `${type}-${Date.now()}`;
-    const z = this.nextObjectDepth;
+    const z = DEBUG_OBJECT_DEPTH + this.nextObjectDepth;
     this.nextObjectDepth += DEPTH_STEP;
     mesh.position.set(point.x, point.y, z);
     mesh.scale.setScalar(item.defaultScale);
@@ -295,8 +330,8 @@ export class ShapeScene {
       this.scene.add(this.previewMesh);
     }
 
-    this.previewMesh.position.set(point.x, point.y, this.nextObjectDepth + 0.16);
-    this.previewMesh.renderOrder = Math.round((this.nextObjectDepth + 0.16) * 1000);
+    this.previewMesh.position.set(point.x, point.y, DEBUG_OBJECT_DEPTH + this.nextObjectDepth + 0.16);
+    this.previewMesh.renderOrder = Math.round((DEBUG_OBJECT_DEPTH + this.nextObjectDepth + 0.16) * 1000);
   }
 
   applyTransformAtScreenPoint(
@@ -734,10 +769,23 @@ export class ShapeScene {
     return collider;
   }
 
+  private hideHandColliders() {
+    for (const collider of this.handColliders.values()) {
+      collider.mesh.visible = false;
+      collider.body.position.set(30, 30, 0);
+      collider.body.velocity.set(0, 0, 0);
+    }
+  }
+
   private stepGame() {
     const now = performance.now();
     const delta = Math.min((now - this.lastPhysicsTime) / 1000, 1 / 30);
     this.lastPhysicsTime = now;
+    if (!this.gameActive) {
+      this.syncBallMesh();
+      return;
+    }
+
     this.physicsWorld.step(1 / 60, delta, 3);
 
     this.ballBody.position.z = 0;
@@ -763,6 +811,10 @@ export class ShapeScene {
       this.goalCore.material.opacity = 0.2;
     }
 
+    this.syncBallMesh();
+  }
+
+  private syncBallMesh() {
     this.ballMesh.position.set(this.ballBody.position.x, this.ballBody.position.y, GAME_DEPTH + 0.36);
     this.ballMesh.quaternion.copy(this.ballBody.quaternion as unknown as THREE.Quaternion);
   }
