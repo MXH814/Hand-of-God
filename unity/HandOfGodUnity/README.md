@@ -20,7 +20,8 @@ Hand of God > Rebuild Level 01 Scene
 
 ## Gameplay Prototype
 
-- A top-down 3D temple maze is generated with Unity primitives.
+- A top-down 3D temple map is generated and saved into `Assets/Scenes/Level01.unity`.
+- The current map theme is a floating mechanism temple with carved slabs, a central court, brass runes, pillars, braziers, rails, and a glowing goal altar.
 - The golden ball moves through the maze using Rigidbody physics.
 - Hand Roll / Pitch frames from UDP port `5005` drive the board tilt control.
 - The hand does not collide with the ball directly.

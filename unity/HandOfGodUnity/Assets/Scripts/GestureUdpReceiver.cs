@@ -17,18 +17,19 @@ namespace HandOfGod.Gestures
         private Thread thread;
         private UdpClient client;
         private volatile bool running;
-        private volatile long lastReceivedTicks;
+        private long lastReceivedTicks;
 
         public bool HasFreshFrame
         {
             get
             {
-                if (lastReceivedTicks == 0L)
+                var receivedTicks = Interlocked.Read(ref lastReceivedTicks);
+                if (receivedTicks == 0L)
                 {
                     return false;
                 }
 
-                var age = (DateTime.UtcNow.Ticks - lastReceivedTicks) / (float)TimeSpan.TicksPerSecond;
+                var age = (DateTime.UtcNow.Ticks - receivedTicks) / (float)TimeSpan.TicksPerSecond;
                 return age <= timeoutSeconds;
             }
         }
@@ -82,7 +83,7 @@ namespace HandOfGod.Gestures
                     {
                         latest = frame;
                     }
-                    lastReceivedTicks = DateTime.UtcNow.Ticks;
+                    Interlocked.Exchange(ref lastReceivedTicks, DateTime.UtcNow.Ticks);
                 }
             }
             catch (SocketException)
