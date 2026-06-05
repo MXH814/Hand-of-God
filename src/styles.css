@@ -216,18 +216,17 @@ video {
 .shape-tray {
   position: absolute;
   z-index: 6;
-  left: 50%;
-  bottom: 16px;
+  top: 16px;
+  right: 16px;
   display: grid;
-  width: min(720px, calc(100% - 32px));
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  width: min(360px, calc(100% - 32px));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 8px;
   background: rgba(248, 251, 249, 0.9);
   box-shadow: 0 16px 36px rgba(10, 17, 14, 0.2);
-  transform: translateX(-50%);
   backdrop-filter: blur(10px);
 }
 
@@ -376,14 +375,16 @@ video {
   border-radius: 50%;
 }
 
-.event-panel {
+.event-panel,
+.game-panel {
   padding: 12px;
   border: 1px solid #c6d3cc;
   border-radius: 8px;
   background: #ffffff;
 }
 
-.event-panel strong {
+.event-panel strong,
+.game-panel strong {
   display: block;
   margin: 4px 0 6px;
   color: #0f8b8d;
@@ -391,12 +392,18 @@ video {
   overflow-wrap: anywhere;
 }
 
-.event-panel p {
+.event-panel p,
+.game-panel p {
   min-height: 20px;
   margin: 0;
   color: #5a6b62;
   font-size: 0.88rem;
   overflow-wrap: anywhere;
+}
+
+.game-panel {
+  display: grid;
+  gap: 10px;
 }
 
 .metric-label {
@@ -577,7 +584,10 @@ video {
   }
 
   .shape-tray {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    top: 10px;
+    right: 10px;
+    width: min(280px, calc(100% - 20px));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .shape-button {

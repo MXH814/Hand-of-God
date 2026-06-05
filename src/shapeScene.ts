@@ -1,5 +1,6 @@
+import * as CANNON from "cannon-es";
 import * as THREE from "three";
-import type { MappedHandPoint, SceneObject, ShapeLibraryItem, ShapeType, Vector2 } from "./types";
+import type { AnalyzedHand, MappedHandPoint, SceneObject, ShapeLibraryItem, ShapeType, Vector2 } from "./types";
 
 interface ShapeControllerOptions {
   stageElement: HTMLElement;
@@ -8,6 +9,35 @@ interface ShapeControllerOptions {
 
 const WORLD_SCALE = 140;
 const DEPTH_STEP = 1.35;
+const GAME_DEPTH = 12;
+const BALL_RADIUS = 0.24;
+const HAND_RADIUS = 0.34;
+const BALL_START = new CANNON.Vec3(-2.78, 1.72, 0);
+const GOAL_CENTER = new THREE.Vector2(2.78, -1.58);
+const GOAL_RADIUS = 0.42;
+
+interface GamePlatform {
+  body: CANNON.Body;
+  mesh: THREE.Mesh;
+}
+
+interface GameHandCollider {
+  body: CANNON.Body;
+  mesh: THREE.Mesh;
+  lastPosition: CANNON.Vec3;
+  lastTimestamp: number;
+}
+
+export interface GameStateSnapshot {
+  status: "guiding" | "goal" | "resetting";
+  won: boolean;
+  activeHands: number;
+  ball: {
+    x: number;
+    y: number;
+    speed: number;
+  };
+}
 
 export class ShapeScene {
   private readonly scene = new THREE.Scene();
@@ -15,12 +45,58 @@ export class ShapeScene {
   private readonly renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2();
+  private readonly physicsWorld = new CANNON.World({
+    gravity: new CANNON.Vec3(0, -6.8, 0),
+  });
+  private readonly gameMaterial = new CANNON.Material("game");
+  private readonly handMaterial = new CANNON.Material("hand");
+  private readonly ballBody = new CANNON.Body({
+    mass: 1,
+    shape: new CANNON.Sphere(BALL_RADIUS),
+    material: this.gameMaterial,
+    linearDamping: 0.22,
+    angularDamping: 0.18,
+  });
+  private readonly ballMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(BALL_RADIUS, 32, 20),
+    new THREE.MeshStandardMaterial({
+      color: "#f7b801",
+      roughness: 0.38,
+      metalness: 0.08,
+      emissive: "#6b4d00",
+      emissiveIntensity: 0.16,
+    }),
+  );
+  private readonly gamePlatforms: GamePlatform[] = [];
+  private readonly handColliders = new Map<string, GameHandCollider>();
+  private readonly goalMesh = new THREE.Mesh(
+    new THREE.TorusGeometry(GOAL_RADIUS, 0.045, 12, 48),
+    new THREE.MeshStandardMaterial({
+      color: "#43aa8b",
+      roughness: 0.4,
+      metalness: 0.18,
+      emissive: "#0f8b8d",
+      emissiveIntensity: 0.28,
+    }),
+  );
+  private readonly goalCore = new THREE.Mesh(
+    new THREE.CircleGeometry(GOAL_RADIUS * 0.78, 48),
+    new THREE.MeshBasicMaterial({
+      color: "#43aa8b",
+      transparent: true,
+      opacity: 0.2,
+      depthWrite: false,
+    }),
+  );
   private readonly objects = new Map<string, THREE.Mesh>();
   private readonly objectState = new Map<string, SceneObject>();
   private selectedObjectId?: string;
   private activeObjectId?: string;
   private deleteTargetObjectId?: string;
   private animationFrame = 0;
+  private lastPhysicsTime = performance.now();
+  private gameWon = false;
+  private gameStatus: GameStateSnapshot["status"] = "guiding";
   private previewMesh?: THREE.Mesh;
   private nextObjectDepth = 0;
   private transformBase?: {
@@ -46,6 +122,8 @@ export class ShapeScene {
     this.camera.position.set(0, 0, 30);
     this.camera.lookAt(0, 0, 0);
     this.addLights();
+    this.setupPhysics();
+    this.setupGameLevel();
     this.resize();
     this.animate();
   }
@@ -54,6 +132,70 @@ export class ShapeScene {
     cancelAnimationFrame(this.animationFrame);
     this.renderer.dispose();
     this.renderer.domElement.remove();
+  }
+
+  resetGame() {
+    this.gameWon = false;
+    this.gameStatus = "resetting";
+    this.ballBody.position.copy(BALL_START);
+    this.ballBody.velocity.set(0, 0, 0);
+    this.ballBody.angularVelocity.set(0, 0, 0);
+    this.ballBody.quaternion.set(0, 0, 0, 1);
+    this.ballBody.wakeUp();
+  }
+
+  updateGameHands(points: MappedHandPoint[], hands: AnalyzedHand[], timestamp: number) {
+    const activeIds = new Set<string>();
+
+    for (const point of points) {
+      const hand = hands.find((candidate) => candidate.id === point.handId);
+      if (!hand || hand.score < 0.5) {
+        continue;
+      }
+
+      activeIds.add(point.handId);
+      const collider = this.getOrCreateHandCollider(point.handId);
+      const worldPoint = this.screenToWorldPoint(point.x, point.y);
+      const nextPosition = new CANNON.Vec3(worldPoint.x, worldPoint.y, 0);
+      const dt = Math.max((timestamp - collider.lastTimestamp) / 1000, 1 / 120);
+      const velocity = nextPosition.vsub(collider.lastPosition).scale(1 / dt);
+      const pinchBoost = hand.pinch.active ? 1.32 : 1;
+
+      collider.body.velocity.set(
+        clamp(velocity.x * pinchBoost, -8, 8),
+        clamp(velocity.y * pinchBoost, -8, 8),
+        0,
+      );
+      collider.body.position.copy(nextPosition);
+      collider.body.wakeUp();
+      collider.mesh.visible = true;
+      collider.mesh.position.set(nextPosition.x, nextPosition.y, GAME_DEPTH + 0.7);
+      collider.mesh.scale.setScalar(hand.pinch.active ? 1.18 : 1);
+      collider.lastPosition.copy(nextPosition);
+      collider.lastTimestamp = timestamp;
+    }
+
+    for (const [id, collider] of this.handColliders.entries()) {
+      if (activeIds.has(id)) {
+        continue;
+      }
+      collider.mesh.visible = false;
+      collider.body.position.set(30, 30, 0);
+      collider.body.velocity.set(0, 0, 0);
+    }
+  }
+
+  getGameState(): GameStateSnapshot {
+    return {
+      status: this.gameStatus,
+      won: this.gameWon,
+      activeHands: [...this.handColliders.values()].filter((collider) => collider.mesh.visible).length,
+      ball: {
+        x: this.ballBody.position.x,
+        y: this.ballBody.position.y,
+        speed: this.ballBody.velocity.length(),
+      },
+    };
   }
 
   resize() {
@@ -427,8 +569,147 @@ export class ShapeScene {
     this.scene.add(ambient, key);
   }
 
+  private setupPhysics() {
+    this.physicsWorld.allowSleep = true;
+    this.physicsWorld.addContactMaterial(
+      new CANNON.ContactMaterial(this.gameMaterial, this.gameMaterial, {
+        friction: 0.42,
+        restitution: 0.18,
+      }),
+    );
+    this.physicsWorld.addContactMaterial(
+      new CANNON.ContactMaterial(this.gameMaterial, this.handMaterial, {
+        friction: 0.12,
+        restitution: 0.08,
+      }),
+    );
+    this.ballBody.position.copy(BALL_START);
+    this.physicsWorld.addBody(this.ballBody);
+    this.ballMesh.castShadow = false;
+    this.ballMesh.receiveShadow = false;
+    this.ballMesh.renderOrder = GAME_DEPTH * 1000 + 10;
+    this.scene.add(this.ballMesh);
+  }
+
+  private setupGameLevel() {
+    this.goalMesh.position.set(GOAL_CENTER.x, GOAL_CENTER.y, GAME_DEPTH + 0.08);
+    this.goalMesh.renderOrder = GAME_DEPTH * 1000;
+    this.goalCore.position.copy(this.goalMesh.position);
+    this.goalCore.renderOrder = GAME_DEPTH * 1000 - 1;
+    this.scene.add(this.goalCore, this.goalMesh);
+
+    this.addPlatform({ x: 0, y: -2.3, width: 6.6, height: 0.24, angle: 0.02, color: "#e8f0eb" });
+    this.addPlatform({ x: -3.25, y: -0.35, width: 0.22, height: 4.2, angle: 0, color: "#c6d3cc" });
+    this.addPlatform({ x: 3.25, y: -0.35, width: 0.22, height: 4.2, angle: 0, color: "#c6d3cc" });
+    this.addPlatform({ x: -2.15, y: 1.12, width: 2.35, height: 0.22, angle: -0.22, color: "#0f8b8d" });
+    this.addPlatform({ x: -0.15, y: 0.15, width: 1.75, height: 0.2, angle: 0.2, color: "#d1495b" });
+    this.addPlatform({ x: 1.55, y: -0.72, width: 1.55, height: 0.2, angle: -0.16, color: "#6a7fdb" });
+    this.addPlatform({ x: 1.1, y: 0.76, width: 0.22, height: 1.08, angle: 0.55, color: "#f7b801" });
+  }
+
+  private addPlatform(config: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    angle: number;
+    color: string;
+  }) {
+    const halfExtents = new CANNON.Vec3(config.width / 2, config.height / 2, 0.28);
+    const body = new CANNON.Body({
+      mass: 0,
+      shape: new CANNON.Box(halfExtents),
+      material: this.gameMaterial,
+    });
+    body.position.set(config.x, config.y, 0);
+    body.quaternion.setFromEuler(0, 0, config.angle);
+    this.physicsWorld.addBody(body);
+
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(config.width, config.height, 0.12),
+      new THREE.MeshStandardMaterial({
+        color: config.color,
+        roughness: 0.5,
+        metalness: 0.08,
+      }),
+    );
+    mesh.position.set(config.x, config.y, GAME_DEPTH);
+    mesh.rotation.z = config.angle;
+    mesh.renderOrder = GAME_DEPTH * 1000;
+    this.scene.add(mesh);
+    this.gamePlatforms.push({ body, mesh });
+  }
+
+  private getOrCreateHandCollider(id: string) {
+    const existing = this.handColliders.get(id);
+    if (existing) {
+      return existing;
+    }
+
+    const body = new CANNON.Body({
+      mass: 0,
+      type: CANNON.Body.KINEMATIC,
+      shape: new CANNON.Sphere(HAND_RADIUS),
+      material: this.handMaterial,
+    });
+    body.position.set(30, 30, 0);
+    this.physicsWorld.addBody(body);
+
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(HAND_RADIUS, 24, 16),
+      new THREE.MeshBasicMaterial({
+        color: "#ffffff",
+        transparent: true,
+        opacity: 0.28,
+        depthWrite: false,
+      }),
+    );
+    mesh.visible = false;
+    mesh.renderOrder = GAME_DEPTH * 1000 + 30;
+    this.scene.add(mesh);
+
+    const collider = {
+      body,
+      mesh,
+      lastPosition: body.position.clone(),
+      lastTimestamp: performance.now(),
+    };
+    this.handColliders.set(id, collider);
+    return collider;
+  }
+
+  private stepGame() {
+    const now = performance.now();
+    const delta = Math.min((now - this.lastPhysicsTime) / 1000, 1 / 30);
+    this.lastPhysicsTime = now;
+    this.physicsWorld.step(1 / 60, delta, 3);
+
+    this.ballBody.position.z = 0;
+    this.ballBody.velocity.z = 0;
+    if (this.ballBody.position.y < -2.85 || this.ballBody.position.x < -3.6 || this.ballBody.position.x > 3.6) {
+      this.resetGame();
+    }
+
+    const goalDistance = Math.hypot(
+      this.ballBody.position.x - GOAL_CENTER.x,
+      this.ballBody.position.y - GOAL_CENTER.y,
+    );
+    if (!this.gameWon && goalDistance < GOAL_RADIUS && this.ballBody.velocity.length() < 2.8) {
+      this.gameWon = true;
+      this.gameStatus = "goal";
+      this.goalCore.material.opacity = 0.42;
+    } else if (!this.gameWon) {
+      this.gameStatus = "guiding";
+      this.goalCore.material.opacity = 0.2;
+    }
+
+    this.ballMesh.position.set(this.ballBody.position.x, this.ballBody.position.y, GAME_DEPTH + 0.36);
+    this.ballMesh.quaternion.copy(this.ballBody.quaternion as unknown as THREE.Quaternion);
+  }
+
   private animate = () => {
     this.animationFrame = requestAnimationFrame(this.animate);
+    this.stepGame();
     for (const mesh of this.objects.values()) {
       if (mesh.userData.objectId !== this.selectedObjectId) {
         mesh.rotation.y += 0.002;

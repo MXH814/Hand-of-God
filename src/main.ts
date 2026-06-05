@@ -34,7 +34,7 @@ app.innerHTML = `
     <header class="top-bar">
       <div>
         <p class="eyebrow">HCI Gesture Game</p>
-        <h1>Gesture AR Workspace</h1>
+        <h1>Hand of God</h1>
       </div>
       <div class="status-pill" id="status">Idle</div>
     </header>
@@ -95,6 +95,15 @@ app.innerHTML = `
           </div>
         </div>
 
+        <div class="game-panel">
+          <div>
+            <span class="metric-label">Game</span>
+            <strong id="game-status">Guiding</strong>
+            <p id="game-detail">Push the ball into the green goal.</p>
+          </div>
+          <button class="secondary-button full-width" id="reset-game" type="button">Reset Ball</button>
+        </div>
+
         <div class="control-row">
           <label class="switch">
             <input id="mirror" type="checkbox" checked />
@@ -143,6 +152,9 @@ const crossDeleteProgress = getElement<HTMLDivElement>("cross-delete-progress");
 const crossDeleteBar = getElement<HTMLSpanElement>("cross-delete-bar");
 const objectCount = getElement<HTMLElement>("object-count");
 const interactionModeNode = getElement<HTMLElement>("interaction-mode");
+const gameStatus = getElement<HTMLElement>("game-status");
+const gameDetail = getElement<HTMLParagraphElement>("game-detail");
+const resetGameButton = getElement<HTMLButtonElement>("reset-game");
 const calibrationLayer = getElement<HTMLDivElement>("calibration-layer");
 const calibrationTitle = getElement<HTMLElement>("calibration-title");
 const calibrationDetail = getElement<HTMLParagraphElement>("calibration-detail");
@@ -189,6 +201,8 @@ setMirror(true);
 renderHandsList([]);
 renderCalibration();
 setInteractionMode("idle");
+renderGameHud();
+window.setInterval(renderGameHud, 250);
 
 toggleButton.addEventListener("click", async () => {
   if (running) {
@@ -204,6 +218,12 @@ resetButton.addEventListener("click", () => {
   eventEngine.reset();
   setInteractionMode("idle");
   setEventHud("reset", "Smoothing and event state cleared");
+});
+
+resetGameButton.addEventListener("click", () => {
+  shapeScene.resetGame();
+  renderGameHud();
+  setEventHud("gameReset", "Ball returned to the start");
 });
 
 mirrorInput.addEventListener("change", () => {
@@ -298,6 +318,7 @@ function renderFrame(frame: TrackingFrame) {
   latestHands = analyzer.analyze(frame.hands, smoothing, calibration.getPinchThreshold());
   calibration.update(latestHands, frame.timestamp);
   latestMappedPoints = mapper.mapHands(latestHands, arStage.getBoundingClientRect());
+  shapeScene.updateGameHands(latestMappedPoints, latestHands, frame.timestamp);
   const events = calibration.isInteractive()
     ? eventEngine.update(latestHands, latestMappedPoints, frame.timestamp, calibration.getProfile())
     : [];
@@ -309,6 +330,7 @@ function renderFrame(frame: TrackingFrame) {
   renderCalibration();
   fpsNode.textContent = frame.fps.toFixed(1);
   handCountNode.textContent = String(latestHands.length);
+  renderGameHud();
   renderHandsList(latestHands);
 }
 
@@ -747,6 +769,14 @@ function setEventHud(name: string, detail: string) {
 function refreshObjectCount() {
   const count = shapeScene.getSceneObjects().length;
   objectCount.textContent = String(count);
+}
+
+function renderGameHud() {
+  const state = shapeScene.getGameState();
+  gameStatus.textContent = state.won ? "Goal reached" : state.status === "resetting" ? "Resetting" : "Guiding";
+  gameDetail.textContent = state.won
+    ? "Nice. The ball reached the goal."
+    : `ball x ${state.ball.x.toFixed(2)} / y ${state.ball.y.toFixed(2)} / speed ${state.ball.speed.toFixed(2)} / hands ${state.activeHands}`;
 }
 
 function formatEventDetail(event: GestureEvent) {
