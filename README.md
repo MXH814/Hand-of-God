@@ -127,6 +127,8 @@ E:\Unity\HandOfGodGestureBridge\.venv
 
 项目仍然保存在当前中文目录，只有 Python 依赖环境放到英文路径。
 
+桥接进程使用本地锁端口 `5007` 保证单实例运行，避免多次点击 `Start Camera` 后多个 Python 进程同时抢摄像头。退出 Unity 时会主动关闭由 Unity 启动的桥接进程。
+
 如果直接双击 `HandOfGod.exe`，Unity 会尝试自行启动桥接；失败信息会显示在校准界面，并写入：
 
 ```text

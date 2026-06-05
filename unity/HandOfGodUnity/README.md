@@ -23,6 +23,7 @@ All player-facing UI is controlled by index-finger dwell selection. Mouse contro
 The recommended launcher is the repository root `Play-HandOfGod.bat`. It prepares the Python environment, then launches Unity with the bridge directory argument. The player clicks `Start Camera` inside Unity to start the hidden MediaPipe bridge. The bridge sends landmarks through UDP `5005` and embedded JPEG camera frames through TCP `5006`.
 
 The launcher keeps the Python virtual environment at `E:\Unity\HandOfGodGestureBridge\.venv` because MediaPipe native model loading is unreliable from the repository's Chinese path.
+The bridge uses local lock port `5007` so repeated `Start Camera` clicks cannot create multiple camera processes. Unity stops the bridge process it started when the game exits.
 
 ## Gesture Input
 

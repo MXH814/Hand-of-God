@@ -161,6 +161,7 @@ namespace HandOfGod.Gameplay
             if (bridgeProcess != null && bridgeProcess.HasExited)
             {
                 bridgeStatus = $"Camera bridge exited ({bridgeProcess.ExitCode}). Check gesture-bridge-runtime.log.";
+                launchedBridge = false;
             }
             else if (usesExternalBridge)
             {
@@ -769,6 +770,12 @@ namespace HandOfGod.Gameplay
 
         private void StartHiddenGestureBridge(string bridgeDirectory)
         {
+            if (bridgeProcess != null && !bridgeProcess.HasExited)
+            {
+                bridgeStatus = "Camera bridge is already running.";
+                return;
+            }
+
             var scriptPath = Path.Combine(bridgeDirectory, "mediapipe_udp_sender.py");
             var python = ResolveGesturePython(bridgeDirectory);
             var logPath = Path.Combine(bridgeDirectory, "gesture-bridge-runtime.log");
@@ -784,6 +791,8 @@ namespace HandOfGod.Gameplay
                     RedirectStandardError = true,
                     RedirectStandardOutput = true,
                 };
+                launchedBridge = true;
+                bridgeStatus = "Starting camera...";
                 bridgeProcess = Process.Start(startInfo);
                 if (bridgeProcess != null)
                 {
@@ -803,6 +812,12 @@ namespace HandOfGod.Gameplay
 
         private void StartVisibleGestureBridge()
         {
+            if (bridgeProcess != null && !bridgeProcess.HasExited)
+            {
+                bridgeStatus = "Camera bridge is already running.";
+                return;
+            }
+
             var bridgeDirectory = FindBridgeDirectory();
             if (string.IsNullOrEmpty(bridgeDirectory))
             {
@@ -825,6 +840,8 @@ namespace HandOfGod.Gameplay
                     RedirectStandardOutput = true,
                 };
                 var logPath = Path.Combine(bridgeDirectory, "gesture-bridge-runtime.log");
+                launchedBridge = true;
+                bridgeStatus = "Starting camera...";
                 bridgeProcess = Process.Start(startInfo);
                 if (bridgeProcess != null)
                 {
@@ -833,7 +850,6 @@ namespace HandOfGod.Gameplay
                     bridgeProcess.BeginOutputReadLine();
                     bridgeProcess.BeginErrorReadLine();
                 }
-                launchedBridge = true;
                 usesExternalBridge = false;
                 bridgeStatus = "Camera bridge started; waiting for image and hand...";
             }
@@ -951,6 +967,21 @@ namespace HandOfGod.Gameplay
 
         private void OnApplicationQuit()
         {
+            StopBridgeProcess();
+        }
+
+        private void OnDisable()
+        {
+            StopBridgeProcess();
+        }
+
+        private void OnDestroy()
+        {
+            StopBridgeProcess();
+        }
+
+        private void StopBridgeProcess()
+        {
             if (bridgeProcess == null)
             {
                 return;
@@ -961,11 +992,18 @@ namespace HandOfGod.Gameplay
                 if (!bridgeProcess.HasExited)
                 {
                     bridgeProcess.Kill();
+                    bridgeProcess.WaitForExit(500);
                 }
             }
             catch (System.Exception)
             {
                 // Process may already be gone during application shutdown.
+            }
+            finally
+            {
+                bridgeProcess.Dispose();
+                bridgeProcess = null;
+                launchedBridge = false;
             }
         }
 

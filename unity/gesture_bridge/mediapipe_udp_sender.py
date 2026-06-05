@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import socket
 import struct
 import time
@@ -168,11 +169,21 @@ def main():
     parser.add_argument("--video-width", type=int, default=640)
     parser.add_argument("--video-height", type=int, default=480)
     parser.add_argument("--jpeg-quality", type=int, default=72)
+    parser.add_argument("--lock-port", type=int, default=5007)
     args = parser.parse_args()
 
+    lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        lock_socket.bind(("127.0.0.1", args.lock_port))
+        lock_socket.listen(1)
+    except OSError:
+        print(f"Another Hand of God gesture bridge is already running on lock port {args.lock_port}.")
+        return
+
+    os.environ.setdefault("GLOG_minloglevel", "1")
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     video = VideoStreamClient(args.video_host, args.video_port)
-    hands_model = mp.solutions.hands.Hands(max_num_hands=2, min_detection_confidence=0.65, min_tracking_confidence=0.65)
+    hands_model = mp.solutions.hands.Hands(max_num_hands=2, model_complexity=0, min_detection_confidence=0.65, min_tracking_confidence=0.65)
     drawing = mp.solutions.drawing_utils
     cap = cv2.VideoCapture(args.camera, cv2.CAP_DSHOW)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.video_width)
@@ -183,92 +194,96 @@ def main():
     smooth_points = {}
 
     print("Hand of God bridge: headless camera tracking started. Use --preview for a debug window.")
-    while cap.isOpened():
-        ok, frame = cap.read()
-        if not ok:
-            break
-
-        frame = cv2.resize(frame, (args.video_width, args.video_height), interpolation=cv2.INTER_AREA)
-
-        if args.mirror:
-            frame = cv2.flip(frame, 1)
-
-        result = hands_model.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        payload = neutral_payload()
-        analyzed = []
-
-        if result.multi_hand_landmarks:
-            handedness_list = result.multi_handedness or []
-            for index, hand in enumerate(result.multi_hand_landmarks[:2]):
-                category = handedness_list[index].classification[0] if index < len(handedness_list) else None
-                label = category.label if category else "Unknown"
-                score = category.score if category else 1.0
-                hand_id = f"{label}-{index}"
-                hand_payload, raw = analyze_hand(hand.landmark, label, score, hand_id, neutral)
-                last_raw = raw
-
-                distance = raw["pinchDistance"]
-                latched = pinch_latches.get(hand_id, False)
-                latched = distance < (0.92 if latched else 0.72)
-                pinch_latches[hand_id] = latched
-
-                previous = smooth_points.get(hand_id, (hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"]))
-                smoothed = (
-                    previous[0] * 0.72 + hand_payload["pinchX"] * 0.28,
-                    previous[1] * 0.72 + hand_payload["pinchY"] * 0.28,
-                    previous[2] * 0.72 + hand_payload["indexX"] * 0.28,
-                    previous[3] * 0.72 + hand_payload["indexY"] * 0.28,
-                )
-                smooth_points[hand_id] = smoothed
-
-                hand_payload["pinch"] = latched
-                hand_payload["openPalm"] = hand_payload["openPalm"] and not latched
-                hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"] = smoothed
-                analyzed.append(hand_payload)
-                drawing.draw_landmarks(frame, hand, mp.solutions.hands.HAND_CONNECTIONS)
-
-        if analyzed:
-            primary = sorted(analyzed, key=lambda h: (h["pinch"], h["score"]), reverse=True)[0]
-            payload.update({
-                "roll": primary["palmRoll"],
-                "pitch": primary["palmPitch"],
-                "pinchX": primary["pinchX"],
-                "pinchY": primary["pinchY"],
-                "indexX": primary["indexX"],
-                "indexY": primary["indexY"],
-                "pinchDistance": primary["pinchDistance"],
-                "palmSpan": primary["palmSpan"],
-                "palmRoll": primary["palmRoll"],
-                "palmPitch": primary["palmPitch"],
-                "palmYaw": primary["palmYaw"],
-                "confidence": primary["score"],
-                "pinch": primary["pinch"],
-                "openPalm": primary["openPalm"],
-                "handCount": len(analyzed),
-                "hands": analyzed,
-                "timestamp": time.time(),
-            })
-
-        sock.sendto(json.dumps(payload).encode("utf-8"), (args.host, args.port))
-        video.send_jpeg(frame, max(30, min(args.jpeg_quality, 95)))
-
-        if args.preview:
-            cv2.putText(frame, "C calibrate neutral | Q quit", (18, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (80, 240, 180), 2)
-            cv2.putText(frame, f"hands {payload['handCount']} pinch {payload['pinchDistance']:.2f}", (18, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (80, 240, 180), 2)
-            cv2.imshow("Hand of God Gesture Bridge", frame)
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord("q"):
+    try:
+        while cap.isOpened():
+            ok, frame = cap.read()
+            if not ok:
                 break
-            if key == ord("c"):
-                neutral = dict(last_raw)
-                print(f"Calibrated bridge neutral pose: {neutral}")
-        else:
-            time.sleep(0.001)
 
-    cap.release()
-    video.close()
-    if args.preview:
-        cv2.destroyAllWindows()
+            frame = cv2.resize(frame, (args.video_width, args.video_height), interpolation=cv2.INTER_AREA)
+
+            if args.mirror:
+                frame = cv2.flip(frame, 1)
+
+            result = hands_model.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            payload = neutral_payload()
+            analyzed = []
+
+            if result.multi_hand_landmarks:
+                handedness_list = result.multi_handedness or []
+                for index, hand in enumerate(result.multi_hand_landmarks[:2]):
+                    category = handedness_list[index].classification[0] if index < len(handedness_list) else None
+                    label = category.label if category else "Unknown"
+                    score = category.score if category else 1.0
+                    hand_id = f"{label}-{index}"
+                    hand_payload, raw = analyze_hand(hand.landmark, label, score, hand_id, neutral)
+                    last_raw = raw
+
+                    distance = raw["pinchDistance"]
+                    latched = pinch_latches.get(hand_id, False)
+                    latched = distance < (0.92 if latched else 0.72)
+                    pinch_latches[hand_id] = latched
+
+                    previous = smooth_points.get(hand_id, (hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"]))
+                    smoothed = (
+                        previous[0] * 0.72 + hand_payload["pinchX"] * 0.28,
+                        previous[1] * 0.72 + hand_payload["pinchY"] * 0.28,
+                        previous[2] * 0.72 + hand_payload["indexX"] * 0.28,
+                        previous[3] * 0.72 + hand_payload["indexY"] * 0.28,
+                    )
+                    smooth_points[hand_id] = smoothed
+
+                    hand_payload["pinch"] = latched
+                    hand_payload["openPalm"] = hand_payload["openPalm"] and not latched
+                    hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"] = smoothed
+                    analyzed.append(hand_payload)
+                    if args.preview:
+                        drawing.draw_landmarks(frame, hand, mp.solutions.hands.HAND_CONNECTIONS)
+
+            if analyzed:
+                primary = sorted(analyzed, key=lambda h: (h["pinch"], h["score"]), reverse=True)[0]
+                payload.update({
+                    "roll": primary["palmRoll"],
+                    "pitch": primary["palmPitch"],
+                    "pinchX": primary["pinchX"],
+                    "pinchY": primary["pinchY"],
+                    "indexX": primary["indexX"],
+                    "indexY": primary["indexY"],
+                    "pinchDistance": primary["pinchDistance"],
+                    "palmSpan": primary["palmSpan"],
+                    "palmRoll": primary["palmRoll"],
+                    "palmPitch": primary["palmPitch"],
+                    "palmYaw": primary["palmYaw"],
+                    "confidence": primary["score"],
+                    "pinch": primary["pinch"],
+                    "openPalm": primary["openPalm"],
+                    "handCount": len(analyzed),
+                    "hands": analyzed,
+                    "timestamp": time.time(),
+                })
+
+            sock.sendto(json.dumps(payload).encode("utf-8"), (args.host, args.port))
+            video.send_jpeg(frame, max(30, min(args.jpeg_quality, 95)))
+
+            if args.preview:
+                cv2.putText(frame, "C calibrate neutral | Q quit", (18, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (80, 240, 180), 2)
+                cv2.putText(frame, f"hands {payload['handCount']} pinch {payload['pinchDistance']:.2f}", (18, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (80, 240, 180), 2)
+                cv2.imshow("Hand of God Gesture Bridge", frame)
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord("q"):
+                    break
+                if key == ord("c"):
+                    neutral = dict(last_raw)
+                    print(f"Calibrated bridge neutral pose: {neutral}")
+            else:
+                time.sleep(0.001)
+    finally:
+        cap.release()
+        video.close()
+        hands_model.close()
+        lock_socket.close()
+        if args.preview:
+            cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
