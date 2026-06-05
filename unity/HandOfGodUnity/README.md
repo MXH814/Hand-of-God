@@ -4,13 +4,13 @@ This Unity project is the new main direction for the HCI gesture rolling-ball ga
 
 ## Version
 
-- Recommended editor: Unity 2022.3 LTS
+- Recommended editor: Unity 6.4 (6000.4.10f1)
 - Project path: `E:\同济\大二下\用户交互技术HCI\期末项目\unity\HandOfGodUnity`
 - Recommended editor install path: `E:\Unity\Hub\Editor`
 
 ## Scene Generation
 
-Open the project in Unity. The editor script creates `Assets/Scenes/Level01.unity` automatically if it is missing.
+Open the project in Unity 6.4. The editor script creates `Assets/Scenes/Level01.unity` automatically if it is missing.
 
 Manual rebuild:
 

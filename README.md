@@ -7,7 +7,7 @@
 - 旧网页原型仍保留在根目录，技术栈为 Vite + TypeScript + MediaPipe + Three.js + cannon-es。
 - 新 Unity 原型位于 `unity/HandOfGodUnity`。
 - Unity 手势桥接脚本位于 `unity/gesture_bridge`，使用 MediaPipe + OpenCV 识别手部姿态，并通过 UDP `127.0.0.1:5005` 发送给 Unity。
-- Unity Hub 已安装；Unity Editor 推荐安装到 `E:\Unity\Hub\Editor`，Unity 项目和缓存也统一放在 E 盘。
+- Unity Hub 已安装在 E 盘；Unity Editor 目标版本改为 `Unity 6.4 (6000.4.10f1)`，推荐安装到 `E:\Unity\Hub\Editor`，Unity 项目和缓存也统一放在 E 盘。
 
 ## 为什么迁移到 Unity
 
@@ -34,7 +34,7 @@ Unity 更适合本项目后续目标：
 
 1. 打开 Unity Hub。
 2. 设置 Editor 安装路径为 `E:\Unity\Hub\Editor`。
-3. 安装 Unity `2022.3 LTS`。
+3. 安装 Unity `6.4 (6000.4.10f1)`。
 4. 在 Hub 中选择 Add project from disk，打开：
 
 ```text
@@ -80,7 +80,7 @@ npm run build
 
 ## 后续路线
 
-- Unity Level 01：完成真实美术地图、起点到终点路线、基础胜利/重置流程。
+- Unity 6 Level 01：完成真实美术地图、起点到终点路线、基础胜利/重置流程。
 - 手势能力 1：手掌倾斜控制机关桌。
 - 手势能力 2：捏取移动木块或升降门。
 - 手势能力 3：食指戳按钮、开关门、启动传送带。
