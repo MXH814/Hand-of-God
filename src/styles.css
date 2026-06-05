@@ -219,15 +219,22 @@ video {
   top: 16px;
   right: 16px;
   display: grid;
-  width: min(360px, calc(100% - 32px));
+  width: min(320px, calc(100% - 32px));
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 8px;
-  background: rgba(248, 251, 249, 0.9);
-  box-shadow: 0 16px 36px rgba(10, 17, 14, 0.2);
+  background: rgba(248, 251, 249, 0.68);
+  box-shadow: 0 12px 28px rgba(10, 17, 14, 0.14);
+  opacity: 0.76;
   backdrop-filter: blur(10px);
+}
+
+.shape-tray:hover,
+.shape-tray:focus-within {
+  opacity: 1;
+  background: rgba(248, 251, 249, 0.92);
 }
 
 .cross-delete-progress {
@@ -336,7 +343,9 @@ video {
   position: relative;
   overflow: hidden;
   min-width: 0;
-  padding: 0 10px;
+  min-height: 38px;
+  padding: 0 9px;
+  font-size: 0.88rem;
 }
 
 .shape-button > span:not(.shape-progress) {

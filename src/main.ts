@@ -773,10 +773,18 @@ function refreshObjectCount() {
 
 function renderGameHud() {
   const state = shapeScene.getGameState();
-  gameStatus.textContent = state.won ? "Goal reached" : state.status === "resetting" ? "Resetting" : "Guiding";
-  gameDetail.textContent = state.won
-    ? "Nice. The ball reached the goal."
-    : `ball x ${state.ball.x.toFixed(2)} / y ${state.ball.y.toFixed(2)} / speed ${state.ball.speed.toFixed(2)} / hands ${state.activeHands}`;
+  gameStatus.textContent =
+    state.status === "goal"
+      ? "Goal reached"
+      : state.status === "fallen"
+        ? "Fell off"
+        : state.status === "resetting"
+          ? "Resetting"
+          : state.levelName;
+  gameDetail.textContent =
+    state.status === "goal"
+      ? "Nice. The ball reached the goal."
+      : `${state.resetReason === "fallen" ? "Dropped and reset. " : ""}ball x ${state.ball.x.toFixed(2)} / y ${state.ball.y.toFixed(2)} / speed ${state.ball.speed.toFixed(2)} / hands ${state.activeHands}`;
 }
 
 function formatEventDetail(event: GestureEvent) {

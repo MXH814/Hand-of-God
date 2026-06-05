@@ -1,5 +1,6 @@
 import * as CANNON from "cannon-es";
 import * as THREE from "three";
+import { LEVEL_01, type GameLevel, type LevelBlock, type LevelProp } from "./gameLevel";
 import type { AnalyzedHand, MappedHandPoint, SceneObject, ShapeLibraryItem, ShapeType, Vector2 } from "./types";
 
 interface ShapeControllerOptions {
@@ -7,14 +8,11 @@ interface ShapeControllerOptions {
   library: ShapeLibraryItem[];
 }
 
-const WORLD_SCALE = 140;
+const WORLD_SCALE = 112;
 const DEPTH_STEP = 1.35;
 const GAME_DEPTH = 12;
 const BALL_RADIUS = 0.24;
 const HAND_RADIUS = 0.34;
-const BALL_START = new CANNON.Vec3(-2.78, 1.72, 0);
-const GOAL_CENTER = new THREE.Vector2(2.78, -1.58);
-const GOAL_RADIUS = 0.42;
 
 interface GamePlatform {
   body: CANNON.Body;
@@ -29,9 +27,11 @@ interface GameHandCollider {
 }
 
 export interface GameStateSnapshot {
-  status: "guiding" | "goal" | "resetting";
+  levelName: string;
+  status: "guiding" | "goal" | "resetting" | "fallen";
   won: boolean;
   activeHands: number;
+  resetReason?: "manual" | "fallen";
   ball: {
     x: number;
     y: number;
@@ -40,14 +40,13 @@ export interface GameStateSnapshot {
 }
 
 export class ShapeScene {
+  private readonly level: GameLevel = LEVEL_01;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
   private readonly renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2();
-  private readonly physicsWorld = new CANNON.World({
-    gravity: new CANNON.Vec3(0, -6.8, 0),
-  });
+  private readonly physicsWorld = new CANNON.World();
   private readonly gameMaterial = new CANNON.Material("game");
   private readonly handMaterial = new CANNON.Material("hand");
   private readonly ballBody = new CANNON.Body({
@@ -68,9 +67,10 @@ export class ShapeScene {
     }),
   );
   private readonly gamePlatforms: GamePlatform[] = [];
+  private readonly levelMeshes: THREE.Object3D[] = [];
   private readonly handColliders = new Map<string, GameHandCollider>();
   private readonly goalMesh = new THREE.Mesh(
-    new THREE.TorusGeometry(GOAL_RADIUS, 0.045, 12, 48),
+    new THREE.TorusGeometry(LEVEL_01.goal.radius, 0.045, 12, 48),
     new THREE.MeshStandardMaterial({
       color: "#43aa8b",
       roughness: 0.4,
@@ -80,7 +80,7 @@ export class ShapeScene {
     }),
   );
   private readonly goalCore = new THREE.Mesh(
-    new THREE.CircleGeometry(GOAL_RADIUS * 0.78, 48),
+    new THREE.CircleGeometry(LEVEL_01.goal.radius * 0.78, 48),
     new THREE.MeshBasicMaterial({
       color: "#43aa8b",
       transparent: true,
@@ -97,6 +97,8 @@ export class ShapeScene {
   private lastPhysicsTime = performance.now();
   private gameWon = false;
   private gameStatus: GameStateSnapshot["status"] = "guiding";
+  private lastResetAt = 0;
+  private lastResetReason: GameStateSnapshot["resetReason"];
   private previewMesh?: THREE.Mesh;
   private nextObjectDepth = 0;
   private transformBase?: {
@@ -117,6 +119,8 @@ export class ShapeScene {
   constructor(private readonly options: ShapeControllerOptions) {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.className = "shape-canvas";
     this.options.stageElement.appendChild(this.renderer.domElement);
     this.camera.position.set(0, 0, 30);
@@ -134,10 +138,12 @@ export class ShapeScene {
     this.renderer.domElement.remove();
   }
 
-  resetGame() {
+  resetGame(reason: "manual" | "fallen" = "manual") {
     this.gameWon = false;
-    this.gameStatus = "resetting";
-    this.ballBody.position.copy(BALL_START);
+    this.gameStatus = reason === "fallen" ? "fallen" : "resetting";
+    this.lastResetAt = performance.now();
+    this.lastResetReason = reason;
+    this.ballBody.position.set(this.level.start.x, this.level.start.y, 0);
     this.ballBody.velocity.set(0, 0, 0);
     this.ballBody.angularVelocity.set(0, 0, 0);
     this.ballBody.quaternion.set(0, 0, 0, 1);
@@ -186,10 +192,13 @@ export class ShapeScene {
   }
 
   getGameState(): GameStateSnapshot {
+    const recentReset = performance.now() - this.lastResetAt < 900;
     return {
-      status: this.gameStatus,
+      levelName: this.level.name,
+      status: recentReset ? this.gameStatus : this.gameWon ? "goal" : "guiding",
       won: this.gameWon,
       activeHands: [...this.handColliders.values()].filter((collider) => collider.mesh.visible).length,
+      resetReason: recentReset ? this.lastResetReason : undefined,
       ball: {
         x: this.ballBody.position.x,
         y: this.ballBody.position.y,
@@ -566,10 +575,13 @@ export class ShapeScene {
     const ambient = new THREE.AmbientLight("#ffffff", 0.88);
     const key = new THREE.DirectionalLight("#ffffff", 1.1);
     key.position.set(2, 3, 5);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
     this.scene.add(ambient, key);
   }
 
   private setupPhysics() {
+    this.physicsWorld.gravity.set(this.level.gravity.x, this.level.gravity.y, this.level.gravity.z);
     this.physicsWorld.allowSleep = true;
     this.physicsWorld.addContactMaterial(
       new CANNON.ContactMaterial(this.gameMaterial, this.gameMaterial, {
@@ -583,7 +595,7 @@ export class ShapeScene {
         restitution: 0.08,
       }),
     );
-    this.ballBody.position.copy(BALL_START);
+    this.ballBody.position.set(this.level.start.x, this.level.start.y, 0);
     this.physicsWorld.addBody(this.ballBody);
     this.ballMesh.castShadow = false;
     this.ballMesh.receiveShadow = false;
@@ -592,52 +604,96 @@ export class ShapeScene {
   }
 
   private setupGameLevel() {
-    this.goalMesh.position.set(GOAL_CENTER.x, GOAL_CENTER.y, GAME_DEPTH + 0.08);
+    this.goalMesh.position.set(this.level.goal.x, this.level.goal.y, GAME_DEPTH + 0.16);
     this.goalMesh.renderOrder = GAME_DEPTH * 1000;
     this.goalCore.position.copy(this.goalMesh.position);
     this.goalCore.renderOrder = GAME_DEPTH * 1000 - 1;
+    this.goalCore.rotation.z = -0.08;
     this.scene.add(this.goalCore, this.goalMesh);
 
-    this.addPlatform({ x: 0, y: -2.3, width: 6.6, height: 0.24, angle: 0.02, color: "#e8f0eb" });
-    this.addPlatform({ x: -3.25, y: -0.35, width: 0.22, height: 4.2, angle: 0, color: "#c6d3cc" });
-    this.addPlatform({ x: 3.25, y: -0.35, width: 0.22, height: 4.2, angle: 0, color: "#c6d3cc" });
-    this.addPlatform({ x: -2.15, y: 1.12, width: 2.35, height: 0.22, angle: -0.22, color: "#0f8b8d" });
-    this.addPlatform({ x: -0.15, y: 0.15, width: 1.75, height: 0.2, angle: 0.2, color: "#d1495b" });
-    this.addPlatform({ x: 1.55, y: -0.72, width: 1.55, height: 0.2, angle: -0.16, color: "#6a7fdb" });
-    this.addPlatform({ x: 1.1, y: 0.76, width: 0.22, height: 1.08, angle: 0.55, color: "#f7b801" });
+    for (const block of this.level.blocks) {
+      this.addLevelBlock(block);
+    }
+
+    for (const prop of this.level.props) {
+      this.addLevelProp(prop);
+    }
   }
 
-  private addPlatform(config: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    angle: number;
-    color: string;
-  }) {
-    const halfExtents = new CANNON.Vec3(config.width / 2, config.height / 2, 0.28);
+  private addLevelBlock(block: LevelBlock) {
+    const blockHeight = block.height3d ?? 0.14;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(block.width, block.height, blockHeight),
+      new THREE.MeshStandardMaterial({
+        color: block.color,
+        roughness: block.kind === "floor" ? 0.74 : 0.5,
+        metalness: block.kind === "hazard" ? 0.04 : 0.1,
+        transparent: block.opacity !== undefined,
+        opacity: block.opacity ?? 1,
+      }),
+    );
+    mesh.position.set(block.x, block.y, GAME_DEPTH + blockHeight / 2 - 0.08);
+    mesh.rotation.z = block.angle ?? 0;
+    mesh.renderOrder = block.kind === "floor" || block.kind === "hazard" ? GAME_DEPTH * 1000 - 4 : GAME_DEPTH * 1000;
+    mesh.receiveShadow = true;
+    mesh.castShadow = block.kind !== "floor" && block.kind !== "hazard";
+    this.scene.add(mesh);
+    this.levelMeshes.push(mesh);
+
+    if (block.kind === "hazard") {
+      const rim = new THREE.Mesh(
+        new THREE.BoxGeometry(block.width + 0.08, block.height + 0.08, 0.025),
+        new THREE.MeshBasicMaterial({
+          color: "#d1495b",
+          transparent: true,
+          opacity: 0.32,
+          depthWrite: false,
+        }),
+      );
+      rim.position.set(block.x, block.y, GAME_DEPTH + 0.02);
+      rim.rotation.z = block.angle ?? 0;
+      rim.renderOrder = GAME_DEPTH * 1000 - 3;
+      this.scene.add(rim);
+      this.levelMeshes.push(rim);
+    }
+
+    if (block.physics === false || block.kind === "floor" || block.kind === "hazard") {
+      return;
+    }
+
+    const halfExtents = new CANNON.Vec3(block.width / 2, block.height / 2, 0.28);
     const body = new CANNON.Body({
       mass: 0,
       shape: new CANNON.Box(halfExtents),
       material: this.gameMaterial,
     });
-    body.position.set(config.x, config.y, 0);
-    body.quaternion.setFromEuler(0, 0, config.angle);
+    body.position.set(block.x, block.y, 0);
+    body.quaternion.setFromEuler(0, 0, block.angle ?? 0);
     this.physicsWorld.addBody(body);
-
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(config.width, config.height, 0.12),
-      new THREE.MeshStandardMaterial({
-        color: config.color,
-        roughness: 0.5,
-        metalness: 0.08,
-      }),
-    );
-    mesh.position.set(config.x, config.y, GAME_DEPTH);
-    mesh.rotation.z = config.angle;
-    mesh.renderOrder = GAME_DEPTH * 1000;
-    this.scene.add(mesh);
     this.gamePlatforms.push({ body, mesh });
+  }
+
+  private addLevelProp(prop: LevelProp) {
+    const mesh = createPropMesh(prop);
+    mesh.position.set(prop.x, prop.y, GAME_DEPTH + 0.25);
+    mesh.rotation.z = prop.angle ?? 0;
+    mesh.renderOrder = GAME_DEPTH * 1000 + 4;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    this.scene.add(mesh);
+    this.levelMeshes.push(mesh);
+
+    if (prop.kind !== "bumper") {
+      return;
+    }
+
+    const body = new CANNON.Body({
+      mass: 0,
+      shape: new CANNON.Sphere(prop.radius ?? 0.18),
+      material: this.gameMaterial,
+    });
+    body.position.set(prop.x, prop.y, 0);
+    this.physicsWorld.addBody(body);
   }
 
   private getOrCreateHandCollider(id: string) {
@@ -686,15 +742,19 @@ export class ShapeScene {
 
     this.ballBody.position.z = 0;
     this.ballBody.velocity.z = 0;
-    if (this.ballBody.position.y < -2.85 || this.ballBody.position.x < -3.6 || this.ballBody.position.x > 3.6) {
-      this.resetGame();
+    if (
+      this.ballBody.position.y < this.level.fallBounds.bottom ||
+      this.ballBody.position.x < this.level.fallBounds.left ||
+      this.ballBody.position.x > this.level.fallBounds.right
+    ) {
+      this.resetGame("fallen");
     }
 
     const goalDistance = Math.hypot(
-      this.ballBody.position.x - GOAL_CENTER.x,
-      this.ballBody.position.y - GOAL_CENTER.y,
+      this.ballBody.position.x - this.level.goal.x,
+      this.ballBody.position.y - this.level.goal.y,
     );
-    if (!this.gameWon && goalDistance < GOAL_RADIUS && this.ballBody.velocity.length() < 2.8) {
+    if (!this.gameWon && goalDistance < this.level.goal.radius && this.ballBody.velocity.length() < 2.8) {
       this.gameWon = true;
       this.gameStatus = "goal";
       this.goalCore.material.opacity = 0.42;
@@ -732,6 +792,55 @@ function createGeometry(type: ShapeType) {
     case "torus":
       return new THREE.TorusGeometry(0.58, 0.18, 18, 48);
   }
+}
+
+function createPropMesh(prop: LevelProp) {
+  if (prop.kind === "pillar" || prop.kind === "bumper") {
+    const radius = prop.radius ?? 0.12;
+    const height = prop.height ?? 0.38;
+    const material = new THREE.MeshStandardMaterial({
+      color: prop.color,
+      roughness: 0.42,
+      metalness: prop.kind === "bumper" ? 0.18 : 0.08,
+      emissive: prop.kind === "bumper" ? prop.color : "#000000",
+      emissiveIntensity: prop.kind === "bumper" ? 0.12 : 0,
+    });
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 24), material);
+    mesh.rotation.x = Math.PI / 2;
+    return mesh;
+  }
+
+  if (prop.kind === "marker") {
+    return new THREE.Mesh(
+      new THREE.RingGeometry((prop.radius ?? 0.38) * 0.72, prop.radius ?? 0.38, 40),
+      new THREE.MeshBasicMaterial({
+        color: prop.color,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+      }),
+    );
+  }
+
+  const group = new THREE.Group();
+  const width = prop.width ?? 0.48;
+  const height = prop.height ?? 0.16;
+  const material = new THREE.MeshBasicMaterial({
+    color: prop.color,
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+  });
+  const stem = new THREE.Mesh(new THREE.BoxGeometry(width * 0.62, height * 0.42, 0.035), material);
+  const triangle = new THREE.Shape();
+  triangle.moveTo(width * 0.2, -height * 0.8);
+  triangle.lineTo(width * 0.2, height * 0.8);
+  triangle.lineTo(width * 0.52, 0);
+  triangle.closePath();
+  const head = new THREE.Mesh(new THREE.ShapeGeometry(triangle), material);
+  head.position.x = width * 0.36;
+  group.add(stem, head);
+  return group;
 }
 
 function disposeMaterial(material: THREE.Material | THREE.Material[]) {
