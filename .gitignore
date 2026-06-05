@@ -31,4 +31,5 @@ unity/**/.vs/
 *.docx
 __pycache__/
 *.pyc
+.venv/
 Preview/

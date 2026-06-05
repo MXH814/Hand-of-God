@@ -77,6 +77,28 @@ E:\同济\大二下\用户交互技术HCI\期末项目\unity\HandOfGodUnity
 Hand of God > Rebuild Level 01 Scene
 ```
 
+## 一键启动游戏
+
+先构建一次 Windows 可执行文件：
+
+```powershell
+.\Build-HandOfGod.bat
+```
+
+构建完成后，双击根目录：
+
+```text
+Play-HandOfGod.bat
+```
+
+它会自动启动 Python 手势桥接窗口，再打开本地游戏：
+
+```text
+unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
+```
+
+第一次运行手势桥接时会自动创建 `.venv` 并安装依赖，可能需要几分钟。构建产物和虚拟环境都只保存在本地，不提交 GitHub。
+
 ## 手势桥接运行
 
 ```powershell
@@ -106,6 +128,7 @@ Unity：
 
 ```powershell
 & "E:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.exe" -batchmode -quit -projectPath "E:\同济\大二下\用户交互技术HCI\期末项目\unity\HandOfGodUnity" -executeMethod HandOfGod.EditorTools.LevelSceneGenerator.RebuildLevel01
+.\Build-HandOfGod.bat
 ```
 
 手动检查：

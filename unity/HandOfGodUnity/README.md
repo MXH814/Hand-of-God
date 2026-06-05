@@ -18,6 +18,18 @@ Manual rebuild:
 Hand of God > Rebuild Level 01 Scene
 ```
 
+Build local Windows player:
+
+```text
+Hand of God > Build Windows Player
+```
+
+Or run the root script:
+
+```powershell
+..\..\Build-HandOfGod.bat
+```
+
 ## Gameplay Prototype
 
 - A top-down 3D temple map is generated and saved into `Assets/Scenes/Level01.unity`.
