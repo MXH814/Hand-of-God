@@ -55,11 +55,11 @@ npm run dev
 - 相关文件：`src/gameLevel.ts`、`src/shapeScene.ts`
 - 参考：Three.js, https://github.com/mrdoob/three.js；cannon-es, https://github.com/pmndrs/cannon-es
 
-### 间接机关控制：神之倾斜坡道
+### 间接机关控制：可拖动倾斜坡道
 
-- 功能：玩家不能再用手直接碰撞小球；主玩法改为捏住坡道手柄并旋转手腕，控制神殿坡道倾角，让小球受真实重力间接滚动。
-- 技术：MediaPipe 捏合点映射、掌部 roll 与屏幕位移估计、Three.js 机关高亮、cannon-es kinematic ramp collider。
-- 规则：可交互机关使用青色发光控制区常亮标记；每帧读取当前捏合点并连续驱动机关，沿用调试几何体拖动/旋转的手势映射思路，不再只依赖捏合开始瞬间命中；坡道倾角限制在安全范围内，松开手势后结束控制。
+- 功能：玩家不能再用手直接碰撞小球；主玩法改为捏住坡道的青色控制点并左右拖动，控制神殿坡道倾角，让小球受真实重力间接滚动。
+- 技术：MediaPipe 捏合点映射、屏幕拖动估计、Three.js 机关高亮、cannon-es kinematic ramp collider。
+- 规则：可交互机关使用青色发光控制区常亮标记；每帧读取当前捏合点并连续驱动机关。控制规则固定为“向右拖动让坡道右端下降，向左拖动让坡道左端下降”，不再混用手腕 roll，避免旋转方向难以理解。当前关卡包含中间桥和终点入口两个可控坡道。
 - 相关文件：`src/main.ts`、`src/shapeScene.ts`、`src/interactionMapper.ts`
 - 参考：自研规则，基于 landmark-driven control 思路。
 
@@ -100,7 +100,7 @@ npm run build
 - 手不能直接推动小球。
 - 地图上能看到青色发光控制区，表示可以交互的机关位置。
 - 摄像头开启后，舞台上能看到 `HAND/PINCH` 光标，位置应贴近视频中的捏合点。
-- 捏住坡道的发光控制区或手柄并旋转手腕，坡道倾角改变，小球受真实重力间接移动。
+- 捏住坡道的发光控制区或手柄并左右拖动，坡道倾角改变；向右拖动让坡道右端下降，向左拖动让左端下降。
 - 小球进入终点祭坛并减速后，`Game` 面板显示 `Goal reached`。
 - 浏览器控制台无 runtime error。
 

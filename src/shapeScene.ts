@@ -37,9 +37,7 @@ interface TiltMechanism {
 
 interface MechanismControl {
   id: string;
-  baseTilt: number;
-  baseRoll: number;
-  baseScreenY: number;
+  centerX: number;
 }
 
 export interface GameStateSnapshot {
@@ -74,8 +72,8 @@ export class ShapeScene {
     mass: 1,
     shape: new CANNON.Sphere(BALL_RADIUS),
     material: this.ballMaterial,
-    linearDamping: 0.16,
-    angularDamping: 0.18,
+    linearDamping: 0.08,
+    angularDamping: 0.08,
   });
   private readonly ballMesh = new THREE.Mesh(
     new THREE.SphereGeometry(BALL_RADIUS, 36, 24),
@@ -166,7 +164,7 @@ export class ShapeScene {
     this.lastResetAt = performance.now();
     this.lastResetReason = reason;
     this.ballBody.position.set(this.level.start.x, this.level.start.y, this.level.start.z);
-    this.ballBody.velocity.set(0, 0, 0);
+    this.ballBody.velocity.set(1.05, 0, -0.34);
     this.ballBody.angularVelocity.set(0, 0, 0);
     this.ballBody.quaternion.set(0, 0, 0, 1);
     this.ballBody.sleep();
@@ -200,9 +198,7 @@ export class ShapeScene {
 
     this.mechanismControl = {
       id: mechanism.config.id,
-      baseTilt: mechanism.tilt,
-      baseRoll: point.palmRoll,
-      baseScreenY: point.y,
+      centerX: this.worldToScreen(this.getMechanismCenterWorld(mechanism)).x,
     };
     this.setMechanismSelected(mechanism.config.id);
     this.gameStatus = "guiding";
@@ -219,10 +215,9 @@ export class ShapeScene {
       return false;
     }
 
-    const rollDelta = normalizeAngle(point.palmRoll - this.mechanismControl.baseRoll);
-    const verticalDelta = clamp((point.y - this.mechanismControl.baseScreenY) / 260, -0.55, 0.55);
+    const drag = clamp((point.x - this.mechanismControl.centerX) / 210, -1, 1);
     const nextTilt = clamp(
-      this.mechanismControl.baseTilt + rollDelta * 0.68 + verticalDelta,
+      -drag * mechanism.config.maxTilt,
       mechanism.config.minTilt,
       mechanism.config.maxTilt,
     );
@@ -661,11 +656,11 @@ export class ShapeScene {
   private setupPhysics() {
     this.physicsWorld.gravity.set(this.level.gravity.x, this.level.gravity.y, this.level.gravity.z);
     this.physicsWorld.allowSleep = true;
-    this.physicsWorld.defaultContactMaterial.friction = 0.46;
+    this.physicsWorld.defaultContactMaterial.friction = 0.28;
     this.physicsWorld.defaultContactMaterial.restitution = 0.08;
     this.physicsWorld.addContactMaterial(
       new CANNON.ContactMaterial(this.ballMaterial, this.gameMaterial, {
-        friction: 0.52,
+        friction: 0.24,
         restitution: 0.08,
       }),
     );
@@ -902,13 +897,18 @@ export class ShapeScene {
       mechanism.config.handleOffset.z,
     );
     mechanism.mesh.localToWorld(handleWorld);
-    const centerWorld = new THREE.Vector3(0, 0, 0);
-    mechanism.mesh.localToWorld(centerWorld);
+    const centerWorld = this.getMechanismCenterWorld(mechanism);
     const handleScreen = this.worldToScreen(handleWorld);
     const centerScreen = this.worldToScreen(centerWorld);
     const handleDistance = Math.hypot(handleScreen.x - clientX, handleScreen.y - clientY);
     const centerDistance = Math.hypot(centerScreen.x - clientX, centerScreen.y - clientY);
     return Math.min(handleDistance, centerDistance * 0.78);
+  }
+
+  private getMechanismCenterWorld(mechanism: TiltMechanism) {
+    const centerWorld = new THREE.Vector3(0, 0, 0);
+    mechanism.mesh.localToWorld(centerWorld);
+    return centerWorld;
   }
 
   private worldToScreen(world: THREE.Vector3) {

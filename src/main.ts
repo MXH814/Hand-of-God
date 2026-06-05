@@ -400,7 +400,7 @@ function handlePinch(event: GestureEvent) {
     if (event.mappedPoint && shapeScene.beginMechanismControl(event.mappedPoint)) {
       shapeScene.endSingleHandTransform();
       setInteractionMode("mechanismControl");
-      setEventHud("mechanismSelected", "Tilt the divine ramp by rotating your wrist");
+      setEventHud("mechanismSelected", "Drag left/right: right lowers the right side");
       return;
     }
 
@@ -423,13 +423,13 @@ function handlePinch(event: GestureEvent) {
   if (event.type === "pinchMove") {
     if (interactionMode === "mechanismControl" && event.mappedPoint) {
       shapeScene.updateMechanismControl(event.mappedPoint);
-      setEventHud("mechanismMove", "Ramp tilt follows wrist rotation");
+      setEventHud("mechanismMove", "Drag left/right: right lowers the right side");
       return;
     }
 
     if (interactionMode === "idle" && event.mappedPoint && shapeScene.beginMechanismControl(event.mappedPoint)) {
       setInteractionMode("mechanismControl");
-      setEventHud("mechanismSelected", "Tilt the divine ramp by rotating your wrist");
+      setEventHud("mechanismSelected", "Drag left/right: right lowers the right side");
       return;
     }
 
@@ -855,7 +855,7 @@ function renderGameHud() {
       ? "Start camera and finish calibration to begin."
       : state.status === "goal"
       ? "Nice. The ball reached the goal."
-      : `${state.activeMechanism ? "Controlling glowing ramp. " : "Pinch the glowing cyan ramp control. "}${state.resetReason === "fallen" ? "Dropped and reset. " : ""}ball x ${state.ball.x.toFixed(2)} / y ${state.ball.y.toFixed(2)} / z ${state.ball.z.toFixed(2)} / speed ${state.ball.speed.toFixed(2)}`;
+      : `${state.activeMechanism ? "Drag left/right; right lowers the right side. " : "Pinch a glowing cyan ramp control. "}${state.resetReason === "fallen" ? "Dropped and reset. " : ""}ball x ${state.ball.x.toFixed(2)} / y ${state.ball.y.toFixed(2)} / z ${state.ball.z.toFixed(2)} / speed ${state.ball.speed.toFixed(2)}`;
 }
 
 function formatEventDetail(event: GestureEvent) {
