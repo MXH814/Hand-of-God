@@ -59,6 +59,7 @@ app.innerHTML = `
         </div>
 
         <div class="shape-tray" id="shape-library"></div>
+        <div class="interaction-cursors" id="interaction-cursors"></div>
         <div class="cross-delete-progress" id="cross-delete-progress" hidden>
           <span class="cross-delete-label">Delete</span>
           <span class="cross-delete-track"><span id="cross-delete-bar"></span></span>
@@ -146,6 +147,7 @@ const fpsNode = getElement<HTMLElement>("fps");
 const handCountNode = getElement<HTMLElement>("hand-count");
 const handsList = getElement<HTMLDivElement>("hands-list");
 const shapeLibrary = getElement<HTMLDivElement>("shape-library");
+const interactionCursors = getElement<HTMLDivElement>("interaction-cursors");
 const eventName = getElement<HTMLElement>("event-name");
 const eventDetail = getElement<HTMLParagraphElement>("event-detail");
 const crossDeleteProgress = getElement<HTMLDivElement>("cross-delete-progress");
@@ -304,6 +306,7 @@ function stopCamera(status = "Idle") {
   shapeScene.setPreview(undefined);
   clearCanvas();
   renderHandsList([]);
+  renderInteractionCursors([], [], false, false);
   renderCalibration();
   emptyState.hidden = false;
   fpsNode.textContent = "0.0";
@@ -319,10 +322,18 @@ function renderFrame(frame: TrackingFrame) {
   const smoothing = Number(smoothingInput.value);
   latestHands = analyzer.analyze(frame.hands, smoothing, calibration.getPinchThreshold());
   calibration.update(latestHands, frame.timestamp);
-  latestMappedPoints = mapper.mapHands(latestHands, arStage.getBoundingClientRect());
+  const videoBounds = getVideoDisplayRect(frame.videoWidth, frame.videoHeight);
+  latestMappedPoints = mapper.mapHands(latestHands, videoBounds);
   const isInteractive = calibration.isInteractive();
   shapeScene.setGameActive(isInteractive);
   shapeScene.updateMechanismHints(isInteractive ? latestMappedPoints : []);
+  const mechanismDriven = isInteractive ? shapeScene.updateMechanismDirectControl(latestHands, latestMappedPoints) : false;
+  if (mechanismDriven && interactionMode !== "mechanismControl") {
+    setInteractionMode("mechanismControl");
+    setEventHud("mechanismControl", "Pinch point is driving the ramp");
+  } else if (!mechanismDriven && interactionMode === "mechanismControl") {
+    setInteractionMode("idle");
+  }
   const events = calibration.isInteractive()
     ? eventEngine.update(latestHands, latestMappedPoints, frame.timestamp, calibration.getProfile())
     : [];
@@ -331,6 +342,7 @@ function renderFrame(frame: TrackingFrame) {
   drawHands(latestHands, frame.videoWidth, frame.videoHeight);
   applyGestureEvents(events);
   detectIndexCrossDelete(frame.timestamp);
+  renderInteractionCursors(latestHands, latestMappedPoints, isInteractive, mechanismDriven);
   renderCalibration();
   fpsNode.textContent = frame.fps.toFixed(1);
   handCountNode.textContent = String(latestHands.length);
@@ -506,7 +518,7 @@ function detectIndexCrossDelete(timestamp: number) {
     return;
   }
 
-  const stageBounds = arStage.getBoundingClientRect();
+  const stageBounds = getVideoDisplayRect(video.videoWidth, video.videoHeight);
   const [first, second] = candidates
     .slice(0, 2)
     .map((hand) => ({
@@ -716,6 +728,34 @@ function renderHandsList(hands: AnalyzedHand[]) {
   handsList.innerHTML = hands.map(renderHand).join("");
 }
 
+function renderInteractionCursors(
+  hands: AnalyzedHand[],
+  points: MappedHandPoint[],
+  interactive: boolean,
+  mechanismDriven: boolean,
+) {
+  if (!interactive || points.length === 0) {
+    interactionCursors.innerHTML = "";
+    return;
+  }
+
+  const stageRect = arStage.getBoundingClientRect();
+  interactionCursors.innerHTML = points
+    .map((point) => {
+      const hand = hands.find((candidate) => candidate.id === point.handId);
+      const active = Boolean(hand?.pinch.active);
+      const x = point.x - stageRect.left;
+      const y = point.y - stageRect.top;
+      return `
+        <div class="interaction-cursor ${active ? "is-pinching" : ""} ${mechanismDriven && active ? "is-controlling" : ""}" style="left:${x}px; top:${y}px">
+          <span></span>
+          <b>${active ? "PINCH" : "HAND"}</b>
+        </div>
+      `;
+    })
+    .join("");
+}
+
 function renderHand(hand: AnalyzedHand) {
   const activeFingers = hand.fingers
     .filter((finger) => finger.extended)
@@ -837,6 +877,23 @@ function isInsideStage(x: number, y: number) {
 function isInsideShapeTray(x: number, y: number) {
   const rect = shapeLibrary.getBoundingClientRect();
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function getVideoDisplayRect(videoWidth: number, videoHeight: number) {
+  const stageRect = arStage.getBoundingClientRect();
+  if (!videoWidth || !videoHeight) {
+    return stageRect;
+  }
+
+  const videoAspect = videoWidth / videoHeight;
+  const stageAspect = stageRect.width / stageRect.height;
+  if (stageAspect > videoAspect) {
+    const width = stageRect.height * videoAspect;
+    return new DOMRect(stageRect.left + (stageRect.width - width) / 2, stageRect.top, width, stageRect.height);
+  }
+
+  const height = stageRect.width / videoAspect;
+  return new DOMRect(stageRect.left, stageRect.top + (stageRect.height - height) / 2, stageRect.width, height);
 }
 
 function mountIcons() {

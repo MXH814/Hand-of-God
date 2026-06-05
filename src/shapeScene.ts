@@ -1,7 +1,7 @@
 import * as CANNON from "cannon-es";
 import * as THREE from "three";
 import { LEVEL_01, type GameLevel, type LevelBlock, type LevelMechanism, type LevelProp } from "./gameLevel";
-import type { MappedHandPoint, SceneObject, ShapeLibraryItem, ShapeType, Vector2 } from "./types";
+import type { AnalyzedHand, MappedHandPoint, SceneObject, ShapeLibraryItem, ShapeType, Vector2 } from "./types";
 
 interface ShapeControllerOptions {
   stageElement: HTMLElement;
@@ -39,6 +39,7 @@ interface MechanismControl {
   id: string;
   baseTilt: number;
   baseRoll: number;
+  baseScreenY: number;
 }
 
 export interface GameStateSnapshot {
@@ -201,6 +202,7 @@ export class ShapeScene {
       id: mechanism.config.id,
       baseTilt: mechanism.tilt,
       baseRoll: point.palmRoll,
+      baseScreenY: point.y,
     };
     this.setMechanismSelected(mechanism.config.id);
     this.gameStatus = "guiding";
@@ -218,13 +220,32 @@ export class ShapeScene {
     }
 
     const rollDelta = normalizeAngle(point.palmRoll - this.mechanismControl.baseRoll);
+    const verticalDelta = clamp((point.y - this.mechanismControl.baseScreenY) / 260, -0.55, 0.55);
     const nextTilt = clamp(
-      this.mechanismControl.baseTilt + rollDelta * 0.82,
+      this.mechanismControl.baseTilt + rollDelta * 0.68 + verticalDelta,
       mechanism.config.minTilt,
       mechanism.config.maxTilt,
     );
     this.setMechanismTilt(mechanism, nextTilt);
     return true;
+  }
+
+  updateMechanismDirectControl(hands: AnalyzedHand[], points: MappedHandPoint[]) {
+    const controlHand = hands.find((hand) => hand.score >= 0.42 && hand.pinch.active);
+    const point = controlHand ? points.find((candidate) => candidate.handId === controlHand.id) : undefined;
+
+    if (!point) {
+      if (this.mechanismControl) {
+        this.endMechanismControl();
+      }
+      return false;
+    }
+
+    if (this.mechanismControl) {
+      return this.updateMechanismControl(point);
+    }
+
+    return this.beginMechanismControl(point);
   }
 
   endMechanismControl() {
@@ -796,9 +817,9 @@ export class ShapeScene {
   private setMechanismTilt(mechanism: TiltMechanism, tilt: number) {
     mechanism.tilt = tilt;
     mechanism.mesh.position.set(mechanism.config.position.x, mechanism.config.position.y, mechanism.config.position.z);
-    mechanism.mesh.rotation.set(tilt, mechanism.config.yaw, 0);
+    mechanism.mesh.rotation.set(0, mechanism.config.yaw, tilt);
     mechanism.body.position.set(mechanism.config.position.x, mechanism.config.position.y, mechanism.config.position.z);
-    mechanism.body.quaternion.setFromEuler(tilt, mechanism.config.yaw, 0, "XYZ");
+    mechanism.body.quaternion.setFromEuler(0, mechanism.config.yaw, tilt, "XYZ");
     mechanism.body.velocity.set(0, 0, 0);
     mechanism.body.angularVelocity.set(0, 0, 0);
     mechanism.body.aabbNeedsUpdate = true;

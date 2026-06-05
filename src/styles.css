@@ -133,6 +133,7 @@ video {
 
 #overlay {
   z-index: 3;
+  object-fit: contain;
   pointer-events: none;
 }
 
@@ -252,6 +253,78 @@ video {
   box-shadow: 0 12px 30px rgba(10, 17, 14, 0.22);
   transform: translate(-50%, -130%);
   pointer-events: none;
+}
+
+.interaction-cursors {
+  position: absolute;
+  z-index: 7;
+  inset: 0;
+  pointer-events: none;
+}
+
+.interaction-cursor {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 74px;
+  height: 74px;
+  color: #e8f0eb;
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-shadow: 0 2px 8px rgba(5, 13, 10, 0.82);
+  transform: translate(-50%, -50%);
+}
+
+.interaction-cursor span {
+  position: absolute;
+  inset: 12px;
+  border: 2px solid rgba(232, 240, 235, 0.68);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(5, 13, 10, 0.24), 0 0 18px rgba(232, 240, 235, 0.28);
+}
+
+.interaction-cursor span::before,
+.interaction-cursor span::after {
+  position: absolute;
+  content: "";
+  background: rgba(232, 240, 235, 0.82);
+}
+
+.interaction-cursor span::before {
+  top: 50%;
+  left: -9px;
+  right: -9px;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.interaction-cursor span::after {
+  top: -9px;
+  bottom: -9px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+}
+
+.interaction-cursor b {
+  position: absolute;
+  top: calc(100% - 8px);
+  letter-spacing: 0;
+}
+
+.interaction-cursor.is-pinching span {
+  border-color: #f7b801;
+  box-shadow: 0 0 0 1px rgba(5, 13, 10, 0.32), 0 0 24px rgba(247, 184, 1, 0.62);
+}
+
+.interaction-cursor.is-pinching span::before,
+.interaction-cursor.is-pinching span::after {
+  background: #f7b801;
+}
+
+.interaction-cursor.is-controlling span {
+  border-color: #58c6a7;
+  box-shadow: 0 0 0 1px rgba(5, 13, 10, 0.32), 0 0 30px rgba(88, 198, 167, 0.78);
 }
 
 .cross-delete-progress[hidden] {
