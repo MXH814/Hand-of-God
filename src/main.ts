@@ -322,6 +322,7 @@ function renderFrame(frame: TrackingFrame) {
   latestMappedPoints = mapper.mapHands(latestHands, arStage.getBoundingClientRect());
   const isInteractive = calibration.isInteractive();
   shapeScene.setGameActive(isInteractive);
+  shapeScene.updateMechanismHints(isInteractive ? latestMappedPoints : []);
   const events = calibration.isInteractive()
     ? eventEngine.update(latestHands, latestMappedPoints, frame.timestamp, calibration.getProfile())
     : [];
@@ -411,6 +412,12 @@ function handlePinch(event: GestureEvent) {
     if (interactionMode === "mechanismControl" && event.mappedPoint) {
       shapeScene.updateMechanismControl(event.mappedPoint);
       setEventHud("mechanismMove", "Ramp tilt follows wrist rotation");
+      return;
+    }
+
+    if (interactionMode === "idle" && event.mappedPoint && shapeScene.beginMechanismControl(event.mappedPoint)) {
+      setInteractionMode("mechanismControl");
+      setEventHud("mechanismSelected", "Tilt the divine ramp by rotating your wrist");
       return;
     }
 
@@ -808,7 +815,7 @@ function renderGameHud() {
       ? "Start camera and finish calibration to begin."
       : state.status === "goal"
       ? "Nice. The ball reached the goal."
-      : `${state.resetReason === "fallen" ? "Dropped and reset. " : ""}ball x ${state.ball.x.toFixed(2)} / y ${state.ball.y.toFixed(2)} / z ${state.ball.z.toFixed(2)} / speed ${state.ball.speed.toFixed(2)} / mechanism ${state.activeMechanism ?? "none"}`;
+      : `${state.activeMechanism ? "Controlling glowing ramp. " : "Pinch the glowing cyan ramp control. "}${state.resetReason === "fallen" ? "Dropped and reset. " : ""}ball x ${state.ball.x.toFixed(2)} / y ${state.ball.y.toFixed(2)} / z ${state.ball.z.toFixed(2)} / speed ${state.ball.speed.toFixed(2)}`;
 }
 
 function formatEventDetail(event: GestureEvent) {

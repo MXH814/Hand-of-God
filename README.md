@@ -59,7 +59,7 @@ npm run dev
 
 - 功能：玩家不能再用手直接碰撞小球；主玩法改为捏住坡道手柄并旋转手腕，控制神殿坡道倾角，让小球受真实重力间接滚动。
 - 技术：MediaPipe 捏合点映射、掌部 roll 估计、Three.js 机关高亮、cannon-es kinematic ramp collider。
-- 规则：捏合命中发光手柄后进入 `mechanismControl`；坡道倾角限制在安全范围内，松开手势后结束控制。
+- 规则：可交互机关使用青色发光控制区常亮标记；捏合命中坡道或手柄热点后进入 `mechanismControl`，先捏住再移动到热点也可以触发；坡道倾角限制在安全范围内，松开手势后结束控制。
 - 相关文件：`src/main.ts`、`src/shapeScene.ts`、`src/interactionMapper.ts`
 - 参考：自研规则，基于 landmark-driven control 思路。
 
@@ -90,7 +90,8 @@ npm run build
 - 点击 `Start` 后进入校准；完成或点击 `Skip` 后游戏才开始。
 - 小球在 X/Z 地面上滚动，Y 轴为高度，掉出地图后自动重置。
 - 手不能直接推动小球。
-- 捏住坡道的发光手柄并旋转手腕，坡道倾角改变，小球受真实重力间接移动。
+- 地图上能看到青色发光控制区，表示可以交互的机关位置。
+- 捏住坡道的发光控制区或手柄并旋转手腕，坡道倾角改变，小球受真实重力间接移动。
 - 小球进入终点祭坛并减速后，`Game` 面板显示 `Goal reached`。
 - 浏览器控制台无 runtime error。
 

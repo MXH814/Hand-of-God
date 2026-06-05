@@ -12,7 +12,7 @@ const WORLD_SCALE = 72;
 const DEBUG_OBJECT_DEPTH = 3.8;
 const DEPTH_STEP = 0.32;
 const BALL_RADIUS = 0.22;
-const MECHANISM_HIT_RADIUS = 82;
+const MECHANISM_HIT_RADIUS = 150;
 const STONE_TOP = "#9ba9a0";
 const STONE_SIDE = "#56665e";
 const TRIM = "#c0a15b";
@@ -29,8 +29,10 @@ interface TiltMechanism {
   rampMesh: THREE.Mesh;
   handle: THREE.Group;
   arc: THREE.Group;
+  hotspot: THREE.Group;
   tilt: number;
   selected: boolean;
+  hinted: boolean;
 }
 
 interface MechanismControl {
@@ -228,6 +230,15 @@ export class ShapeScene {
   endMechanismControl() {
     this.mechanismControl = undefined;
     this.setMechanismSelected(undefined);
+  }
+
+  updateMechanismHints(points: MappedHandPoint[]) {
+    if (this.mechanismControl) {
+      return;
+    }
+
+    const nearest = this.getNearestMechanism(points);
+    this.setMechanismHinted(nearest?.config.id);
   }
 
   getGameState(): GameStateSnapshot {
@@ -753,6 +764,10 @@ export class ShapeScene {
     arc.position.set(config.handleOffset.x, config.handleOffset.y + 0.08, config.handleOffset.z);
     mesh.add(arc);
 
+    const hotspot = createMechanismHotspot();
+    hotspot.position.set(config.handleOffset.x, config.handleOffset.y + 0.03, config.handleOffset.z);
+    mesh.add(hotspot);
+
     const body = new CANNON.Body({
       mass: 0,
       type: CANNON.Body.KINEMATIC,
@@ -768,8 +783,10 @@ export class ShapeScene {
       rampMesh,
       handle,
       arc,
+      hotspot,
       tilt: config.initialTilt,
       selected: false,
+      hinted: false,
     };
     this.scene.add(mesh);
     this.mechanisms.set(config.id, mechanism);
@@ -803,37 +820,74 @@ export class ShapeScene {
   private setMechanismSelected(id: string | undefined) {
     for (const mechanism of this.mechanisms.values()) {
       mechanism.selected = mechanism.config.id === id;
-      mechanism.arc.visible = mechanism.selected;
+      const activeCue = mechanism.selected || mechanism.hinted;
+      mechanism.arc.visible = activeCue;
       const scale = mechanism.selected ? 1.16 : 1;
       mechanism.handle.scale.setScalar(scale);
+      mechanism.hotspot.scale.setScalar(mechanism.selected ? 1.18 : mechanism.hinted ? 1.08 : 1);
       const material = mechanism.rampMesh.material;
       if (material instanceof THREE.MeshStandardMaterial) {
-        material.emissive.set(mechanism.selected ? "#d9b44a" : "#4a3210");
-        material.emissiveIntensity = mechanism.selected ? 0.55 : 0.12;
+        material.emissive.set(mechanism.selected ? "#d9b44a" : mechanism.hinted ? "#58c6a7" : "#4a3210");
+        material.emissiveIntensity = mechanism.selected ? 0.55 : mechanism.hinted ? 0.34 : 0.12;
       }
     }
   }
 
-  private getMechanismNearScreenPoint(clientX: number, clientY: number) {
+  private setMechanismHinted(id: string | undefined) {
+    for (const mechanism of this.mechanisms.values()) {
+      mechanism.hinted = mechanism.config.id === id;
+    }
+    this.setMechanismSelected(this.mechanismControl?.id);
+  }
+
+  private getNearestMechanism(points: MappedHandPoint[]) {
+    let best: TiltMechanism | undefined;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const point of points) {
+      const candidate = this.getMechanismNearScreenPoint(point.x, point.y, MECHANISM_HIT_RADIUS * 1.15);
+      if (!candidate) {
+        continue;
+      }
+      const distance = this.getMechanismScreenDistance(candidate, point.x, point.y);
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+
+    return best;
+  }
+
+  private getMechanismNearScreenPoint(clientX: number, clientY: number, radius = MECHANISM_HIT_RADIUS) {
     let best: TiltMechanism | undefined;
     let bestDistance = Number.POSITIVE_INFINITY;
 
     for (const mechanism of this.mechanisms.values()) {
-      const handleWorld = new THREE.Vector3(
-        mechanism.config.handleOffset.x,
-        mechanism.config.handleOffset.y,
-        mechanism.config.handleOffset.z,
-      );
-      mechanism.mesh.localToWorld(handleWorld);
-      const screen = this.worldToScreen(handleWorld);
-      const distance = Math.hypot(screen.x - clientX, screen.y - clientY);
-      if (distance < bestDistance && distance < MECHANISM_HIT_RADIUS) {
+      const distance = this.getMechanismScreenDistance(mechanism, clientX, clientY);
+      if (distance < bestDistance && distance < radius) {
         best = mechanism;
         bestDistance = distance;
       }
     }
 
     return best;
+  }
+
+  private getMechanismScreenDistance(mechanism: TiltMechanism, clientX: number, clientY: number) {
+    const handleWorld = new THREE.Vector3(
+      mechanism.config.handleOffset.x,
+      mechanism.config.handleOffset.y,
+      mechanism.config.handleOffset.z,
+    );
+    mechanism.mesh.localToWorld(handleWorld);
+    const centerWorld = new THREE.Vector3(0, 0, 0);
+    mechanism.mesh.localToWorld(centerWorld);
+    const handleScreen = this.worldToScreen(handleWorld);
+    const centerScreen = this.worldToScreen(centerWorld);
+    const handleDistance = Math.hypot(handleScreen.x - clientX, handleScreen.y - clientY);
+    const centerDistance = Math.hypot(centerScreen.x - clientX, centerScreen.y - clientY);
+    return Math.min(handleDistance, centerDistance * 0.78);
   }
 
   private worldToScreen(world: THREE.Vector3) {
@@ -906,6 +960,9 @@ export class ShapeScene {
       }
     }
     this.goalRing.rotation.z += 0.008;
+    for (const mechanism of this.mechanisms.values()) {
+      mechanism.hotspot.rotation.y += 0.012;
+    }
     this.renderer.render(this.scene, this.camera);
   };
 }
@@ -1042,10 +1099,46 @@ function createMechanismHandle() {
     emissive: "#1c9e88",
     emissiveIntensity: 0.32,
   });
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 16), material);
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.38, 18), material);
-  stem.position.y = -0.16;
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 18), material);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.46, 20), material);
+  stem.position.y = -0.19;
   group.add(knob, stem);
+  return group;
+}
+
+function createMechanismHotspot() {
+  const group = new THREE.Group();
+  const material = new THREE.MeshBasicMaterial({
+    color: "#58c6a7",
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+  });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.035, 12, 72), material);
+  ring.rotation.x = Math.PI / 2;
+  const halo = new THREE.Mesh(
+    new THREE.CircleGeometry(0.72, 72),
+    new THREE.MeshBasicMaterial({
+      color: "#58c6a7",
+      transparent: true,
+      opacity: 0.2,
+      depthWrite: false,
+    }),
+  );
+  halo.rotation.x = Math.PI / 2;
+  const beacon = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.09, 0.18, 0.64, 24),
+    new THREE.MeshBasicMaterial({
+      color: "#58c6a7",
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+    }),
+  );
+  beacon.position.y = 0.34;
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 14), material.clone());
+  cap.position.y = 0.7;
+  group.add(halo, ring, beacon, cap);
   return group;
 }
 
