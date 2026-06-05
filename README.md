@@ -1,85 +1,87 @@
 # Hand of God
 
-同济 HCI 期末项目。项目已从网页原型切换为 **Unity 6 真 3D 游戏重构**：玩家不再用手直接撞球，而是通过摄像头手势控制机关桌、挡板、机关等，让物理小球间接到达终点。
+同济 HCI 期末项目。项目已经完全迁移为 **Unity 6.4 + Python MediaPipe 手势桥接**：Unity 负责游戏、校准、菜单、选关、关卡交互和 HUD；Python 只负责摄像头识别并通过 UDP 发送手部数据。
 
 ## 当前方向
 
 - 游戏名：**Hand of God**
-- 主实现：Unity 6.4 `(6000.4.10f1)`
-- Unity 工程：`unity/HandOfGodUnity`
+- 主工程：`unity/HandOfGodUnity`
 - 手势桥接：`unity/gesture_bridge`
-- 旧网页原型仍保留在根目录，仅作为历史验证和调试参考。
-
-## Unity 安装约定
-
-- Unity Hub：`E:\Unity\UnityHub`
 - Unity Editor：`E:\Unity\Hub\Editor\6000.4.10f1`
-- Unity 项目：`E:\同济\大二下\用户交互技术HCI\期末项目\unity\HandOfGodUnity`
+- 远端仓库：`MXH814/hci-gesture-game`
+- 主分支：`main`
 
-如果 Hub 仍通过 `C:\Program Files\Unity\Hub\Editor\6000.4.10f1` 找 Editor，该路径应只是一个 Junction，实际文件在 E 盘。
+旧的 Vite / TypeScript / Web 原型已经从仓库移除。正式展示和后续开发均以 Unity 版本为准。
 
-## 已实现功能
+## 玩法结构
 
-### Unity 6 正式地图第一版
+### 启动流程
 
-`Level01` 当前改为第一关教学设计：一条倾斜石路、一个可捏取箱子、一个终点祭坛。小球会沿坡道自动向下滚，玩家只需要用手把挡路箱子移开。
+1. Python 桥接打开摄像头并发送手部数据。
+2. Unity 启动后进入校准界面。
+3. 玩家用手势完成校准，或用单指悬停触发“跳过校准”。
+4. 进入全手势主菜单和选关界面。
 
-- 浮空黑曜石基座和单条倾斜石质道路
-- 小球从高处起点自动下滚
-- 中间有一个木箱阻挡路线
-- 捏合手势可抓取并平滑移动箱子
-- 箱子靠近/被抓取时会高亮反馈
-- 小球到达终点祭坛后显示过关提示
-- 终点有青绿色发光环，路面有符文引导线
-- 固定俯视偏斜正交相机，能看到高度、侧面和空间层次
-- 场景生成器会把地图真实保存到 Unity Scene 中，打开编辑器即可看到地图
+### 校准
 
-相关文件：
+- 第一步：张开手掌保持 1 秒。
+- 第二步：拇指和食指捏合保持 1 秒。
+- Unity 根据第二步采样生成本次游玩的捏合阈值。
+- 校准界面中的“跳过校准”也使用单指悬停触发。
 
-- `unity/HandOfGodUnity/Assets/Scripts/GameBootstrap.cs`
-- `unity/HandOfGodUnity/Assets/Editor/LevelSceneGenerator.cs`
+### 菜单与按钮
 
-### Unity 手势输入桥接
+- 所有菜单按钮都用 **食指悬停** 选择。
+- 默认悬停时间：`0.85s`。
+- 手指离开按钮后进度立即清空。
+- 捏合不用于菜单点击，避免误触。
 
-Python 脚本使用 MediaPipe + OpenCV 识别单手姿态，并通过 UDP `127.0.0.1:5005` 发给 Unity。
+### Level 0: Gesture Lab
 
-相关文件：
+第 0 关用于训练和验证手势：
 
-- `unity/gesture_bridge/mediapipe_udp_sender.py`
+- 场景中央有可交互物体。
+- 右侧可用悬停选择 `Cube`、`Sphere`、`Cylinder`。
+- 单手捏合可抓取并平滑移动物体。
+- 双手同时捏合可旋转和缩放当前物体。
+- 成功移动物体后显示完成状态，并可悬停进入第 1 关。
+
+### Level 1: First Path
+
+第 1 关是第一版正式玩法：
+
+- 一条真实倾斜的 3D 石质道路。
+- 小球会沿重力方向自动向下滚动。
+- 木箱挡在路中间。
+- 玩家不能直接碰球，只能捏取并移开木箱。
+- 木箱靠近手势点时高亮，被抓取时变为青绿色高亮。
+- 小球到达终点祭坛后显示 `PASS`，并提供 `Restart` / `Menu` 悬停按钮。
+
+## 手势桥接数据
+
+`unity/gesture_bridge/mediapipe_udp_sender.py` 使用 MediaPipe Hands 识别最多两只手，并向 `127.0.0.1:5005` 发送 JSON UDP 帧。
+
+Unity 接收的数据包括：
+
+- 21 个手部 landmarks
+- handedness 和 score
+- pinch center、index fingertip
+- pinchDistance、palmSpan
+- finger extended 状态
+- palm roll / pitch / yaw
+- timestamp
+
+Unity 中的主要脚本：
+
 - `unity/HandOfGodUnity/Assets/Scripts/GestureUdpReceiver.cs`
-- `unity/HandOfGodUnity/Assets/Scripts/BoardTiltController.cs`
+- `unity/HandOfGodUnity/Assets/Scripts/GestureFrame.cs`
+- `unity/HandOfGodUnity/Assets/Scripts/GestureGameController.cs`
+- `unity/HandOfGodUnity/Assets/Scripts/GameBootstrap.cs`
+- `unity/HandOfGodUnity/Assets/Scripts/BallController.cs`
 
-### 旧网页原型
+## 一键启动
 
-网页原型保留以下能力作为参考：
-
-- Vite + TypeScript
-- MediaPipe Hand Landmarker
-- Three.js + cannon-es
-- 基础手势识别、校准、调试几何体和网页 3D 原型
-
-后续最终展示以 Unity 版本为主。
-
-## 打开 Unity 项目
-
-1. 打开 Unity Hub。
-2. Add project from disk。
-3. 选择：
-
-```text
-E:\同济\大二下\用户交互技术HCI\期末项目\unity\HandOfGodUnity
-```
-
-4. 用 Unity `6.4 (6000.4.10f1)` 打开。
-5. 如果场景未生成，执行菜单：
-
-```text
-Hand of God > Rebuild Level 01 Scene
-```
-
-## 一键启动游戏
-
-先构建一次 Windows 可执行文件：
+先构建 Windows 可执行文件：
 
 ```powershell
 .\Build-HandOfGod.bat
@@ -91,15 +93,21 @@ Hand of God > Rebuild Level 01 Scene
 Play-HandOfGod.bat
 ```
 
-它会自动启动 Python 手势桥接窗口，再打开本地游戏：
+或双击桌面快捷方式：
+
+```text
+Hand of God
+```
+
+启动脚本会先启动 Python 手势桥接，再启动：
 
 ```text
 unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 ```
 
-第一次运行手势桥接时会自动创建 `.venv` 并安装依赖，可能需要几分钟。构建产物和虚拟环境都只保存在本地，不提交 GitHub。
+第一次启动桥接时会在 `unity/gesture_bridge/.venv` 创建 Python 虚拟环境并安装依赖，可能需要几分钟。
 
-## 手势桥接运行
+## 手动运行手势桥接
 
 ```powershell
 cd "E:\同济\大二下\用户交互技术HCI\期末项目\unity\gesture_bridge"
@@ -109,48 +117,39 @@ pip install -r requirements.txt
 python mediapipe_udp_sender.py
 ```
 
-桥接窗口：
+桥接窗口快捷键：
 
-- `C`：校准当前手掌姿态为中立姿态
-- `Q`：退出
+- `C`：将当前手掌姿态设为 Python 侧中立姿态。
+- `Q`：退出桥接。
 
-没有启动手势桥接时，Unity 中可以用 WASD / 方向键临时验证地图路线。
+## Unity 场景生成与构建
 
-## 验证
-
-网页原型：
+Unity 场景由编辑器工具生成：
 
 ```powershell
-npm run build
+& "E:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com" -batchmode -quit -projectPath "E:\同济\大二下\用户交互技术HCI\期末项目\unity\HandOfGodUnity" -executeMethod HandOfGod.EditorTools.LevelSceneGenerator.RebuildLevel01
 ```
 
-Unity：
+构建游戏：
 
 ```powershell
-& "E:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.exe" -batchmode -quit -projectPath "E:\同济\大二下\用户交互技术HCI\期末项目\unity\HandOfGodUnity" -executeMethod HandOfGod.EditorTools.LevelSceneGenerator.RebuildLevel01
 .\Build-HandOfGod.bat
 ```
 
-手动检查：
+生成的场景虽然文件名仍为 `Level01.unity`，但现在它是完整游戏入口：启动后先校准，再进入手势菜单和选关。
 
-- 打开 `Assets/Scenes/Level01.unity`
-- 首屏能看到一条清晰的倾斜石路，而不是散落几何体
-- 小球在左侧高处，箱子挡在路中间，终点祭坛在右侧低处
-- 启动手势桥接后，捏合并移动手指应能平滑拖动箱子
-- 箱子被指向时变亮，被捏住时变为青绿色高亮
-- 小球通过后 HUD 显示 `PASS`
+## 验证清单
 
-## 后续路线
-
-- 地图美术继续升级：材质资产、地砖纹理、坡道模型、可交互机关 Prefab
-- 玩法能力 1：手掌倾斜控制机关桌
-- 玩法能力 2：捏取移动木块或升降门
-- 玩法能力 3：食指戳按钮、开关门、启动传送带
-- 玩法能力 4：旋转手势控制转盘或局部机关
+- `python -m py_compile unity\gesture_bridge\mediapipe_udp_sender.py`
+- Unity batchmode 生成场景无编译错误。
+- `.\Build-HandOfGod.bat` 成功生成 Windows exe。
+- 双击 `Play-HandOfGod.bat` 后 Python 桥接和 Unity 游戏都能启动。
+- 不使用鼠标完成校准、菜单选择、第 0 关物体移动、第 1 关木箱移动。
+- 第 1 关小球到达终点后显示 `PASS`。
+- 控制台没有 runtime error。
 
 ## Git 约定
 
-- 主分支：`main`
-- 远端仓库：`MXH814/hci-gesture-game`
-- 每次新增功能必须同步更新 README
-- 不提交 `.docx` 方案书、课件资料、临时截图、Unity Library/Temp/Build 等本地文件
+- 每次新增功能同步更新 README。
+- 不提交 `.docx`、`.venv`、Unity `Library/`、`Builds/`、`Logs/`、`UserSettings/`、临时截图和构建产物。
+- 当前仓库不再保留网页旧版本源码。

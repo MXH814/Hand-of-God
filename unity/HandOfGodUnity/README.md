@@ -1,47 +1,28 @@
-# Hand of God Unity Prototype
+# Hand of God Unity Project
 
-This Unity project is the new main direction for the HCI gesture rolling-ball game.
+This is the main Unity-only version of the HCI gesture rolling-ball game.
 
 ## Version
 
-- Recommended editor: Unity 6.4 (6000.4.10f1)
+- Editor: Unity 6.4 `(6000.4.10f1)`
 - Project path: `E:\同济\大二下\用户交互技术HCI\期末项目\unity\HandOfGodUnity`
-- Recommended editor install path: `E:\Unity\Hub\Editor`
+- Editor path: `E:\Unity\Hub\Editor\6000.4.10f1`
 
-## Scene Generation
+## Runtime Flow
 
-Open the project in Unity 6.4. The editor script creates `Assets/Scenes/Level01.unity` automatically if it is missing.
+The generated scene `Assets/Scenes/Level01.unity` is now the full game entry scene:
 
-Manual rebuild:
+1. Gesture calibration
+2. Gesture-only main menu
+3. Level 0 gesture lab
+4. Level 1 first path
+5. PASS / Restart / Menu screen
 
-```text
-Hand of God > Rebuild Level 01 Scene
-```
+All player-facing UI is controlled by index-finger dwell selection. Mouse controls are not part of the main game.
 
-Build local Windows player:
+## Gesture Input
 
-```text
-Hand of God > Build Windows Player
-```
-
-Or run the root script:
-
-```powershell
-..\..\Build-HandOfGod.bat
-```
-
-## Gameplay Prototype
-
-- A top-down 3D temple map is generated and saved into `Assets/Scenes/Level01.unity`.
-- Level 01 is a single sloped road with one movable obstacle box and a glowing goal altar.
-- The golden ball rolls downhill using Rigidbody physics.
-- Pinch frames from UDP port `5005` pick up and move the obstacle box.
-- The hand does not collide with the ball directly.
-- Mouse drag fallback is available for quick level testing.
-
-## Gesture Bridge
-
-Run the Python bridge before entering Play mode:
+Python MediaPipe bridge:
 
 ```powershell
 cd ..\gesture_bridge
@@ -51,22 +32,39 @@ pip install -r requirements.txt
 python mediapipe_udp_sender.py
 ```
 
-In the bridge preview:
+Unity receives JSON frames from UDP `127.0.0.1:5005`, including:
 
-- `C` calibrates the current pose as neutral.
-- `Q` quits.
+- 21 landmarks
+- handedness and score
+- pinch center and index fingertip
+- pinch distance and palm span
+- finger extended state
+- palm roll / pitch / yaw
+- timestamp
 
-The bridge sends JSON frames such as:
+## Scenes And Build
 
-```json
-{
-  "roll": 0.12,
-  "pitch": -0.25,
-  "pinchX": 0.5,
-  "pinchY": 0.5,
-  "confidence": 1.0,
-  "pinch": false,
-  "openPalm": true,
-  "timestamp": 1780000000.0
-}
+Manual scene rebuild:
+
+```text
+Hand of God > Rebuild Level 01 Scene
 ```
+
+Batch rebuild:
+
+```powershell
+& "E:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com" -batchmode -quit -projectPath "E:\同济\大二下\用户交互技术HCI\期末项目\unity\HandOfGodUnity" -executeMethod HandOfGod.EditorTools.LevelSceneGenerator.RebuildLevel01
+```
+
+Build Windows player from the repository root:
+
+```powershell
+.\Build-HandOfGod.bat
+```
+
+## Current Levels
+
+- `Level 0: Gesture Lab`: hover-select Cube / Sphere / Cylinder, pinch to move, two-hand pinch to rotate and scale.
+- `Level 1: First Path`: the ball rolls downhill by physics; the player pinches and moves the blocking box away; reaching the altar shows `PASS`.
+
+The hand never directly pushes the ball. Gesture interaction acts on UI and mechanisms only.
