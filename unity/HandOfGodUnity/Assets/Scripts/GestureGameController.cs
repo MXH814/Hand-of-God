@@ -244,7 +244,7 @@ namespace HandOfGod.Gameplay
 
         private void DrawCalibration()
         {
-            var panel = new Rect(30, 30, 430, 190);
+            var panel = new Rect(30, 30, 450, 248);
             var title = mode == GameMode.CalibrationOpen ? "Calibration: Open Hand" : "Calibration: Pinch";
             var detail = mode == GameMode.CalibrationOpen
                 ? "Hold an open palm for 1 second."
@@ -255,9 +255,10 @@ namespace HandOfGod.Gameplay
             GUI.Label(new Rect(50, 48, 380, 30), "Hand of God");
             GUI.Label(new Rect(50, 80, 380, 26), title);
             GUI.Label(new Rect(50, 110, 390, 24), detail);
-            GUI.Label(new Rect(50, 158, 360, 24), receiver != null && receiver.HasFreshFrame ? "Camera: tracking hand" : bridgeStatus);
             DrawProgressBar(progress, new Rect(50, 138, 360, 18));
-            DrawHoverButton("skip", "Skip calibration", new Rect(50, 166, 180, 34), SafeDwellSeconds, () =>
+            GUI.Label(new Rect(50, 164, 410, 24), receiver != null && receiver.HasFreshFrame ? "Camera: tracking hand" : bridgeStatus);
+            DrawUtilityButton("start-camera", "Start Camera", new Rect(50, 194, 180, 34), SafeDwellSeconds, StartVisibleGestureBridge);
+            DrawHoverButton("skip", "Skip calibration", new Rect(250, 194, 180, 34), SafeDwellSeconds, () =>
             {
                 pinchThreshold = 0.56f;
                 mode = GameMode.Menu;
@@ -757,9 +758,13 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
+            StartHiddenGestureBridge(bridgeDirectory);
+        }
+
+        private void StartHiddenGestureBridge(string bridgeDirectory)
+        {
             var scriptPath = Path.Combine(bridgeDirectory, "mediapipe_udp_sender.py");
-            var venvPython = Path.Combine(bridgeDirectory, ".venv", "Scripts", "python.exe");
-            var python = File.Exists(venvPython) ? venvPython : "python";
+            var python = ResolveGesturePython(bridgeDirectory);
             var logPath = Path.Combine(bridgeDirectory, "gesture-bridge-runtime.log");
             try
             {
@@ -787,6 +792,39 @@ namespace HandOfGod.Gameplay
             {
                 bridgeStatus = "Failed to launch camera bridge.";
                 Debug.LogWarning($"Failed to launch gesture bridge: {exception.Message}");
+            }
+        }
+
+        private void StartVisibleGestureBridge()
+        {
+            var bridgeDirectory = FindBridgeDirectory();
+            if (string.IsNullOrEmpty(bridgeDirectory))
+            {
+                bridgeStatus = "Camera bridge not found. Start with Play-HandOfGod.bat.";
+                return;
+            }
+
+            var scriptPath = Path.Combine(bridgeDirectory, "mediapipe_udp_sender.py");
+            var python = ResolveGesturePython(bridgeDirectory);
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/k \"\"{python}\" \"{scriptPath}\"\"",
+                    WorkingDirectory = bridgeDirectory,
+                    UseShellExecute = true,
+                    CreateNoWindow = false,
+                };
+                Process.Start(startInfo);
+                launchedBridge = true;
+                usesExternalBridge = true;
+                bridgeStatus = "Visible camera bridge started; waiting for hand...";
+            }
+            catch (System.Exception exception)
+            {
+                bridgeStatus = "Failed to open visible camera bridge.";
+                Debug.LogWarning($"Failed to open visible gesture bridge: {exception.Message}");
             }
         }
 
@@ -823,6 +861,24 @@ namespace HandOfGod.Gameplay
                 }
             }
             return "";
+        }
+
+        private static string ResolveGesturePython(string bridgeDirectory)
+        {
+            var cliPython = GetCommandLineValue("--gesture-python");
+            if (!string.IsNullOrEmpty(cliPython) && File.Exists(cliPython))
+            {
+                return cliPython;
+            }
+
+            var asciiRuntimePython = @"E:\Unity\HandOfGodGestureBridge\.venv\Scripts\python.exe";
+            if (File.Exists(asciiRuntimePython))
+            {
+                return asciiRuntimePython;
+            }
+
+            var projectVenvPython = Path.Combine(bridgeDirectory, ".venv", "Scripts", "python.exe");
+            return File.Exists(projectVenvPython) ? projectVenvPython : "python";
         }
 
         private static bool HasCommandLineFlag(string flag)

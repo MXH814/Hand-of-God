@@ -7,7 +7,8 @@ set "UNITY_PROJECT=%ROOT%unity\HandOfGodUnity"
 set "GAME_EXE=%UNITY_PROJECT%\Builds\Windows\HandOfGod.exe"
 set "BRIDGE_DIR=%ROOT%unity\gesture_bridge"
 set "BRIDGE_PY=%BRIDGE_DIR%\mediapipe_udp_sender.py"
-set "VENV_PY=%BRIDGE_DIR%\.venv\Scripts\python.exe"
+set "BRIDGE_RUNTIME=E:\Unity\HandOfGodGestureBridge"
+set "VENV_PY=%BRIDGE_RUNTIME%\.venv\Scripts\python.exe"
 
 if not exist "%GAME_EXE%" (
   echo HandOfGod.exe was not found.
@@ -26,21 +27,22 @@ if errorlevel 1 (
   if not exist "%VENV_PY%" (
     echo Gesture bridge virtual environment was not found.
     echo Creating it now. This may take a few minutes the first time.
-    pushd "%BRIDGE_DIR%"
+    if not exist "%BRIDGE_RUNTIME%" mkdir "%BRIDGE_RUNTIME%"
+    pushd "%BRIDGE_RUNTIME%"
     python -m venv .venv
     popd
   )
 
-  "%VENV_PY%" -c "import cv2, mediapipe, numpy" >nul 2>nul
+  "%VENV_PY%" -c "import cv2, mediapipe as mp, numpy; raise SystemExit(0 if hasattr(mp, 'solutions') else 1)" >nul 2>nul
   if errorlevel 1 (
-    echo Installing gesture bridge dependencies. This may take a few minutes the first time.
+    echo Installing compatible gesture bridge dependencies. This may take a few minutes the first time.
     pushd "%BRIDGE_DIR%"
-    "%VENV_PY%" -m pip install -r requirements.txt
+    "%VENV_PY%" -m pip install --force-reinstall -r requirements.txt
     popd
   )
 
   start "Hand of God Gesture Bridge" /D "%BRIDGE_DIR%" cmd /k ""%VENV_PY%" "%BRIDGE_PY%""
 )
 
-start "" "%GAME_EXE%" --gesture-bridge-dir "%BRIDGE_DIR%" --gesture-bridge-external
+start "" "%GAME_EXE%" --gesture-bridge-dir "%BRIDGE_DIR%" --gesture-python "%VENV_PY%" --gesture-bridge-external
 exit /b 0

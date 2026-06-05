@@ -22,6 +22,8 @@ All player-facing UI is controlled by index-finger dwell selection. Mouse contro
 
 The recommended launcher is the repository root `Play-HandOfGod.bat`. It prepares the Python environment, starts the visible MediaPipe bridge window, then launches Unity with the bridge directory argument. If the player opens `HandOfGod.exe` directly, Unity still tries to launch the bridge itself and writes failures to `unity/gesture_bridge/gesture-bridge-runtime.log`. Batchmode scene generation and builds do not start the camera bridge.
 
+The launcher keeps the Python virtual environment at `E:\Unity\HandOfGodGestureBridge\.venv` because MediaPipe native model loading is unreliable from the repository's Chinese path.
+
 ## Gesture Input
 
 Python MediaPipe bridge:
@@ -46,7 +48,7 @@ Unity receives JSON frames from UDP `127.0.0.1:5005`, including:
 
 Unity draws the live 21-point hand skeleton in the foreground during calibration, menus, and gameplay. If the skeleton is missing, the game has not received a fresh UDP hand frame yet.
 
-The top-right `Exit` button is always visible. Levels also expose a top-right `Menu` button.
+The calibration panel includes a `Start Camera` fallback button that can be clicked with the mouse when no hand frame is available yet. The top-right `Exit` button is always visible. Levels also expose a top-right `Menu` button.
 
 ## Scenes And Build
 

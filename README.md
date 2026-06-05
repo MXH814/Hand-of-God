@@ -31,6 +31,7 @@
 - Unity 根据第二步采样生成本次游玩的捏合阈值。
 - 校准界面中的“跳过校准”也使用单指悬停触发。
 - 校准和游戏过程中，Unity 屏幕最前景会显示实时 21 点手骨架。看不到骨架时，说明摄像头桥接未启动或没有收到手部帧。
+- 校准界面提供 `Start Camera` 兜底按钮；没有手势输入时可直接用鼠标点击它来打开可见的 Python 摄像头桥接窗口。
 
 ### 菜单与按钮
 
@@ -109,7 +110,17 @@ Hand of God
 unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 ```
 
-第一次启动时会在 `unity/gesture_bridge/.venv` 创建 Python 虚拟环境并安装依赖，可能需要几分钟。随后会出现 `Hand of God Gesture Bridge` 命令行/预览窗口，摄像头权限由这个 Python 桥接进程申请。
+第一次启动时会在英文路径创建 Python 虚拟环境并安装依赖，可能需要几分钟。随后会出现 `Hand of God Gesture Bridge` 命令行/预览窗口，摄像头权限由这个 Python 桥接进程申请。
+
+桥接依赖固定使用 `mediapipe==0.10.14`，因为更新版本的 MediaPipe 移除了当前脚本使用的 `mp.solutions.hands` API。启动脚本会检测该 API 是否存在；如果不兼容，会自动强制重装依赖。
+
+MediaPipe 的原生模型加载对中文路径不稳定，因此启动脚本会把 Python 运行环境放在纯英文路径：
+
+```text
+E:\Unity\HandOfGodGestureBridge\.venv
+```
+
+项目仍然保存在当前中文目录，只有 Python 依赖环境放到英文路径。
 
 如果直接双击 `HandOfGod.exe`，Unity 会尝试自行启动桥接；失败信息会显示在校准界面，并写入：
 
@@ -120,11 +131,11 @@ unity\gesture_bridge\gesture-bridge-runtime.log
 ## 手动运行手势桥接
 
 ```powershell
-cd "E:\同济\大二下\用户交互技术HCI\期末项目\unity\gesture_bridge"
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python mediapipe_udp_sender.py
+cd "E:\同济\大二下\用户交互技术HCI\期末项目"
+python -m venv "E:\Unity\HandOfGodGestureBridge\.venv"
+& "E:\Unity\HandOfGodGestureBridge\.venv\Scripts\python.exe" -m pip install -r "unity\gesture_bridge\requirements.txt"
+cd "unity\gesture_bridge"
+& "E:\Unity\HandOfGodGestureBridge\.venv\Scripts\python.exe" mediapipe_udp_sender.py
 ```
 
 桥接窗口快捷键：
