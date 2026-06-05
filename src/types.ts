@@ -11,7 +11,7 @@ export type GestureEventType =
   | "twoHandTransformEnd";
 export type ShapeType = "cube" | "sphere" | "cylinder" | "cone" | "torus";
 export type CalibrationStage = "idle" | "openHand" | "pinch" | "ready" | "skipped";
-export type InteractionMode = "idle" | "draggingShape" | "movingObject" | "twoHandTransform";
+export type InteractionMode = "idle" | "draggingShape" | "movingObject" | "mechanismControl" | "twoHandTransform";
 
 export interface Vector2 {
   x: number;

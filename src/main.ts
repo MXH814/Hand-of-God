@@ -99,7 +99,7 @@ app.innerHTML = `
           <div>
             <span class="metric-label">Game</span>
             <strong id="game-status">Guiding</strong>
-            <p id="game-detail">Push the ball into the green goal.</p>
+            <p id="game-detail">Control temple mechanisms to guide the ball.</p>
           </div>
           <button class="secondary-button full-width" id="reset-game" type="button">Reset Ball</button>
         </div>
@@ -322,9 +322,6 @@ function renderFrame(frame: TrackingFrame) {
   latestMappedPoints = mapper.mapHands(latestHands, arStage.getBoundingClientRect());
   const isInteractive = calibration.isInteractive();
   shapeScene.setGameActive(isInteractive);
-  if (isInteractive) {
-    shapeScene.updateGameHands(latestMappedPoints, latestHands, frame.timestamp);
-  }
   const events = calibration.isInteractive()
     ? eventEngine.update(latestHands, latestMappedPoints, frame.timestamp, calibration.getProfile())
     : [];
@@ -353,6 +350,9 @@ function applyGestureEvents(events: GestureEvent[]) {
     }
 
     if (event.type === "twoHandTransformStart") {
+      if (interactionMode === "mechanismControl") {
+        continue;
+      }
       shapeScene.endSingleHandTransform();
       shapeScene.beginTransform();
       setInteractionMode("twoHandTransform");
@@ -384,6 +384,13 @@ function handlePinch(event: GestureEvent) {
   }
 
   if (event.type === "pinchStart") {
+    if (event.mappedPoint && shapeScene.beginMechanismControl(event.mappedPoint)) {
+      shapeScene.endSingleHandTransform();
+      setInteractionMode("mechanismControl");
+      setEventHud("mechanismSelected", "Tilt the divine ramp by rotating your wrist");
+      return;
+    }
+
     const trayShape = getShapeUnderPoint(point.x, point.y, TRAY_HIT_EXPAND_Y);
     if (trayShape) {
       startTrayHold(trayShape, event.timestamp);
@@ -401,6 +408,12 @@ function handlePinch(event: GestureEvent) {
   }
 
   if (event.type === "pinchMove") {
+    if (interactionMode === "mechanismControl" && event.mappedPoint) {
+      shapeScene.updateMechanismControl(event.mappedPoint);
+      setEventHud("mechanismMove", "Ramp tilt follows wrist rotation");
+      return;
+    }
+
     if (updateTrayHold(point.x, point.y, event.timestamp)) {
       return;
     }
@@ -437,6 +450,7 @@ function finishPinch(event: GestureEvent) {
 
   activeDraggedShape = undefined;
   shapeScene.setPreview(undefined);
+  shapeScene.endMechanismControl();
   shapeScene.endSingleHandTransform();
   clearTrayHold();
   setInteractionMode("idle");
@@ -794,7 +808,7 @@ function renderGameHud() {
       ? "Start camera and finish calibration to begin."
       : state.status === "goal"
       ? "Nice. The ball reached the goal."
-      : `${state.resetReason === "fallen" ? "Dropped and reset. " : ""}ball x ${state.ball.x.toFixed(2)} / y ${state.ball.y.toFixed(2)} / speed ${state.ball.speed.toFixed(2)} / hands ${state.activeHands}`;
+      : `${state.resetReason === "fallen" ? "Dropped and reset. " : ""}ball x ${state.ball.x.toFixed(2)} / y ${state.ball.y.toFixed(2)} / z ${state.ball.z.toFixed(2)} / speed ${state.ball.speed.toFixed(2)} / mechanism ${state.activeMechanism ?? "none"}`;
 }
 
 function formatEventDetail(event: GestureEvent) {

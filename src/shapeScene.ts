@@ -1,30 +1,42 @@
 import * as CANNON from "cannon-es";
 import * as THREE from "three";
-import { LEVEL_01, type GameLevel, type LevelBlock, type LevelProp } from "./gameLevel";
-import type { AnalyzedHand, MappedHandPoint, SceneObject, ShapeLibraryItem, ShapeType, Vector2 } from "./types";
+import { LEVEL_01, type GameLevel, type LevelBlock, type LevelMechanism, type LevelProp } from "./gameLevel";
+import type { MappedHandPoint, SceneObject, ShapeLibraryItem, ShapeType, Vector2 } from "./types";
 
 interface ShapeControllerOptions {
   stageElement: HTMLElement;
   library: ShapeLibraryItem[];
 }
 
-const WORLD_SCALE = 112;
-const DEPTH_STEP = 1.35;
-const GAME_DEPTH = 12;
-const DEBUG_OBJECT_DEPTH = GAME_DEPTH + 0.95;
-const BALL_RADIUS = 0.24;
-const HAND_RADIUS = 0.34;
+const WORLD_SCALE = 72;
+const DEBUG_OBJECT_DEPTH = 3.8;
+const DEPTH_STEP = 0.32;
+const BALL_RADIUS = 0.22;
+const MECHANISM_HIT_RADIUS = 82;
+const STONE_TOP = "#9ba9a0";
+const STONE_SIDE = "#56665e";
+const TRIM = "#c0a15b";
 
-interface GamePlatform {
+interface LevelBody {
   body: CANNON.Body;
-  mesh: THREE.Mesh;
+  mesh: THREE.Object3D;
 }
 
-interface GameHandCollider {
+interface TiltMechanism {
+  config: LevelMechanism;
   body: CANNON.Body;
-  mesh: THREE.Mesh;
-  lastPosition: CANNON.Vec3;
-  lastTimestamp: number;
+  mesh: THREE.Group;
+  rampMesh: THREE.Mesh;
+  handle: THREE.Group;
+  arc: THREE.Group;
+  tilt: number;
+  selected: boolean;
+}
+
+interface MechanismControl {
+  id: string;
+  baseTilt: number;
+  baseRoll: number;
 }
 
 export interface GameStateSnapshot {
@@ -33,10 +45,12 @@ export interface GameStateSnapshot {
   won: boolean;
   active: boolean;
   activeHands: number;
+  activeMechanism?: string;
   resetReason?: "manual" | "fallen";
   ball: {
     x: number;
     y: number;
+    z: number;
     speed: number;
   };
 }
@@ -48,62 +62,54 @@ export class ShapeScene {
   private readonly renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2();
-  private readonly interactionPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -GAME_DEPTH);
+  private readonly debugPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.15);
   private readonly planeHit = new THREE.Vector3();
   private readonly physicsWorld = new CANNON.World();
-  private readonly gameMaterial = new CANNON.Material("game");
-  private readonly handMaterial = new CANNON.Material("hand");
+  private readonly gameMaterial = new CANNON.Material("temple-stone");
+  private readonly ballMaterial = new CANNON.Material("temple-ball");
   private readonly ballBody = new CANNON.Body({
     mass: 1,
     shape: new CANNON.Sphere(BALL_RADIUS),
-    material: this.gameMaterial,
-    linearDamping: 0.22,
+    material: this.ballMaterial,
+    linearDamping: 0.16,
     angularDamping: 0.18,
   });
   private readonly ballMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(BALL_RADIUS, 32, 20),
+    new THREE.SphereGeometry(BALL_RADIUS, 36, 24),
     new THREE.MeshStandardMaterial({
-      color: "#f7b801",
-      roughness: 0.38,
-      metalness: 0.08,
-      emissive: "#6b4d00",
-      emissiveIntensity: 0.16,
+      color: "#d9a325",
+      roughness: 0.28,
+      metalness: 0.18,
+      emissive: "#5f3f00",
+      emissiveIntensity: 0.14,
     }),
   );
-  private readonly gamePlatforms: GamePlatform[] = [];
-  private readonly levelMeshes: THREE.Object3D[] = [];
-  private readonly handColliders = new Map<string, GameHandCollider>();
-  private readonly goalMesh = new THREE.Mesh(
-    new THREE.TorusGeometry(LEVEL_01.goal.radius, 0.045, 12, 48),
+  private readonly goalRing = new THREE.Mesh(
+    new THREE.TorusGeometry(LEVEL_01.goal.radius, 0.055, 16, 72),
     new THREE.MeshStandardMaterial({
-      color: "#43aa8b",
-      roughness: 0.4,
+      color: "#58c6a7",
+      roughness: 0.32,
       metalness: 0.18,
-      emissive: "#0f8b8d",
-      emissiveIntensity: 0.28,
+      emissive: "#1c9e88",
+      emissiveIntensity: 0.5,
     }),
   );
   private readonly goalCore = new THREE.Mesh(
-    new THREE.CircleGeometry(LEVEL_01.goal.radius * 0.78, 48),
+    new THREE.CylinderGeometry(LEVEL_01.goal.radius * 0.82, LEVEL_01.goal.radius * 0.82, 0.035, 72),
     new THREE.MeshBasicMaterial({
-      color: "#43aa8b",
+      color: "#58c6a7",
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.26,
       depthWrite: false,
     }),
   );
+  private readonly levelBodies: LevelBody[] = [];
+  private readonly mechanisms = new Map<string, TiltMechanism>();
   private readonly objects = new Map<string, THREE.Mesh>();
   private readonly objectState = new Map<string, SceneObject>();
   private selectedObjectId?: string;
   private activeObjectId?: string;
   private deleteTargetObjectId?: string;
-  private animationFrame = 0;
-  private lastPhysicsTime = performance.now();
-  private gameActive = false;
-  private gameWon = false;
-  private gameStatus: GameStateSnapshot["status"] = "guiding";
-  private lastResetAt = 0;
-  private lastResetReason: GameStateSnapshot["resetReason"];
   private previewMesh?: THREE.Mesh;
   private nextObjectDepth = 0;
   private transformBase?: {
@@ -120,6 +126,14 @@ export class ShapeScene {
     palmRoll: number;
     palmYaw: number;
   };
+  private mechanismControl?: MechanismControl;
+  private animationFrame = 0;
+  private lastPhysicsTime = performance.now();
+  private gameActive = false;
+  private gameWon = false;
+  private gameStatus: GameStateSnapshot["status"] = "guiding";
+  private lastResetAt = 0;
+  private lastResetReason: GameStateSnapshot["resetReason"];
 
   constructor(private readonly options: ShapeControllerOptions) {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -128,9 +142,8 @@ export class ShapeScene {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.className = "shape-canvas";
     this.options.stageElement.appendChild(this.renderer.domElement);
-    this.camera.up.set(0, 0, 1);
-    this.camera.position.set(0, -7.4, GAME_DEPTH + 5.8);
-    this.camera.lookAt(0, 0, GAME_DEPTH);
+    this.scene.background = null;
+    this.camera.up.set(0, 1, 0);
     this.addLights();
     this.setupPhysics();
     this.setupGameLevel();
@@ -149,11 +162,14 @@ export class ShapeScene {
     this.gameStatus = reason === "fallen" ? "fallen" : "resetting";
     this.lastResetAt = performance.now();
     this.lastResetReason = reason;
-    this.ballBody.position.set(this.level.start.x, this.level.start.y, 0);
+    this.ballBody.position.set(this.level.start.x, this.level.start.y, this.level.start.z);
     this.ballBody.velocity.set(0, 0, 0);
     this.ballBody.angularVelocity.set(0, 0, 0);
     this.ballBody.quaternion.set(0, 0, 0, 1);
-    this.ballBody.wakeUp();
+    this.ballBody.sleep();
+    if (this.gameActive) {
+      this.ballBody.wakeUp();
+    }
   }
 
   setGameActive(active: boolean) {
@@ -163,53 +179,55 @@ export class ShapeScene {
 
     this.gameActive = active;
     this.lastPhysicsTime = performance.now();
+    this.endMechanismControl();
     if (active) {
       this.resetGame("manual");
+      this.ballBody.wakeUp();
       return;
     }
 
-    this.hideHandColliders();
+    this.ballBody.sleep();
   }
 
-  updateGameHands(points: MappedHandPoint[], hands: AnalyzedHand[], timestamp: number) {
-    const activeIds = new Set<string>();
-
-    for (const point of points) {
-      const hand = hands.find((candidate) => candidate.id === point.handId);
-      if (!hand || hand.score < 0.5) {
-        continue;
-      }
-
-      activeIds.add(point.handId);
-      const collider = this.getOrCreateHandCollider(point.handId);
-      const worldPoint = this.screenToWorldPoint(point.x, point.y);
-      const nextPosition = new CANNON.Vec3(worldPoint.x, worldPoint.y, 0);
-      const dt = Math.max((timestamp - collider.lastTimestamp) / 1000, 1 / 120);
-      const velocity = nextPosition.vsub(collider.lastPosition).scale(1 / dt);
-      const pinchBoost = hand.pinch.active ? 1.32 : 1;
-
-      collider.body.velocity.set(
-        clamp(velocity.x * pinchBoost, -8, 8),
-        clamp(velocity.y * pinchBoost, -8, 8),
-        0,
-      );
-      collider.body.position.copy(nextPosition);
-      collider.body.wakeUp();
-      collider.mesh.visible = true;
-      collider.mesh.position.set(nextPosition.x, nextPosition.y, GAME_DEPTH + 0.7);
-      collider.mesh.scale.setScalar(hand.pinch.active ? 1.18 : 1);
-      collider.lastPosition.copy(nextPosition);
-      collider.lastTimestamp = timestamp;
+  beginMechanismControl(point: MappedHandPoint) {
+    const mechanism = this.getMechanismNearScreenPoint(point.x, point.y);
+    if (!mechanism) {
+      return false;
     }
 
-    for (const [id, collider] of this.handColliders.entries()) {
-      if (activeIds.has(id)) {
-        continue;
-      }
-      collider.mesh.visible = false;
-      collider.body.position.set(30, 30, 0);
-      collider.body.velocity.set(0, 0, 0);
+    this.mechanismControl = {
+      id: mechanism.config.id,
+      baseTilt: mechanism.tilt,
+      baseRoll: point.palmRoll,
+    };
+    this.setMechanismSelected(mechanism.config.id);
+    this.gameStatus = "guiding";
+    return true;
+  }
+
+  updateMechanismControl(point: MappedHandPoint) {
+    if (!this.mechanismControl) {
+      return false;
     }
+
+    const mechanism = this.mechanisms.get(this.mechanismControl.id);
+    if (!mechanism) {
+      return false;
+    }
+
+    const rollDelta = normalizeAngle(point.palmRoll - this.mechanismControl.baseRoll);
+    const nextTilt = clamp(
+      this.mechanismControl.baseTilt + rollDelta * 0.82,
+      mechanism.config.minTilt,
+      mechanism.config.maxTilt,
+    );
+    this.setMechanismTilt(mechanism, nextTilt);
+    return true;
+  }
+
+  endMechanismControl() {
+    this.mechanismControl = undefined;
+    this.setMechanismSelected(undefined);
   }
 
   getGameState(): GameStateSnapshot {
@@ -219,11 +237,13 @@ export class ShapeScene {
       status: !this.gameActive ? "waiting" : recentReset ? this.gameStatus : this.gameWon ? "goal" : "guiding",
       won: this.gameWon,
       active: this.gameActive,
-      activeHands: [...this.handColliders.values()].filter((collider) => collider.mesh.visible).length,
+      activeHands: this.mechanismControl ? 1 : 0,
+      activeMechanism: this.mechanismControl?.id,
       resetReason: recentReset ? this.lastResetReason : undefined,
       ball: {
         x: this.ballBody.position.x,
         y: this.ballBody.position.y,
+        z: this.ballBody.position.z,
         speed: this.ballBody.velocity.length(),
       },
     };
@@ -233,36 +253,29 @@ export class ShapeScene {
     const rect = this.options.stageElement.getBoundingClientRect();
     const width = Math.max(1, Math.floor(rect.width));
     const height = Math.max(1, Math.floor(rect.height));
-    const worldWidth = width / WORLD_SCALE;
     const worldHeight = height / WORLD_SCALE;
+    const worldWidth = worldHeight * (width / height);
 
     this.camera.left = -worldWidth / 2;
     this.camera.right = worldWidth / 2;
     this.camera.top = worldHeight / 2;
     this.camera.bottom = -worldHeight / 2;
     this.camera.updateProjectionMatrix();
-    this.camera.position.set(0, -7.4, GAME_DEPTH + 5.8);
-    this.camera.lookAt(0, 0, GAME_DEPTH);
+    this.camera.position.set(5.7, 7.8, 7.6);
+    this.camera.lookAt(0, 0.15, 0);
     this.renderer.setSize(width, height, false);
   }
 
   screenToWorldPoint(clientX: number, clientY: number): Vector2 {
-    const rect = this.options.stageElement.getBoundingClientRect();
-    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hit = this.raycaster.ray.intersectPlane(this.interactionPlane, this.planeHit);
+    const hit = this.screenToGround(clientX, clientY);
     if (hit) {
       return {
         x: hit.x,
-        y: hit.y,
+        y: hit.z,
       };
     }
 
-    return {
-      x: (clientX - rect.left - rect.width / 2) / WORLD_SCALE,
-      y: -(clientY - rect.top - rect.height / 2) / WORLD_SCALE,
-    };
+    return { x: 0, y: 0 };
   }
 
   addShapeAtScreenPoint(type: ShapeType, clientX: number, clientY: number) {
@@ -277,18 +290,17 @@ export class ShapeScene {
 
     const mesh = this.createMesh(item);
     const id = `${type}-${Date.now()}`;
-    const z = DEBUG_OBJECT_DEPTH + this.nextObjectDepth;
+    const y = DEBUG_OBJECT_DEPTH + this.nextObjectDepth;
     this.nextObjectDepth += DEPTH_STEP;
-    mesh.position.set(point.x, point.y, z);
+    mesh.position.set(point.x, y, point.y);
     mesh.scale.setScalar(item.defaultScale);
-    mesh.renderOrder = Math.round(z * 1000);
     mesh.userData.objectId = id;
     this.scene.add(mesh);
     this.objects.set(id, mesh);
     this.objectState.set(id, {
       id,
       type,
-      position: { x: point.x, y: point.y, z },
+      position: { x: point.x, y, z: point.y },
       rotation: { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z },
       scale: item.defaultScale,
       selected: true,
@@ -330,8 +342,7 @@ export class ShapeScene {
       this.scene.add(this.previewMesh);
     }
 
-    this.previewMesh.position.set(point.x, point.y, DEBUG_OBJECT_DEPTH + this.nextObjectDepth + 0.16);
-    this.previewMesh.renderOrder = Math.round((DEBUG_OBJECT_DEPTH + this.nextObjectDepth + 0.16) * 1000);
+    this.previewMesh.position.set(point.x, DEBUG_OBJECT_DEPTH + this.nextObjectDepth + 0.12, point.y);
   }
 
   applyTransformAtScreenPoint(
@@ -397,13 +408,7 @@ export class ShapeScene {
     this.setActiveObject(undefined);
   }
 
-  applyTransform(
-    center: Vector2,
-    scaleDelta: number,
-    rotationDelta: number,
-    rotationXDelta = 0,
-    rotationYDelta = 0,
-  ) {
+  applyTransform(center: Vector2, scaleDelta: number, rotationDelta: number, rotationXDelta = 0, rotationYDelta = 0) {
     const mesh = this.getSelectedMesh();
     if (!mesh) {
       return;
@@ -413,14 +418,14 @@ export class ShapeScene {
       this.transformBase && this.transformBase.objectId === this.selectedObjectId
         ? this.transformBase
         : { scale: mesh.scale.x, rotation: mesh.rotation };
-    const currentWorld = new THREE.Vector2(mesh.position.x, mesh.position.y);
+    const currentWorld = new THREE.Vector2(mesh.position.x, mesh.position.z);
     currentWorld.lerp(new THREE.Vector2(center.x, center.y), 0.58);
-    mesh.position.set(currentWorld.x, currentWorld.y, mesh.position.z);
+    mesh.position.set(currentWorld.x, mesh.position.y, currentWorld.y);
     const nextScale = clamp(base.scale * scaleDelta, 0.35, 3.4);
     mesh.scale.setScalar(nextScale);
     mesh.rotation.x = smoothAngle(mesh.rotation.x, base.rotation.x + rotationXDelta, 0.42);
-    mesh.rotation.y = smoothAngle(mesh.rotation.y, base.rotation.y + rotationYDelta, 0.42);
-    mesh.rotation.z = smoothAngle(mesh.rotation.z, base.rotation.z + rotationDelta, 0.5);
+    mesh.rotation.y = smoothAngle(mesh.rotation.y, base.rotation.y + rotationDelta, 0.5);
+    mesh.rotation.z = smoothAngle(mesh.rotation.z, base.rotation.z + rotationYDelta, 0.42);
     this.syncState(mesh);
   }
 
@@ -431,9 +436,9 @@ export class ShapeScene {
     }
 
     const point = this.screenToWorldPoint(clientX, clientY);
-    const currentWorld = new THREE.Vector2(mesh.position.x, mesh.position.y);
+    const currentWorld = new THREE.Vector2(mesh.position.x, mesh.position.z);
     currentWorld.lerp(new THREE.Vector2(point.x, point.y), 0.55);
-    mesh.position.set(currentWorld.x, currentWorld.y, mesh.position.z);
+    mesh.position.set(currentWorld.x, mesh.position.y, currentWorld.y);
     this.syncState(mesh);
     return true;
   }
@@ -460,8 +465,8 @@ export class ShapeScene {
       const rollRotation = clamp(rollDelta * 1.15, -1.55, 1.55);
 
       mesh.rotation.x = smoothAngle(mesh.rotation.x, this.singleHandBase.rotation.x + depthRotation, 0.46);
-      mesh.rotation.y = smoothAngle(mesh.rotation.y, this.singleHandBase.rotation.y + yawRotation, 0.5);
-      mesh.rotation.z = smoothAngle(mesh.rotation.z, this.singleHandBase.rotation.z + rollRotation, 0.48);
+      mesh.rotation.y = smoothAngle(mesh.rotation.y, this.singleHandBase.rotation.y + rollRotation, 0.48);
+      mesh.rotation.z = smoothAngle(mesh.rotation.z, this.singleHandBase.rotation.z + yawRotation, 0.5);
       this.syncState(mesh);
     }
 
@@ -601,221 +606,294 @@ export class ShapeScene {
       opacity: preview ? 0.55 : 1,
     });
     const mesh = new THREE.Mesh(createGeometry(item.type), material);
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     return mesh;
   }
 
   private addLights() {
-    const ambient = new THREE.AmbientLight("#ffffff", 0.88);
-    const key = new THREE.DirectionalLight("#ffffff", 1.1);
-    key.position.set(2, 3, 5);
+    const ambient = new THREE.AmbientLight("#dbe6df", 0.58);
+    const key = new THREE.DirectionalLight("#ffffff", 2.6);
+    key.position.set(-2.8, 6.8, 4.6);
     key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
-    this.scene.add(ambient, key);
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.left = -6;
+    key.shadow.camera.right = 6;
+    key.shadow.camera.top = 5;
+    key.shadow.camera.bottom = -5;
+    const fill = new THREE.DirectionalLight("#7cc7b6", 0.62);
+    fill.position.set(3.5, 3, -3);
+    this.scene.add(ambient, key, fill);
   }
 
   private setupPhysics() {
     this.physicsWorld.gravity.set(this.level.gravity.x, this.level.gravity.y, this.level.gravity.z);
     this.physicsWorld.allowSleep = true;
+    this.physicsWorld.defaultContactMaterial.friction = 0.46;
+    this.physicsWorld.defaultContactMaterial.restitution = 0.08;
     this.physicsWorld.addContactMaterial(
-      new CANNON.ContactMaterial(this.gameMaterial, this.gameMaterial, {
-        friction: 0.42,
-        restitution: 0.18,
-      }),
-    );
-    this.physicsWorld.addContactMaterial(
-      new CANNON.ContactMaterial(this.gameMaterial, this.handMaterial, {
-        friction: 0.12,
+      new CANNON.ContactMaterial(this.ballMaterial, this.gameMaterial, {
+        friction: 0.52,
         restitution: 0.08,
       }),
     );
-    this.ballBody.position.set(this.level.start.x, this.level.start.y, 0);
+    this.ballBody.position.set(this.level.start.x, this.level.start.y, this.level.start.z);
     this.physicsWorld.addBody(this.ballBody);
-    this.ballMesh.castShadow = false;
-    this.ballMesh.receiveShadow = false;
-    this.ballMesh.renderOrder = GAME_DEPTH * 1000 + 10;
+    this.ballMesh.castShadow = true;
+    this.ballMesh.receiveShadow = true;
     this.scene.add(this.ballMesh);
   }
 
   private setupGameLevel() {
-    this.goalMesh.position.set(this.level.goal.x, this.level.goal.y, GAME_DEPTH + 0.16);
-    this.goalMesh.renderOrder = GAME_DEPTH * 1000;
-    this.goalCore.position.copy(this.goalMesh.position);
-    this.goalCore.renderOrder = GAME_DEPTH * 1000 - 1;
-    this.goalCore.rotation.z = -0.08;
-    this.scene.add(this.goalCore, this.goalMesh);
-
     for (const block of this.level.blocks) {
       this.addLevelBlock(block);
+    }
+
+    for (const mechanism of this.level.mechanisms) {
+      this.addTiltMechanism(mechanism);
     }
 
     for (const prop of this.level.props) {
       this.addLevelProp(prop);
     }
+
+    this.goalRing.position.set(this.level.goal.x, this.level.goal.y + 0.035, this.level.goal.z);
+    this.goalRing.rotation.x = Math.PI / 2;
+    this.goalCore.position.copy(this.goalRing.position);
+    this.goalCore.rotation.x = Math.PI / 2;
+    this.scene.add(this.goalCore, this.goalRing);
   }
 
   private addLevelBlock(block: LevelBlock) {
-    const blockHeight = block.height3d ?? 0.14;
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(block.width, block.height, blockHeight),
-      new THREE.MeshStandardMaterial({
-        color: block.color,
-        roughness: block.kind === "floor" ? 0.74 : 0.5,
-        metalness: block.kind === "hazard" ? 0.04 : 0.1,
-        transparent: block.opacity !== undefined,
-        opacity: block.opacity ?? 1,
-      }),
-    );
-    mesh.position.set(block.x, block.y, GAME_DEPTH + blockHeight / 2 - 0.08);
-    mesh.rotation.z = block.angle ?? 0;
-    mesh.renderOrder = block.kind === "floor" || block.kind === "hazard" ? GAME_DEPTH * 1000 - 4 : GAME_DEPTH * 1000;
-    mesh.receiveShadow = true;
-    mesh.castShadow = block.kind !== "floor" && block.kind !== "hazard";
+    const mesh = this.createStoneBlock(block);
     this.scene.add(mesh);
-    this.levelMeshes.push(mesh);
 
-    if (block.kind === "hazard") {
-      const rim = new THREE.Mesh(
-        new THREE.BoxGeometry(block.width + 0.08, block.height + 0.08, 0.025),
-        new THREE.MeshBasicMaterial({
-          color: "#d1495b",
-          transparent: true,
-          opacity: 0.32,
-          depthWrite: false,
-        }),
+    if (block.physics === false || block.kind === "void") {
+      return;
+    }
+
+    const body = new CANNON.Body({
+      mass: 0,
+      shape: new CANNON.Box(new CANNON.Vec3(block.size.x / 2, block.size.y / 2, block.size.z / 2)),
+      material: this.gameMaterial,
+    });
+    body.position.set(block.position.x, block.position.y, block.position.z);
+    body.quaternion.copy(toCannonQuaternion(block.rotation));
+    this.physicsWorld.addBody(body);
+    this.levelBodies.push({ body, mesh });
+  }
+
+  private createStoneBlock(block: LevelBlock) {
+    const group = new THREE.Group();
+    group.position.set(block.position.x, block.position.y, block.position.z);
+    group.rotation.set(block.rotation?.x ?? 0, block.rotation?.y ?? 0, block.rotation?.z ?? 0);
+
+    const material = new THREE.MeshStandardMaterial({
+      color: block.color,
+      roughness: block.kind === "void" ? 0.9 : 0.72,
+      metalness: block.kind === "void" ? 0.02 : 0.08,
+      transparent: block.opacity !== undefined,
+      opacity: block.opacity ?? 1,
+    });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(block.size.x, block.size.y, block.size.z), material);
+    base.castShadow = block.kind !== "void";
+    base.receiveShadow = true;
+    group.add(base);
+
+    if (block.kind === "platform" || block.kind === "wall" || block.kind === "rail") {
+      const trimMaterial = new THREE.MeshStandardMaterial({
+        color: block.kind === "platform" ? STONE_TOP : STONE_SIDE,
+        roughness: 0.64,
+        metalness: 0.06,
+      });
+      const top = new THREE.Mesh(
+        new THREE.BoxGeometry(block.size.x * 0.88, 0.028, block.size.z * 0.82),
+        trimMaterial,
       );
-      rim.position.set(block.x, block.y, GAME_DEPTH + 0.02);
-      rim.rotation.z = block.angle ?? 0;
-      rim.renderOrder = GAME_DEPTH * 1000 - 3;
-      this.scene.add(rim);
-      this.levelMeshes.push(rim);
+      top.position.y = block.size.y / 2 + 0.016;
+      top.receiveShadow = true;
+      group.add(top);
+
+      if (block.kind === "platform") {
+        group.add(createTrim(block.size.x, block.size.z));
+      }
     }
 
-    if (block.physics === false || block.kind === "floor" || block.kind === "hazard") {
-      return;
+    if (block.kind === "void") {
+      const grid = new THREE.GridHelper(block.size.x, 18, "#1b3029", "#10231d");
+      grid.position.y = block.size.y / 2 + 0.01;
+      grid.material.opacity = 0.18;
+      grid.material.transparent = true;
+      group.add(grid);
     }
 
-    const halfExtents = new CANNON.Vec3(block.width / 2, block.height / 2, 0.28);
-    const body = new CANNON.Body({
-      mass: 0,
-      shape: new CANNON.Box(halfExtents),
-      material: this.gameMaterial,
-    });
-    body.position.set(block.x, block.y, 0);
-    body.quaternion.setFromEuler(0, 0, block.angle ?? 0);
-    this.physicsWorld.addBody(body);
-    this.gamePlatforms.push({ body, mesh });
+    return group;
   }
 
-  private addLevelProp(prop: LevelProp) {
-    const mesh = createPropMesh(prop);
-    mesh.position.set(prop.x, prop.y, GAME_DEPTH + 0.25);
-    mesh.rotation.z = prop.angle ?? 0;
-    mesh.renderOrder = GAME_DEPTH * 1000 + 4;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    this.scene.add(mesh);
-    this.levelMeshes.push(mesh);
-
-    if (prop.kind !== "bumper") {
-      return;
-    }
-
-    const body = new CANNON.Body({
-      mass: 0,
-      shape: new CANNON.Sphere(prop.radius ?? 0.18),
-      material: this.gameMaterial,
+  private addTiltMechanism(config: LevelMechanism) {
+    const mesh = new THREE.Group();
+    const rampMaterial = new THREE.MeshStandardMaterial({
+      color: config.color,
+      roughness: 0.42,
+      metalness: 0.2,
+      emissive: "#4a3210",
+      emissiveIntensity: 0.12,
     });
-    body.position.set(prop.x, prop.y, 0);
-    this.physicsWorld.addBody(body);
-  }
+    const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(config.size.x, config.size.y, config.size.z), rampMaterial);
+    rampMesh.castShadow = true;
+    rampMesh.receiveShadow = true;
+    mesh.add(rampMesh);
+    mesh.add(createRampTrim(config.size));
 
-  private getOrCreateHandCollider(id: string) {
-    const existing = this.handColliders.get(id);
-    if (existing) {
-      return existing;
-    }
+    const handle = createMechanismHandle();
+    handle.position.set(config.handleOffset.x, config.handleOffset.y, config.handleOffset.z);
+    mesh.add(handle);
+
+    const arc = createArcIndicator();
+    arc.position.set(config.handleOffset.x, config.handleOffset.y + 0.08, config.handleOffset.z);
+    mesh.add(arc);
 
     const body = new CANNON.Body({
       mass: 0,
       type: CANNON.Body.KINEMATIC,
-      shape: new CANNON.Sphere(HAND_RADIUS),
-      material: this.handMaterial,
+      shape: new CANNON.Box(new CANNON.Vec3(config.size.x / 2, config.size.y / 2, config.size.z / 2)),
+      material: this.gameMaterial,
     });
-    body.position.set(30, 30, 0);
     this.physicsWorld.addBody(body);
 
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(HAND_RADIUS, 24, 16),
-      new THREE.MeshBasicMaterial({
-        color: "#ffffff",
-        transparent: true,
-        opacity: 0.28,
-        depthWrite: false,
-      }),
-    );
-    mesh.visible = false;
-    mesh.renderOrder = GAME_DEPTH * 1000 + 30;
-    this.scene.add(mesh);
-
-    const collider = {
+    const mechanism: TiltMechanism = {
+      config,
       body,
       mesh,
-      lastPosition: body.position.clone(),
-      lastTimestamp: performance.now(),
+      rampMesh,
+      handle,
+      arc,
+      tilt: config.initialTilt,
+      selected: false,
     };
-    this.handColliders.set(id, collider);
-    return collider;
+    this.scene.add(mesh);
+    this.mechanisms.set(config.id, mechanism);
+    this.setMechanismTilt(mechanism, config.initialTilt);
   }
 
-  private hideHandColliders() {
-    for (const collider of this.handColliders.values()) {
-      collider.mesh.visible = false;
-      collider.body.position.set(30, 30, 0);
-      collider.body.velocity.set(0, 0, 0);
+  private setMechanismTilt(mechanism: TiltMechanism, tilt: number) {
+    mechanism.tilt = tilt;
+    mechanism.mesh.position.set(mechanism.config.position.x, mechanism.config.position.y, mechanism.config.position.z);
+    mechanism.mesh.rotation.set(tilt, mechanism.config.yaw, 0);
+    mechanism.body.position.set(mechanism.config.position.x, mechanism.config.position.y, mechanism.config.position.z);
+    mechanism.body.quaternion.setFromEuler(tilt, mechanism.config.yaw, 0, "XYZ");
+    mechanism.body.velocity.set(0, 0, 0);
+    mechanism.body.angularVelocity.set(0, 0, 0);
+    mechanism.body.aabbNeedsUpdate = true;
+
+    const material = mechanism.rampMesh.material;
+    if (material instanceof THREE.MeshStandardMaterial) {
+      material.emissiveIntensity = mechanism.selected ? 0.55 : 0.12;
     }
+    mechanism.arc.rotation.y = -mechanism.config.yaw;
+  }
+
+  private addLevelProp(prop: LevelProp) {
+    const mesh = createPropMesh(prop);
+    mesh.position.set(prop.position.x, prop.position.y, prop.position.z);
+    mesh.rotation.set(prop.rotation?.x ?? 0, prop.rotation?.y ?? 0, prop.rotation?.z ?? 0);
+    this.scene.add(mesh);
+  }
+
+  private setMechanismSelected(id: string | undefined) {
+    for (const mechanism of this.mechanisms.values()) {
+      mechanism.selected = mechanism.config.id === id;
+      mechanism.arc.visible = mechanism.selected;
+      const scale = mechanism.selected ? 1.16 : 1;
+      mechanism.handle.scale.setScalar(scale);
+      const material = mechanism.rampMesh.material;
+      if (material instanceof THREE.MeshStandardMaterial) {
+        material.emissive.set(mechanism.selected ? "#d9b44a" : "#4a3210");
+        material.emissiveIntensity = mechanism.selected ? 0.55 : 0.12;
+      }
+    }
+  }
+
+  private getMechanismNearScreenPoint(clientX: number, clientY: number) {
+    let best: TiltMechanism | undefined;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const mechanism of this.mechanisms.values()) {
+      const handleWorld = new THREE.Vector3(
+        mechanism.config.handleOffset.x,
+        mechanism.config.handleOffset.y,
+        mechanism.config.handleOffset.z,
+      );
+      mechanism.mesh.localToWorld(handleWorld);
+      const screen = this.worldToScreen(handleWorld);
+      const distance = Math.hypot(screen.x - clientX, screen.y - clientY);
+      if (distance < bestDistance && distance < MECHANISM_HIT_RADIUS) {
+        best = mechanism;
+        bestDistance = distance;
+      }
+    }
+
+    return best;
+  }
+
+  private worldToScreen(world: THREE.Vector3) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const projected = world.clone().project(this.camera);
+    return {
+      x: rect.left + ((projected.x + 1) / 2) * rect.width,
+      y: rect.top + ((1 - projected.y) / 2) * rect.height,
+    };
+  }
+
+  private screenToGround(clientX: number, clientY: number) {
+    const rect = this.options.stageElement.getBoundingClientRect();
+    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    return this.raycaster.ray.intersectPlane(this.debugPlane, this.planeHit);
   }
 
   private stepGame() {
     const now = performance.now();
     const delta = Math.min((now - this.lastPhysicsTime) / 1000, 1 / 30);
     this.lastPhysicsTime = now;
-    if (!this.gameActive) {
-      this.syncBallMesh();
-      return;
+    if (this.gameActive) {
+      this.physicsWorld.step(1 / 60, delta, 3);
     }
 
-    this.physicsWorld.step(1 / 60, delta, 3);
-
-    this.ballBody.position.z = 0;
-    this.ballBody.velocity.z = 0;
+    const position = this.ballBody.position;
     if (
-      this.ballBody.position.y < this.level.fallBounds.bottom ||
-      this.ballBody.position.x < this.level.fallBounds.left ||
-      this.ballBody.position.x > this.level.fallBounds.right
+      this.gameActive &&
+      (position.y < this.level.fallBounds.bottom ||
+        position.x < this.level.fallBounds.left ||
+        position.x > this.level.fallBounds.right ||
+        position.z < this.level.fallBounds.back ||
+        position.z > this.level.fallBounds.front)
     ) {
       this.resetGame("fallen");
     }
 
-    const goalDistance = Math.hypot(
-      this.ballBody.position.x - this.level.goal.x,
-      this.ballBody.position.y - this.level.goal.y,
-    );
-    if (!this.gameWon && goalDistance < this.level.goal.radius && this.ballBody.velocity.length() < 2.8) {
+    const goalDistance = Math.hypot(position.x - this.level.goal.x, position.z - this.level.goal.z);
+    if (
+      this.gameActive &&
+      !this.gameWon &&
+      goalDistance < this.level.goal.radius &&
+      Math.abs(position.y - this.level.goal.y) < 0.44 &&
+      this.ballBody.velocity.length() < 2.8
+    ) {
       this.gameWon = true;
       this.gameStatus = "goal";
-      this.goalCore.material.opacity = 0.42;
+      this.goalCore.material.opacity = 0.45;
     } else if (!this.gameWon) {
       this.gameStatus = "guiding";
-      this.goalCore.material.opacity = 0.2;
+      this.goalCore.material.opacity = 0.26;
     }
 
     this.syncBallMesh();
   }
 
   private syncBallMesh() {
-    this.ballMesh.position.set(this.ballBody.position.x, this.ballBody.position.y, GAME_DEPTH + 0.36);
+    this.ballMesh.position.set(this.ballBody.position.x, this.ballBody.position.y, this.ballBody.position.z);
     this.ballMesh.quaternion.copy(this.ballBody.quaternion as unknown as THREE.Quaternion);
   }
 
@@ -827,6 +905,7 @@ export class ShapeScene {
         mesh.rotation.y += 0.002;
       }
     }
+    this.goalRing.rotation.z += 0.008;
     this.renderer.render(this.scene, this.camera);
   };
 }
@@ -847,52 +926,153 @@ function createGeometry(type: ShapeType) {
 }
 
 function createPropMesh(prop: LevelProp) {
-  if (prop.kind === "pillar" || prop.kind === "bumper") {
+  if (prop.kind === "pillar") {
+    const group = new THREE.Group();
     const radius = prop.radius ?? 0.12;
-    const height = prop.height ?? 0.38;
+    const height = prop.height ?? 0.9;
     const material = new THREE.MeshStandardMaterial({
       color: prop.color,
-      roughness: 0.42,
-      metalness: prop.kind === "bumper" ? 0.18 : 0.08,
-      emissive: prop.kind === "bumper" ? prop.color : "#000000",
-      emissiveIntensity: prop.kind === "bumper" ? 0.12 : 0,
+      roughness: 0.66,
+      metalness: 0.08,
     });
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 24), material);
-    mesh.rotation.x = Math.PI / 2;
-    return mesh;
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 28), material);
+    shaft.castShadow = true;
+    shaft.receiveShadow = true;
+    const capMaterial = new THREE.MeshStandardMaterial({ color: "#bac7bf", roughness: 0.58, metalness: 0.06 });
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(radius * 1.45, radius * 1.45, 0.12, 28), capMaterial);
+    const base = top.clone();
+    top.position.y = height / 2 + 0.06;
+    base.position.y = -height / 2 - 0.06;
+    group.add(shaft, top, base);
+    return group;
   }
 
-  if (prop.kind === "marker") {
-    return new THREE.Mesh(
-      new THREE.RingGeometry((prop.radius ?? 0.38) * 0.72, prop.radius ?? 0.38, 40),
-      new THREE.MeshBasicMaterial({
+  if (prop.kind === "rune") {
+    const group = new THREE.Group();
+    const radius = prop.radius ?? 0.45;
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(radius, 0.035, 12, 64),
+      new THREE.MeshStandardMaterial({
         color: prop.color,
-        transparent: true,
-        opacity: 0.7,
-        depthWrite: false,
+        roughness: 0.34,
+        metalness: 0.2,
+        emissive: prop.color,
+        emissiveIntensity: 0.34,
       }),
     );
+    ring.rotation.x = Math.PI / 2;
+    const line = new THREE.Mesh(
+      new THREE.BoxGeometry(radius * 1.18, 0.02, 0.035),
+      new THREE.MeshBasicMaterial({ color: prop.color, transparent: true, opacity: 0.76 }),
+    );
+    group.add(ring, line);
+    return group;
+  }
+
+  if (prop.kind === "torch") {
+    const group = new THREE.Group();
+    const radius = prop.radius ?? 0.08;
+    const height = prop.height ?? 0.4;
+    const post = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius, radius, height, 18),
+      new THREE.MeshStandardMaterial({ color: "#4d4238", roughness: 0.48, metalness: 0.22 }),
+    );
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(radius * 1.7, 18, 12),
+      new THREE.MeshBasicMaterial({ color: prop.color, transparent: true, opacity: 0.68 }),
+    );
+    glow.position.y = height / 2 + radius * 1.5;
+    const light = new THREE.PointLight(prop.color, 0.75, 2.2);
+    light.position.copy(glow.position);
+    group.add(post, glow, light);
+    return group;
   }
 
   const group = new THREE.Group();
-  const width = prop.width ?? 0.48;
-  const height = prop.height ?? 0.16;
+  const size = prop.size ?? { x: 0.46, y: 0.04, z: 0.18 };
   const material = new THREE.MeshBasicMaterial({
     color: prop.color,
     transparent: true,
-    opacity: 0.82,
+    opacity: 0.78,
     depthWrite: false,
   });
-  const stem = new THREE.Mesh(new THREE.BoxGeometry(width * 0.62, height * 0.42, 0.035), material);
-  const triangle = new THREE.Shape();
-  triangle.moveTo(width * 0.2, -height * 0.8);
-  triangle.lineTo(width * 0.2, height * 0.8);
-  triangle.lineTo(width * 0.52, 0);
-  triangle.closePath();
-  const head = new THREE.Mesh(new THREE.ShapeGeometry(triangle), material);
-  head.position.x = width * 0.36;
-  group.add(stem, head);
+  const stem = new THREE.Mesh(new THREE.BoxGeometry(size.x * 0.62, size.y, size.z * 0.34), material);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(size.z * 0.5, size.x * 0.32, 3), material);
+  cone.rotation.z = -Math.PI / 2;
+  cone.position.x = size.x * 0.33;
+  group.add(stem, cone);
   return group;
+}
+
+function createTrim(width: number, depth: number) {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: TRIM, roughness: 0.48, metalness: 0.22 });
+  const front = new THREE.Mesh(new THREE.BoxGeometry(width * 0.92, 0.035, 0.035), material);
+  const back = front.clone();
+  const left = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, depth * 0.82), material);
+  const right = left.clone();
+  front.position.set(0, 0.055, depth * 0.43);
+  back.position.set(0, 0.055, -depth * 0.43);
+  left.position.set(-width * 0.47, 0.055, 0);
+  right.position.set(width * 0.47, 0.055, 0);
+  group.add(front, back, left, right);
+  return group;
+}
+
+function createRampTrim(size: { x: number; y: number; z: number }) {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: "#e0c273", roughness: 0.4, metalness: 0.24 });
+  const axis = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, size.x * 1.08, 16), material);
+  axis.rotation.z = Math.PI / 2;
+  axis.position.y = size.y / 2 + 0.04;
+  const stripeA = new THREE.Mesh(new THREE.BoxGeometry(size.x * 0.84, 0.018, 0.03), material);
+  const stripeB = stripeA.clone();
+  stripeA.position.set(0, size.y / 2 + 0.052, size.z * 0.24);
+  stripeB.position.set(0, size.y / 2 + 0.052, -size.z * 0.24);
+  group.add(axis, stripeA, stripeB);
+  return group;
+}
+
+function createMechanismHandle() {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({
+    color: "#58c6a7",
+    roughness: 0.28,
+    metalness: 0.18,
+    emissive: "#1c9e88",
+    emissiveIntensity: 0.32,
+  });
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 16), material);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.38, 18), material);
+  stem.position.y = -0.16;
+  group.add(knob, stem);
+  return group;
+}
+
+function createArcIndicator() {
+  const group = new THREE.Group();
+  const curve = new THREE.EllipseCurve(0, 0, 0.34, 0.34, -0.85, 0.85);
+  const points = curve.getPoints(26);
+  const geometry = new THREE.BufferGeometry().setFromPoints(points.map((point) => new THREE.Vector3(point.x, 0, point.y)));
+  const line = new THREE.Line(
+    geometry,
+    new THREE.LineBasicMaterial({ color: "#58c6a7", transparent: true, opacity: 0.95 }),
+  );
+  const arrow = new THREE.Mesh(
+    new THREE.ConeGeometry(0.055, 0.13, 3),
+    new THREE.MeshBasicMaterial({ color: "#58c6a7", transparent: true, opacity: 0.95 }),
+  );
+  arrow.position.set(0.23, 0, 0.24);
+  arrow.rotation.z = -0.5;
+  group.add(line, arrow);
+  group.visible = false;
+  return group;
+}
+
+function toCannonQuaternion(rotation?: { x?: number; y?: number; z?: number }) {
+  const quaternion = new CANNON.Quaternion();
+  quaternion.setFromEuler(rotation?.x ?? 0, rotation?.y ?? 0, rotation?.z ?? 0, "XYZ");
+  return quaternion;
 }
 
 function disposeMaterial(material: THREE.Material | THREE.Material[]) {
@@ -915,7 +1095,7 @@ function setMaterialHighlight(
     return;
   }
   if (active) {
-    material.emissive.set("#f7b801");
+    material.emissive.set("#d9b44a");
     material.emissiveIntensity = 0.75;
     return;
   }
