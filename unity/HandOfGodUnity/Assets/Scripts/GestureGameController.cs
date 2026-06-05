@@ -76,6 +76,7 @@ namespace HandOfGod.Gameplay
         private Texture2D lineTexture;
         private Process bridgeProcess;
         private bool launchedBridge;
+        private bool usesExternalBridge;
         private string bridgeStatus = "Starting camera...";
 
         public void Configure(GestureUdpReceiver gestureReceiver)
@@ -115,6 +116,8 @@ namespace HandOfGod.Gameplay
                 QuitGame();
             }
 
+            RefreshBridgeStatus();
+
             if (!TryGetPrimaryHand(out var hand))
             {
                 return;
@@ -139,6 +142,24 @@ namespace HandOfGod.Gameplay
             if (mode == GameMode.Level1 && levelBall != null && levelBall.ReachedGoal)
             {
                 mode = GameMode.Pass;
+            }
+        }
+
+        private void RefreshBridgeStatus()
+        {
+            if (receiver != null && receiver.HasFreshFrame)
+            {
+                bridgeStatus = "Camera: tracking hand";
+                return;
+            }
+
+            if (bridgeProcess != null && bridgeProcess.HasExited)
+            {
+                bridgeStatus = $"Camera bridge exited ({bridgeProcess.ExitCode}). Check gesture-bridge-runtime.log.";
+            }
+            else if (usesExternalBridge)
+            {
+                bridgeStatus = "Launcher started camera bridge; waiting for hand...";
             }
         }
 
@@ -714,6 +735,14 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
+            usesExternalBridge = HasCommandLineFlag("--gesture-bridge-external");
+            if (usesExternalBridge)
+            {
+                launchedBridge = true;
+                bridgeStatus = "Camera bridge started by launcher; waiting for hand...";
+                return;
+            }
+
             if (launchedBridge)
             {
                 return;
@@ -731,6 +760,7 @@ namespace HandOfGod.Gameplay
             var scriptPath = Path.Combine(bridgeDirectory, "mediapipe_udp_sender.py");
             var venvPython = Path.Combine(bridgeDirectory, ".venv", "Scripts", "python.exe");
             var python = File.Exists(venvPython) ? venvPython : "python";
+            var logPath = Path.Combine(bridgeDirectory, "gesture-bridge-runtime.log");
             try
             {
                 var startInfo = new ProcessStartInfo
@@ -740,8 +770,17 @@ namespace HandOfGod.Gameplay
                     WorkingDirectory = bridgeDirectory,
                     UseShellExecute = false,
                     CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
                 };
                 bridgeProcess = Process.Start(startInfo);
+                if (bridgeProcess != null)
+                {
+                    bridgeProcess.OutputDataReceived += (_, args) => AppendBridgeLog(logPath, args.Data);
+                    bridgeProcess.ErrorDataReceived += (_, args) => AppendBridgeLog(logPath, args.Data);
+                    bridgeProcess.BeginOutputReadLine();
+                    bridgeProcess.BeginErrorReadLine();
+                }
                 bridgeStatus = "Camera bridge launched; waiting for hand...";
             }
             catch (System.Exception exception)
@@ -753,11 +792,28 @@ namespace HandOfGod.Gameplay
 
         private static string FindBridgeDirectory()
         {
-            var candidates = new[]
+            var cliDirectory = GetCommandLineValue("--gesture-bridge-dir");
+            if (!string.IsNullOrEmpty(cliDirectory) && File.Exists(Path.Combine(cliDirectory, "mediapipe_udp_sender.py")))
+            {
+                return cliDirectory;
+            }
+
+            var candidates = new System.Collections.Generic.List<string>
             {
                 Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "gesture_bridge")),
                 Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "..", "..", "gesture_bridge")),
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "..", "gesture_bridge")),
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "..", "..", "unity", "gesture_bridge")),
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "..", "..", "..", "unity", "gesture_bridge")),
             };
+
+            var cursor = new DirectoryInfo(Application.dataPath);
+            for (var i = 0; i < 8 && cursor != null; i++)
+            {
+                candidates.Add(Path.Combine(cursor.FullName, "gesture_bridge"));
+                candidates.Add(Path.Combine(cursor.FullName, "unity", "gesture_bridge"));
+                cursor = cursor.Parent;
+            }
 
             foreach (var candidate in candidates)
             {
@@ -767,6 +823,48 @@ namespace HandOfGod.Gameplay
                 }
             }
             return "";
+        }
+
+        private static bool HasCommandLineFlag(string flag)
+        {
+            foreach (var argument in System.Environment.GetCommandLineArgs())
+            {
+                if (string.Equals(argument, flag, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static string GetCommandLineValue(string key)
+        {
+            var args = System.Environment.GetCommandLineArgs();
+            for (var i = 0; i < args.Length - 1; i++)
+            {
+                if (string.Equals(args[i], key, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return args[i + 1];
+                }
+            }
+            return "";
+        }
+
+        private static void AppendBridgeLog(string logPath, string line)
+        {
+            if (string.IsNullOrEmpty(line))
+            {
+                return;
+            }
+
+            try
+            {
+                File.AppendAllText(logPath, $"[{System.DateTime.Now:HH:mm:ss}] {line}{System.Environment.NewLine}");
+            }
+            catch (System.Exception)
+            {
+                // Logging must not break gameplay.
+            }
         }
 
         private void QuitGame()

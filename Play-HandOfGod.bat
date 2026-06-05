@@ -38,7 +38,9 @@ if errorlevel 1 (
     "%VENV_PY%" -m pip install -r requirements.txt
     popd
   )
+
+  start "Hand of God Gesture Bridge" /D "%BRIDGE_DIR%" cmd /k ""%VENV_PY%" "%BRIDGE_PY%""
 )
 
-start "" "%GAME_EXE%"
+start "" "%GAME_EXE%" --gesture-bridge-dir "%BRIDGE_DIR%" --gesture-bridge-external
 exit /b 0

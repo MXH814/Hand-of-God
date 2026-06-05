@@ -22,7 +22,7 @@
 3. 玩家用手势完成校准，或用单指悬停触发“跳过校准”。
 4. 进入全手势主菜单和选关界面。
 
-Unity 现在会在正常游戏启动时自动拉起 Python MediaPipe 桥接并打开摄像头；批处理构建和场景生成时不会启动摄像头。
+推荐通过 `Play-HandOfGod.bat` 或桌面快捷方式启动。启动脚本会先打开 Python MediaPipe 桥接窗口，随后启动 Unity 游戏；Unity 会通过 UDP 接收手势帧。直接双击 exe 时，Unity 也会尝试自动拉起桥接并打开摄像头。批处理构建和场景生成时不会启动摄像头。
 
 ### 校准
 
@@ -109,7 +109,13 @@ Hand of God
 unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 ```
 
-第一次启动时会在 `unity/gesture_bridge/.venv` 创建 Python 虚拟环境并安装依赖，可能需要几分钟。游戏启动后 Unity 会自动运行桥接脚本并打开摄像头。
+第一次启动时会在 `unity/gesture_bridge/.venv` 创建 Python 虚拟环境并安装依赖，可能需要几分钟。随后会出现 `Hand of God Gesture Bridge` 命令行/预览窗口，摄像头权限由这个 Python 桥接进程申请。
+
+如果直接双击 `HandOfGod.exe`，Unity 会尝试自行启动桥接；失败信息会显示在校准界面，并写入：
+
+```text
+unity\gesture_bridge\gesture-bridge-runtime.log
+```
 
 ## 手动运行手势桥接
 
@@ -147,7 +153,7 @@ Unity 场景由编辑器工具生成：
 - `python -m py_compile unity\gesture_bridge\mediapipe_udp_sender.py`
 - Unity batchmode 生成场景无编译错误。
 - `.\Build-HandOfGod.bat` 成功生成 Windows exe。
-- 双击 `Play-HandOfGod.bat` 后 Unity 游戏启动，并自动打开摄像头桥接。
+- 双击 `Play-HandOfGod.bat` 后应出现 Python 手势桥接窗口，并由它打开摄像头。
 - 不使用鼠标完成校准、菜单选择、第 0 关物体移动、第 1 关木箱移动。
 - 第 1 关小球到达终点后显示 `PASS`。
 - 控制台没有 runtime error。

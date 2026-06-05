@@ -20,7 +20,7 @@ The generated scene `Assets/Scenes/Level01.unity` is now the full game entry sce
 
 All player-facing UI is controlled by index-finger dwell selection. Mouse controls are not part of the main game.
 
-When the player starts the game normally, Unity automatically launches the Python MediaPipe bridge and opens the camera. Batchmode scene generation and builds do not start the camera bridge.
+The recommended launcher is the repository root `Play-HandOfGod.bat`. It prepares the Python environment, starts the visible MediaPipe bridge window, then launches Unity with the bridge directory argument. If the player opens `HandOfGod.exe` directly, Unity still tries to launch the bridge itself and writes failures to `unity/gesture_bridge/gesture-bridge-runtime.log`. Batchmode scene generation and builds do not start the camera bridge.
 
 ## Gesture Input
 
