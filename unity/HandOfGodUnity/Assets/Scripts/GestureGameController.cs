@@ -35,6 +35,7 @@ namespace HandOfGod.Gameplay
         };
 
         private GestureUdpReceiver receiver;
+        private CameraFrameReceiver cameraFrames;
         private Transform lobbyRoot;
         private Transform levelRoot;
         private Camera mainCamera;
@@ -49,6 +50,8 @@ namespace HandOfGod.Gameplay
         private Material boxIdle;
         private Material boxHover;
         private Material boxHeldMaterial;
+        private Material cameraBackgroundMaterial;
+        private Transform cameraBackgroundPlane;
 
         private GameMode mode = GameMode.CalibrationOpen;
         private GameMode lastLevel = GameMode.Level1;
@@ -79,9 +82,10 @@ namespace HandOfGod.Gameplay
         private bool usesExternalBridge;
         private string bridgeStatus = "Starting camera...";
 
-        public void Configure(GestureUdpReceiver gestureReceiver)
+        public void Configure(GestureUdpReceiver gestureReceiver, CameraFrameReceiver frameReceiver)
         {
             receiver = gestureReceiver;
+            cameraFrames = frameReceiver;
         }
 
         public void InitializeForScene()
@@ -93,6 +97,7 @@ namespace HandOfGod.Gameplay
 
             initialized = true;
             receiver ??= GetComponent<GestureUdpReceiver>();
+            cameraFrames ??= GetComponent<CameraFrameReceiver>();
             DestroyNamed("Main Camera");
             DestroyNamed("Key Light");
             DestroyNamed("Temple Fill Light");
@@ -100,7 +105,6 @@ namespace HandOfGod.Gameplay
             BuildMaterials();
             BuildCameraAndLights();
             BuildLobbyShell();
-            StartGestureBridgeIfNeeded();
             ResetToCalibration();
         }
 
@@ -117,6 +121,7 @@ namespace HandOfGod.Gameplay
             }
 
             RefreshBridgeStatus();
+            UpdateCameraBackground();
 
             if (!TryGetPrimaryHand(out var hand))
             {
@@ -256,7 +261,8 @@ namespace HandOfGod.Gameplay
             GUI.Label(new Rect(50, 80, 380, 26), title);
             GUI.Label(new Rect(50, 110, 390, 24), detail);
             DrawProgressBar(progress, new Rect(50, 138, 360, 18));
-            GUI.Label(new Rect(50, 164, 410, 24), receiver != null && receiver.HasFreshFrame ? "Camera: tracking hand" : bridgeStatus);
+            var cameraStatus = cameraFrames != null && cameraFrames.HasFreshFrame ? "Camera image: live" : "Camera image: waiting";
+            GUI.Label(new Rect(50, 164, 410, 24), receiver != null && receiver.HasFreshFrame ? "Camera: tracking hand" : $"{bridgeStatus} | {cameraStatus}");
             DrawUtilityButton("start-camera", "Start Camera", new Rect(50, 194, 180, 34), SafeDwellSeconds, StartVisibleGestureBridge);
             DrawHoverButton("skip", "Skip calibration", new Rect(250, 194, 180, 34), SafeDwellSeconds, () =>
             {
@@ -810,21 +816,31 @@ namespace HandOfGod.Gameplay
             {
                 var startInfo = new ProcessStartInfo
                 {
-                    FileName = "cmd.exe",
-                    Arguments = $"/k \"\"{python}\" \"{scriptPath}\"\"",
+                    FileName = python,
+                    Arguments = $"\"{scriptPath}\" --no-preview",
                     WorkingDirectory = bridgeDirectory,
-                    UseShellExecute = true,
-                    CreateNoWindow = false,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
                 };
-                Process.Start(startInfo);
+                var logPath = Path.Combine(bridgeDirectory, "gesture-bridge-runtime.log");
+                bridgeProcess = Process.Start(startInfo);
+                if (bridgeProcess != null)
+                {
+                    bridgeProcess.OutputDataReceived += (_, args) => AppendBridgeLog(logPath, args.Data);
+                    bridgeProcess.ErrorDataReceived += (_, args) => AppendBridgeLog(logPath, args.Data);
+                    bridgeProcess.BeginOutputReadLine();
+                    bridgeProcess.BeginErrorReadLine();
+                }
                 launchedBridge = true;
-                usesExternalBridge = true;
-                bridgeStatus = "Visible camera bridge started; waiting for hand...";
+                usesExternalBridge = false;
+                bridgeStatus = "Camera bridge started; waiting for image and hand...";
             }
             catch (System.Exception exception)
             {
-                bridgeStatus = "Failed to open visible camera bridge.";
-                Debug.LogWarning($"Failed to open visible gesture bridge: {exception.Message}");
+                bridgeStatus = "Failed to start camera bridge.";
+                Debug.LogWarning($"Failed to start gesture bridge: {exception.Message}");
             }
         }
 
@@ -1023,6 +1039,7 @@ namespace HandOfGod.Gameplay
             mainCamera.orthographicSize = 4.35f;
             mainCamera.clearFlags = CameraClearFlags.SolidColor;
             mainCamera.backgroundColor = new Color(0.012f, 0.017f, 0.016f);
+            BuildCameraBackgroundPlane(cameraObject.transform);
 
             var sun = new GameObject("Key Light").AddComponent<Light>();
             sun.type = LightType.Directional;
@@ -1035,6 +1052,42 @@ namespace HandOfGod.Gameplay
             fill.intensity = 1.4f;
             fill.range = 9f;
             fill.transform.position = new Vector3(-1.2f, 4.4f, -1.6f);
+        }
+
+        private void BuildCameraBackgroundPlane(Transform cameraTransform)
+        {
+            var plane = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            plane.name = "Embedded Camera Feed Background";
+            plane.transform.SetParent(cameraTransform, false);
+            plane.transform.localPosition = new Vector3(0f, 0f, 30f);
+            plane.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            DestroyUnityObject(plane.GetComponent<Collider>());
+
+            cameraBackgroundMaterial = new Material(Shader.Find("Unlit/Texture"))
+            {
+                name = "Embedded Camera Feed Material",
+            };
+            plane.GetComponent<Renderer>().sharedMaterial = cameraBackgroundMaterial;
+            cameraBackgroundPlane = plane.transform;
+            UpdateCameraBackground();
+        }
+
+        private void UpdateCameraBackground()
+        {
+            if (cameraBackgroundPlane == null || mainCamera == null)
+            {
+                return;
+            }
+
+            var height = mainCamera.orthographicSize * 2f;
+            var width = height * Mathf.Max(Screen.width / (float)Mathf.Max(Screen.height, 1), 0.01f);
+            cameraBackgroundPlane.localScale = new Vector3(width, height, 1f);
+
+            if (cameraBackgroundMaterial != null && cameraFrames != null && cameraFrames.HasFreshFrame && cameraFrames.Texture != null)
+            {
+                cameraBackgroundMaterial.mainTexture = cameraFrames.Texture;
+                cameraBackgroundMaterial.color = Color.white;
+            }
         }
 
         private GameObject CreateBox(string name, Vector3 position, Vector3 scale, Material material, Transform parent, Quaternion rotation, bool keepCollider)

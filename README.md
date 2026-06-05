@@ -22,7 +22,7 @@
 3. 玩家用手势完成校准，或用单指悬停触发“跳过校准”。
 4. 进入全手势主菜单和选关界面。
 
-推荐通过 `Play-HandOfGod.bat` 或桌面快捷方式启动。启动脚本会先打开 Python MediaPipe 桥接窗口，随后启动 Unity 游戏；Unity 会通过 UDP 接收手势帧。直接双击 exe 时，Unity 也会尝试自动拉起桥接并打开摄像头。批处理构建和场景生成时不会启动摄像头。
+推荐通过 `Play-HandOfGod.bat` 或桌面快捷方式启动。启动脚本只准备 Python 环境并启动 Unity；进入游戏后点击 `Start Camera`，Unity 会隐藏启动 Python MediaPipe 桥接。桥接不会打开独立 OpenCV 摄像头窗口，而是把摄像头画面嵌入 Unity 底层显示。
 
 ### 校准
 
@@ -31,7 +31,7 @@
 - Unity 根据第二步采样生成本次游玩的捏合阈值。
 - 校准界面中的“跳过校准”也使用单指悬停触发。
 - 校准和游戏过程中，Unity 屏幕最前景会显示实时 21 点手骨架。看不到骨架时，说明摄像头桥接未启动或没有收到手部帧。
-- 校准界面提供 `Start Camera` 兜底按钮；没有手势输入时可直接用鼠标点击它来打开可见的 Python 摄像头桥接窗口。
+- 校准界面提供 `Start Camera` 按钮；没有手势输入时可直接用鼠标点击它来打开 Unity 内嵌摄像头画面。
 
 ### 菜单与按钮
 
@@ -66,7 +66,12 @@
 
 `unity/gesture_bridge/mediapipe_udp_sender.py` 使用 MediaPipe Hands 识别最多两只手，并向 `127.0.0.1:5005` 发送 JSON UDP 帧。
 
-Unity 接收的数据包括：
+Unity 通过两个本地通道接收数据：
+
+- UDP `127.0.0.1:5005`：手势 JSON。
+- TCP `127.0.0.1:5006`：长度前缀 JPEG 摄像头帧。
+
+手势 JSON 包括：
 
 - 21 个手部 landmarks
 - handedness 和 score
@@ -110,7 +115,7 @@ Hand of God
 unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 ```
 
-第一次启动时会在英文路径创建 Python 虚拟环境并安装依赖，可能需要几分钟。随后会出现 `Hand of God Gesture Bridge` 命令行/预览窗口，摄像头权限由这个 Python 桥接进程申请。
+第一次启动时会在英文路径创建 Python 虚拟环境并安装依赖，可能需要几分钟。进入 Unity 后点击 `Start Camera`，摄像头权限由隐藏的 Python 桥接进程申请，画面直接显示在 Unity 游戏窗口内。
 
 桥接依赖固定使用 `mediapipe==0.10.14`，因为更新版本的 MediaPipe 移除了当前脚本使用的 `mp.solutions.hands` API。启动脚本会检测该 API 是否存在；如果不兼容，会自动强制重装依赖。
 
@@ -164,7 +169,7 @@ Unity 场景由编辑器工具生成：
 - `python -m py_compile unity\gesture_bridge\mediapipe_udp_sender.py`
 - Unity batchmode 生成场景无编译错误。
 - `.\Build-HandOfGod.bat` 成功生成 Windows exe。
-- 双击 `Play-HandOfGod.bat` 后应出现 Python 手势桥接窗口，并由它打开摄像头。
+- 双击 `Play-HandOfGod.bat` 后进入 Unity 首屏，点击 `Start Camera` 后摄像头画面应出现在 Unity 窗口底层。
 - 不使用鼠标完成校准、菜单选择、第 0 关物体移动、第 1 关木箱移动。
 - 第 1 关小球到达终点后显示 `PASS`。
 - 控制台没有 runtime error。

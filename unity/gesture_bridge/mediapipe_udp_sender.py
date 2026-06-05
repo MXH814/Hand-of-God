@@ -1,6 +1,7 @@
 import argparse
 import json
 import socket
+import struct
 import time
 
 import cv2
@@ -15,6 +16,57 @@ FINGERS = {
     "ring": (16, 14, 13),
     "pinky": (20, 18, 17),
 }
+
+
+class VideoStreamClient:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.sock = None
+        self.last_attempt = 0.0
+
+    def close(self):
+        if self.sock is not None:
+            try:
+                self.sock.close()
+            except OSError:
+                pass
+        self.sock = None
+
+    def connect_if_needed(self):
+        if self.sock is not None:
+            return True
+
+        now = time.time()
+        if now - self.last_attempt < 1.0:
+            return False
+
+        self.last_attempt = now
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1.0)
+            sock.connect((self.host, self.port))
+            sock.settimeout(None)
+            self.sock = sock
+            print(f"Video stream connected to {self.host}:{self.port}")
+            return True
+        except OSError:
+            self.close()
+            return False
+
+    def send_jpeg(self, frame, quality):
+        if not self.connect_if_needed():
+            return
+
+        ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+        if not ok:
+            return
+
+        data = encoded.tobytes()
+        try:
+            self.sock.sendall(struct.pack(">I", len(data)) + data)
+        except OSError:
+            self.close()
 
 
 def normalized_distance(a, b, scale):
@@ -109,23 +161,34 @@ def main():
     parser.add_argument("--port", type=int, default=5005)
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--mirror", action="store_true", default=True)
-    parser.add_argument("--no-preview", action="store_true", help="Run camera tracking without opening an OpenCV preview window.")
+    parser.add_argument("--preview", action="store_true", help="Open a separate OpenCV preview window for debugging.")
+    parser.add_argument("--no-preview", action="store_true", help="Deprecated compatibility flag. The bridge is headless unless --preview is set.")
+    parser.add_argument("--video-host", default="127.0.0.1")
+    parser.add_argument("--video-port", type=int, default=5006)
+    parser.add_argument("--video-width", type=int, default=640)
+    parser.add_argument("--video-height", type=int, default=480)
+    parser.add_argument("--jpeg-quality", type=int, default=72)
     args = parser.parse_args()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    video = VideoStreamClient(args.video_host, args.video_port)
     hands_model = mp.solutions.hands.Hands(max_num_hands=2, min_detection_confidence=0.65, min_tracking_confidence=0.65)
     drawing = mp.solutions.drawing_utils
-    cap = cv2.VideoCapture(args.camera)
+    cap = cv2.VideoCapture(args.camera, cv2.CAP_DSHOW)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.video_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.video_height)
     neutral = None
     last_raw = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
     pinch_latches = {}
     smooth_points = {}
 
-    print("Hand of God bridge: C calibrates neutral pose, Q quits.")
+    print("Hand of God bridge: headless camera tracking started. Use --preview for a debug window.")
     while cap.isOpened():
         ok, frame = cap.read()
         if not ok:
             break
+
+        frame = cv2.resize(frame, (args.video_width, args.video_height), interpolation=cv2.INTER_AREA)
 
         if args.mirror:
             frame = cv2.flip(frame, 1)
@@ -187,10 +250,9 @@ def main():
             })
 
         sock.sendto(json.dumps(payload).encode("utf-8"), (args.host, args.port))
+        video.send_jpeg(frame, max(30, min(args.jpeg_quality, 95)))
 
-        if args.no_preview:
-            time.sleep(0.001)
-        else:
+        if args.preview:
             cv2.putText(frame, "C calibrate neutral | Q quit", (18, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (80, 240, 180), 2)
             cv2.putText(frame, f"hands {payload['handCount']} pinch {payload['pinchDistance']:.2f}", (18, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (80, 240, 180), 2)
             cv2.imshow("Hand of God Gesture Bridge", frame)
@@ -200,9 +262,12 @@ def main():
             if key == ord("c"):
                 neutral = dict(last_raw)
                 print(f"Calibrated bridge neutral pose: {neutral}")
+        else:
+            time.sleep(0.001)
 
     cap.release()
-    if not args.no_preview:
+    video.close()
+    if args.preview:
         cv2.destroyAllWindows()
 
 

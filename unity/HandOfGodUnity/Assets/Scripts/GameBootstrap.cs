@@ -29,12 +29,18 @@ namespace HandOfGod.Gameplay
                 receiver = gameObject.AddComponent<GestureUdpReceiver>();
             }
 
+            var cameraFrames = GetComponent<CameraFrameReceiver>();
+            if (cameraFrames == null)
+            {
+                cameraFrames = gameObject.AddComponent<CameraFrameReceiver>();
+            }
+
             var controller = GetComponent<GestureGameController>();
             if (controller == null)
             {
                 controller = gameObject.AddComponent<GestureGameController>();
             }
-            controller.Configure(receiver);
+            controller.Configure(receiver, cameraFrames);
             controller.InitializeForScene();
         }
 

@@ -41,8 +41,7 @@ if errorlevel 1 (
     popd
   )
 
-  start "Hand of God Gesture Bridge" /D "%BRIDGE_DIR%" cmd /k ""%VENV_PY%" "%BRIDGE_PY%""
 )
 
-start "" "%GAME_EXE%" --gesture-bridge-dir "%BRIDGE_DIR%" --gesture-python "%VENV_PY%" --gesture-bridge-external
+start "" "%GAME_EXE%" --gesture-bridge-dir "%BRIDGE_DIR%" --gesture-python "%VENV_PY%"
 exit /b 0
