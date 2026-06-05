@@ -8,13 +8,17 @@ namespace HandOfGod.Gameplay
         public void BuildGameWorld()
         {
             Physics.gravity = new Vector3(0f, -9.81f, 0f);
-            RemoveLegacyRoots();
+            if (!Application.isPlaying)
+            {
+                RemoveLegacyRoots();
+            }
             EnsureGestureGameController();
         }
 
         private void Awake()
         {
-            BuildGameWorld();
+            Physics.gravity = new Vector3(0f, -9.81f, 0f);
+            EnsureGestureGameController();
         }
 
         private void EnsureGestureGameController()

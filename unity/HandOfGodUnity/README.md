@@ -20,6 +20,8 @@ The generated scene `Assets/Scenes/Level01.unity` is now the full game entry sce
 
 All player-facing UI is controlled by index-finger dwell selection. Mouse controls are not part of the main game.
 
+When the player starts the game normally, Unity automatically launches the Python MediaPipe bridge and opens the camera. Batchmode scene generation and builds do not start the camera bridge.
+
 ## Gesture Input
 
 Python MediaPipe bridge:
@@ -41,6 +43,10 @@ Unity receives JSON frames from UDP `127.0.0.1:5005`, including:
 - finger extended state
 - palm roll / pitch / yaw
 - timestamp
+
+Unity draws the live 21-point hand skeleton in the foreground during calibration, menus, and gameplay. If the skeleton is missing, the game has not received a fresh UDP hand frame yet.
+
+The top-right `Exit` button is always visible. Levels also expose a top-right `Menu` button.
 
 ## Scenes And Build
 

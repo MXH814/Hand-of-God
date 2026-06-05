@@ -109,6 +109,7 @@ def main():
     parser.add_argument("--port", type=int, default=5005)
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--mirror", action="store_true", default=True)
+    parser.add_argument("--no-preview", action="store_true", help="Run camera tracking without opening an OpenCV preview window.")
     args = parser.parse_args()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -187,18 +188,22 @@ def main():
 
         sock.sendto(json.dumps(payload).encode("utf-8"), (args.host, args.port))
 
-        cv2.putText(frame, "C calibrate neutral | Q quit", (18, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (80, 240, 180), 2)
-        cv2.putText(frame, f"hands {payload['handCount']} pinch {payload['pinchDistance']:.2f}", (18, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (80, 240, 180), 2)
-        cv2.imshow("Hand of God Gesture Bridge", frame)
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord("q"):
-            break
-        if key == ord("c"):
-            neutral = dict(last_raw)
-            print(f"Calibrated bridge neutral pose: {neutral}")
+        if args.no_preview:
+            time.sleep(0.001)
+        else:
+            cv2.putText(frame, "C calibrate neutral | Q quit", (18, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (80, 240, 180), 2)
+            cv2.putText(frame, f"hands {payload['handCount']} pinch {payload['pinchDistance']:.2f}", (18, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (80, 240, 180), 2)
+            cv2.imshow("Hand of God Gesture Bridge", frame)
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
+                break
+            if key == ord("c"):
+                neutral = dict(last_raw)
+                print(f"Calibrated bridge neutral pose: {neutral}")
 
     cap.release()
-    cv2.destroyAllWindows()
+    if not args.no_preview:
+        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":

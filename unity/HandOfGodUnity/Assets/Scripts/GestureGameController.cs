@@ -1,5 +1,9 @@
 using HandOfGod.Gestures;
+using System.IO;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
+using Process = System.Diagnostics.Process;
+using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 
 namespace HandOfGod.Gameplay
 {
@@ -20,6 +24,15 @@ namespace HandOfGod.Gameplay
         private const float SafeDwellSeconds = 1f;
         private const float Level1RoadCenterY = 1f;
         private const float Level1RoadAngleDegrees = -8f;
+        private static readonly int[] HandConnectionPairs =
+        {
+            0, 1, 1, 2, 2, 3, 3, 4,
+            0, 5, 5, 6, 6, 7, 7, 8,
+            5, 9, 9, 10, 10, 11, 11, 12,
+            9, 13, 13, 14, 14, 15, 15, 16,
+            13, 17, 17, 18, 18, 19, 19, 20,
+            0, 17,
+        };
 
         private GestureUdpReceiver receiver;
         private Transform lobbyRoot;
@@ -60,6 +73,10 @@ namespace HandOfGod.Gameplay
         private bool boxHeld;
         private BallController levelBall;
         private bool initialized;
+        private Texture2D lineTexture;
+        private Process bridgeProcess;
+        private bool launchedBridge;
+        private string bridgeStatus = "Starting camera...";
 
         public void Configure(GestureUdpReceiver gestureReceiver)
         {
@@ -75,9 +92,14 @@ namespace HandOfGod.Gameplay
 
             initialized = true;
             receiver ??= GetComponent<GestureUdpReceiver>();
+            DestroyNamed("Main Camera");
+            DestroyNamed("Key Light");
+            DestroyNamed("Temple Fill Light");
+            DestroyNamed("Menu Temple Lobby");
             BuildMaterials();
             BuildCameraAndLights();
             BuildLobbyShell();
+            StartGestureBridgeIfNeeded();
             ResetToCalibration();
         }
 
@@ -88,6 +110,11 @@ namespace HandOfGod.Gameplay
 
         private void Update()
         {
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                QuitGame();
+            }
+
             if (!TryGetPrimaryHand(out var hand))
             {
                 return;
@@ -118,7 +145,6 @@ namespace HandOfGod.Gameplay
         private void OnGUI()
         {
             GUI.color = Color.white;
-            DrawCursor();
 
             switch (mode)
             {
@@ -139,6 +165,10 @@ namespace HandOfGod.Gameplay
                     DrawPassHud();
                     break;
             }
+
+            DrawHandSkeletonOverlay();
+            DrawCursor();
+            DrawGlobalControls();
         }
 
         private void ResetToCalibration()
@@ -204,12 +234,27 @@ namespace HandOfGod.Gameplay
             GUI.Label(new Rect(50, 48, 380, 30), "Hand of God");
             GUI.Label(new Rect(50, 80, 380, 26), title);
             GUI.Label(new Rect(50, 110, 390, 24), detail);
+            GUI.Label(new Rect(50, 158, 360, 24), receiver != null && receiver.HasFreshFrame ? "Camera: tracking hand" : bridgeStatus);
             DrawProgressBar(progress, new Rect(50, 138, 360, 18));
             DrawHoverButton("skip", "Skip calibration", new Rect(50, 166, 180, 34), SafeDwellSeconds, () =>
             {
                 pinchThreshold = 0.56f;
                 mode = GameMode.Menu;
             });
+        }
+
+        private void DrawGlobalControls()
+        {
+            DrawUtilityButton("global-exit", "Exit", new Rect(Screen.width - 104, 24, 80, 34), SafeDwellSeconds, QuitGame);
+            if (mode != GameMode.Menu && mode != GameMode.CalibrationOpen && mode != GameMode.CalibrationPinch)
+            {
+                DrawUtilityButton("global-menu", "Menu", new Rect(Screen.width - 198, 24, 86, 34), MenuDwellSeconds, () =>
+                {
+                    ClearLevel();
+                    SetLobbyVisible(true);
+                    mode = GameMode.Menu;
+                });
+            }
         }
 
         private void DrawMenu()
@@ -548,6 +593,16 @@ namespace HandOfGod.Gameplay
 
         private void DrawHoverButton(string key, string label, Rect rect, float dwellSeconds, System.Action action)
         {
+            DrawButtonCore(key, label, rect, dwellSeconds, action, false);
+        }
+
+        private void DrawUtilityButton(string key, string label, Rect rect, float dwellSeconds, System.Action action)
+        {
+            DrawButtonCore(key, label, rect, dwellSeconds, action, true);
+        }
+
+        private void DrawButtonCore(string key, string label, Rect rect, float dwellSeconds, System.Action action, bool allowMouseClick)
+        {
             var cursor = CursorScreen();
             var inside = rect.Contains(cursor);
             if (inside)
@@ -565,12 +620,16 @@ namespace HandOfGod.Gameplay
             }
 
             var progress = hoverKey == key && hoverStart >= 0f ? Mathf.Clamp01((Time.time - hoverStart) / dwellSeconds) : 0f;
-            GUI.Box(rect, label);
+            var clicked = allowMouseClick ? GUI.Button(rect, label) : false;
+            if (!allowMouseClick)
+            {
+                GUI.Box(rect, label);
+            }
             var bar = new Rect(rect.x, rect.yMax - 6f, rect.width * progress, 6f);
             GUI.color = Color.cyan;
             GUI.DrawTexture(bar, Texture2D.whiteTexture);
             GUI.color = Color.white;
-            if (progress >= 1f)
+            if (clicked || progress >= 1f)
             {
                 hoverKey = "";
                 hoverStart = -1f;
@@ -583,12 +642,161 @@ namespace HandOfGod.Gameplay
             GUI.Box(rect, "");
         }
 
+        private void DrawHandSkeletonOverlay()
+        {
+            var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
+            if (frame.hands == null || frame.hands.Length == 0)
+            {
+                var message = launchedBridge
+                    ? "Waiting for camera hand tracking..."
+                    : bridgeStatus;
+                GUI.Label(new Rect(Screen.width / 2f - 170f, Screen.height - 48f, 340f, 24f), message);
+                return;
+            }
+
+            foreach (var hand in frame.hands)
+            {
+                if (hand.landmarks == null || hand.landmarks.Length < 21)
+                {
+                    continue;
+                }
+
+                var pinchColor = IsPinching(hand) ? new Color(0.12f, 1f, 0.85f, 1f) : new Color(1f, 1f, 1f, 0.92f);
+                for (var i = 0; i < HandConnectionPairs.Length; i += 2)
+                {
+                    var a = LandmarkToScreen(hand.landmarks[HandConnectionPairs[i]]);
+                    var b = LandmarkToScreen(hand.landmarks[HandConnectionPairs[i + 1]]);
+                    DrawLine(a, b, pinchColor, 3f);
+                }
+
+                for (var i = 0; i < hand.landmarks.Length; i++)
+                {
+                    var point = LandmarkToScreen(hand.landmarks[i]);
+                    var radius = i == 4 || i == 8 ? 5f : 3.5f;
+                    GUI.color = i == 4 || i == 8 ? Color.cyan : new Color(1f, 0.25f, 0.38f, 1f);
+                    GUI.DrawTexture(new Rect(point.x - radius, point.y - radius, radius * 2f, radius * 2f), Texture2D.whiteTexture);
+                }
+                GUI.color = Color.white;
+            }
+        }
+
+        private static Vector2 LandmarkToScreen(GestureLandmark landmark)
+        {
+            return new Vector2(landmark.x * Screen.width, landmark.y * Screen.height);
+        }
+
+        private void DrawLine(Vector2 start, Vector2 end, Color color, float width)
+        {
+            lineTexture ??= Texture2D.whiteTexture;
+            var delta = end - start;
+            var angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+            var oldColor = GUI.color;
+            GUI.color = color;
+            GUIUtility.RotateAroundPivot(angle, start);
+            GUI.DrawTexture(new Rect(start.x, start.y - width * 0.5f, delta.magnitude, width), lineTexture);
+            GUIUtility.RotateAroundPivot(-angle, start);
+            GUI.color = oldColor;
+        }
+
         private static void DrawProgressBar(float progress, Rect rect)
         {
             GUI.Box(rect, "");
             GUI.color = Color.cyan;
             GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width * progress, rect.height), Texture2D.whiteTexture);
             GUI.color = Color.white;
+        }
+
+        private void StartGestureBridgeIfNeeded()
+        {
+            if (Application.isBatchMode)
+            {
+                bridgeStatus = "Camera bridge disabled in batch build.";
+                return;
+            }
+
+            if (launchedBridge)
+            {
+                return;
+            }
+
+            launchedBridge = true;
+            var bridgeDirectory = FindBridgeDirectory();
+            if (string.IsNullOrEmpty(bridgeDirectory))
+            {
+                bridgeStatus = "Camera bridge not found. Use Play-HandOfGod.bat.";
+                Debug.LogWarning(bridgeStatus);
+                return;
+            }
+
+            var scriptPath = Path.Combine(bridgeDirectory, "mediapipe_udp_sender.py");
+            var venvPython = Path.Combine(bridgeDirectory, ".venv", "Scripts", "python.exe");
+            var python = File.Exists(venvPython) ? venvPython : "python";
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = python,
+                    Arguments = $"\"{scriptPath}\" --no-preview",
+                    WorkingDirectory = bridgeDirectory,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                bridgeProcess = Process.Start(startInfo);
+                bridgeStatus = "Camera bridge launched; waiting for hand...";
+            }
+            catch (System.Exception exception)
+            {
+                bridgeStatus = "Failed to launch camera bridge.";
+                Debug.LogWarning($"Failed to launch gesture bridge: {exception.Message}");
+            }
+        }
+
+        private static string FindBridgeDirectory()
+        {
+            var candidates = new[]
+            {
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "gesture_bridge")),
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "..", "..", "gesture_bridge")),
+            };
+
+            foreach (var candidate in candidates)
+            {
+                if (File.Exists(Path.Combine(candidate, "mediapipe_udp_sender.py")))
+                {
+                    return candidate;
+                }
+            }
+            return "";
+        }
+
+        private void QuitGame()
+        {
+            if (Application.isEditor)
+            {
+                Debug.Log("Quit requested.");
+                return;
+            }
+            Application.Quit();
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (bridgeProcess == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!bridgeProcess.HasExited)
+                {
+                    bridgeProcess.Kill();
+                }
+            }
+            catch (System.Exception)
+            {
+                // Process may already be gone during application shutdown.
+            }
         }
 
         private Vector3 ScreenToWorldPlane(float normalizedX, float normalizedY, float y)
