@@ -21,11 +21,11 @@ Hand of God > Rebuild Level 01 Scene
 ## Gameplay Prototype
 
 - A top-down 3D temple map is generated and saved into `Assets/Scenes/Level01.unity`.
-- The current map theme is a floating mechanism temple with carved slabs, a central court, brass runes, pillars, braziers, rails, and a glowing goal altar.
-- The golden ball moves through the maze using Rigidbody physics.
-- Hand Roll / Pitch frames from UDP port `5005` drive the board tilt control.
+- Level 01 is a single sloped road with one movable obstacle box and a glowing goal altar.
+- The golden ball rolls downhill using Rigidbody physics.
+- Pinch frames from UDP port `5005` pick up and move the obstacle box.
 - The hand does not collide with the ball directly.
-- Keyboard fallback uses WASD / arrow keys for quick level testing.
+- Mouse drag fallback is available for quick level testing.
 
 ## Gesture Bridge
 

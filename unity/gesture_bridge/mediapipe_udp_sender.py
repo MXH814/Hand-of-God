@@ -26,8 +26,6 @@ def analyze_hand(landmarks, neutral):
 
     palm_width = normalized_distance(index_mcp, pinky_mcp, 1.0)
     pinch_distance = normalized_distance(thumb_tip, index_tip, palm_width)
-    pinch = pinch_distance < 0.72
-
     raw_pitch = -(middle_mcp.y - wrist.y) * 3.0
     raw_roll = (index_mcp.y - pinky_mcp.y) * 4.0
 
@@ -46,10 +44,10 @@ def analyze_hand(landmarks, neutral):
         "pinchX": clamp(index_tip.x, 0.0, 1.0),
         "pinchY": clamp(index_tip.y, 0.0, 1.0),
         "confidence": 1.0,
-        "pinch": pinch,
-        "openPalm": extended >= 3 and not pinch,
+        "pinch": False,
+        "openPalm": extended >= 3,
         "timestamp": time.time(),
-    }, {"roll": raw_roll, "pitch": raw_pitch}
+    }, {"roll": raw_roll, "pitch": raw_pitch, "pinchDistance": pinch_distance}
 
 
 def main():
@@ -66,6 +64,9 @@ def main():
     cap = cv2.VideoCapture(args.camera)
     neutral = None
     last_raw = {"roll": 0.0, "pitch": 0.0}
+    pinch_latched = False
+    smooth_x = 0.5
+    smooth_y = 0.5
 
     print("Press C to calibrate neutral hand pose, Q to quit.")
     while cap.isOpened():
@@ -92,6 +93,14 @@ def main():
         if result.multi_hand_landmarks:
             hand = result.multi_hand_landmarks[0]
             payload, last_raw = analyze_hand(hand.landmark, neutral)
+            distance = last_raw["pinchDistance"]
+            pinch_latched = distance < (0.92 if pinch_latched else 0.72)
+            smooth_x = smooth_x * 0.72 + payload["pinchX"] * 0.28
+            smooth_y = smooth_y * 0.72 + payload["pinchY"] * 0.28
+            payload["pinch"] = pinch_latched
+            payload["openPalm"] = payload["openPalm"] and not pinch_latched
+            payload["pinchX"] = smooth_x
+            payload["pinchY"] = smooth_y
             drawing.draw_landmarks(frame, hand, mp.solutions.hands.HAND_CONNECTIONS)
 
         sock.sendto(json.dumps(payload).encode("utf-8"), (args.host, args.port))

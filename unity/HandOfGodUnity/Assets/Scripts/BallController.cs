@@ -8,24 +8,18 @@ namespace HandOfGod.Gameplay
         [SerializeField] private Transform goal;
         [SerializeField] private float goalRadius = 0.55f;
         [SerializeField] private float resetY = -2f;
-        [SerializeField] private float maxPlanarSpeed = 7f;
+        [SerializeField] private float maxSpeed = 8f;
 
         private Rigidbody body;
         private Vector3 startPosition;
-        private Vector3 planarAcceleration;
         private bool reachedGoal;
 
         public bool ReachedGoal => reachedGoal;
-        public float Speed => new Vector3(body.velocity.x, 0f, body.velocity.z).magnitude;
+        public float Speed => body.linearVelocity.magnitude;
 
         public void Configure(Transform goalTransform)
         {
             goal = goalTransform;
-        }
-
-        public void SetPlanarAcceleration(Vector3 acceleration)
-        {
-            planarAcceleration = new Vector3(acceleration.x, 0f, acceleration.z);
         }
 
         public void ResetBall()
@@ -33,7 +27,7 @@ namespace HandOfGod.Gameplay
             reachedGoal = false;
             transform.position = startPosition;
             transform.rotation = Quaternion.identity;
-            body.velocity = Vector3.zero;
+            body.linearVelocity = Vector3.zero;
             body.angularVelocity = Vector3.zero;
             body.Sleep();
         }
@@ -42,7 +36,6 @@ namespace HandOfGod.Gameplay
         {
             body = GetComponent<Rigidbody>();
             startPosition = transform.position;
-            body.constraints = RigidbodyConstraints.FreezePositionY;
             body.interpolation = RigidbodyInterpolation.Interpolate;
             body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         }
@@ -51,17 +44,14 @@ namespace HandOfGod.Gameplay
         {
             if (reachedGoal)
             {
-                body.velocity *= 0.92f;
+                body.linearVelocity *= 0.92f;
                 body.angularVelocity *= 0.92f;
                 return;
             }
 
-            body.AddForce(planarAcceleration, ForceMode.Acceleration);
-            var planarVelocity = new Vector3(body.velocity.x, 0f, body.velocity.z);
-            if (planarVelocity.magnitude > maxPlanarSpeed)
+            if (body.linearVelocity.magnitude > maxSpeed)
             {
-                planarVelocity = planarVelocity.normalized * maxPlanarSpeed;
-                body.velocity = new Vector3(planarVelocity.x, body.velocity.y, planarVelocity.z);
+                body.linearVelocity = body.linearVelocity.normalized * maxSpeed;
             }
 
             if (transform.position.y < resetY)

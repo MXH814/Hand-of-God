@@ -10,7 +10,6 @@ namespace HandOfGod.Gameplay
         [SerializeField] private Transform boardVisualRoot;
         [SerializeField] private bool mirrorRoll = true;
         [SerializeField] private float maxBoardLeanDegrees = 10f;
-        [SerializeField] private float planarAcceleration = 13f;
         [SerializeField] private float pitchSensitivity = 1.65f;
         [SerializeField] private bool allowKeyboardFallback = true;
 
@@ -59,10 +58,7 @@ namespace HandOfGod.Gameplay
                 boardVisualRoot.localRotation = Quaternion.Euler(pitch * maxBoardLeanDegrees, 0f, -roll * maxBoardLeanDegrees);
             }
 
-            if (ball != null)
-            {
-                ball.SetPlanarAcceleration(new Vector3(roll * planarAcceleration, 0f, pitch * planarAcceleration));
-            }
+            // Level 01 no longer lets hand tilt or push the ball directly.
         }
 
         private void OnGUI()
