@@ -31,7 +31,6 @@ namespace HandOfGod.Gameplay
         private const float CalibrationHoldSeconds = 1f;
         private const float MenuDwellSeconds = 0.85f;
         private const float SafeDwellSeconds = 1f;
-        private const float TutorialHoldSeconds = 3f;
         private const float Level1RoadCenterY = 1f;
         private const float Level1RoadAngleDegrees = -8f;
         private static readonly int[] HandConnectionPairs =
@@ -78,7 +77,7 @@ namespace HandOfGod.Gameplay
         private bool labHeld;
         private bool labCompleted;
         private TutorialStage tutorialStage = TutorialStage.FindHands;
-        private float tutorialProgressStart = -1f;
+        private bool tutorialStageSucceeded;
         private bool tutorialObjectMoved;
         private bool tutorialObjectRotated;
         private bool tutorialMapAdjusted;
@@ -352,17 +351,19 @@ namespace HandOfGod.Gameplay
             var detailStyle = new GUIStyle(GUI.skin.label) { fontSize = 15, wordWrap = true };
             var statusStyle = new GUIStyle(GUI.skin.label) { fontSize = 13 };
             var panelWidth = Mathf.Min(Screen.width - 160f, 860f);
-            var panel = new Rect(Screen.width * 0.5f - panelWidth * 0.5f, 42f, panelWidth, 184f);
+            var panel = new Rect(Screen.width * 0.5f - panelWidth * 0.5f, 42f, panelWidth, 170f);
             DrawPanel(panel);
             GUI.Label(new Rect(panel.x + 32f, panel.y + 16f, panel.width - 64f, 32f), "Level 0: Gesture Tutorial", titleStyle);
             GUI.Label(new Rect(panel.x + 32f, panel.y + 52f, panel.width - 64f, 28f), TutorialTitle(), stepStyle);
-            GUI.Label(new Rect(panel.x + 32f, panel.y + 84f, panel.width - 64f, 42f), TutorialDetail(), detailStyle);
-            DrawProgressBar(TutorialProgress(), new Rect(panel.x + 32f, panel.y + 132f, panel.width - 64f, 22f));
-            GUI.Label(new Rect(panel.x + 32f, panel.y + 158f, panel.width - 64f, 22f), $"{HandStatusText()}    Pinch threshold: {pinchThreshold:0.00}", statusStyle);
+            GUI.Label(new Rect(panel.x + 32f, panel.y + 84f, panel.width - 64f, 48f), TutorialDetail(), detailStyle);
+            GUI.Label(new Rect(panel.x + 32f, panel.y + 136f, panel.width - 64f, 22f), $"{HandStatusText()}    Pinch threshold: {pinchThreshold:0.00}", statusStyle);
 
-            if (tutorialStage == TutorialStage.Complete)
+            if (TutorialStageSucceeded())
             {
-                DrawHoverButton("next-level", "Next: Level 1", new Rect(Screen.width * 0.5f - 120f, panel.yMax + 18f, 240f, 48f), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
+                DrawSuccessBanner(new Rect(Screen.width * 0.5f - 210f, panel.yMax + 14f, 420f, 58f), tutorialStage == TutorialStage.Complete ? "TUTORIAL COMPLETE" : "SUCCESS");
+                var buttonLabel = tutorialStage == TutorialStage.Complete ? "Next: Level 1" : "Continue";
+                var buttonAction = tutorialStage == TutorialStage.Complete ? (System.Action)(() => StartLevel(GameMode.Level1)) : AdvanceTutorialStage;
+                DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 120f, panel.yMax + 82f, 240f, 48f), MenuDwellSeconds, buttonAction);
             }
 
             var shapePanel = new Rect(Screen.width - 320f, 260f, 260f, 188f);
@@ -384,12 +385,41 @@ namespace HandOfGod.Gameplay
 
         private void DrawPassHud()
         {
-            var panelX = Screen.width / 2f - 185f;
-            DrawPanel(new Rect(panelX, 70, 370, 210));
-            GUI.Label(new Rect(panelX + 40, 98, 300, 34), "PASS");
-            GUI.Label(new Rect(panelX + 40, 132, 300, 24), "The ball reached the altar.");
-            DrawHoverButton("pass-restart", "Restart", new Rect(Screen.width / 2f - 140f, 170, 120, 40), MenuDwellSeconds, () => StartLevel(lastLevel));
-            DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 20f, 170, 120, 40), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
+            var panelX = Screen.width / 2f - 230f;
+            DrawPanel(new Rect(panelX, 64, 460, 250));
+            DrawSuccessBanner(new Rect(panelX + 40, 92, 380, 70), "PASS");
+            var messageStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 18,
+                fontStyle = FontStyle.Bold,
+            };
+            GUI.color = new Color(0.92f, 1f, 0.94f, 1f);
+            GUI.Label(new Rect(panelX + 48, 166, 364, 30), "The ball reached the altar.", messageStyle);
+            GUI.color = Color.white;
+            DrawHoverButton("pass-restart", "Restart", new Rect(Screen.width / 2f - 150f, 222, 130, 44), MenuDwellSeconds, () => StartLevel(lastLevel));
+            DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 20f, 222, 130, 44), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
+        }
+
+        private void DrawSuccessBanner(Rect rect, string text)
+        {
+            var pulse = (Mathf.Sin(Time.time * 5.4f) + 1f) * 0.5f;
+            var glowRect = new Rect(rect.x - 12f, rect.y - 8f, rect.width + 24f, rect.height + 16f);
+            var oldColor = GUI.color;
+            GUI.color = new Color(0.08f, 1f, 0.76f, 0.20f + pulse * 0.18f);
+            GUI.DrawTexture(glowRect, Texture2D.whiteTexture);
+
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = Mathf.RoundToInt(30f + pulse * 6f),
+                fontStyle = FontStyle.Bold,
+            };
+            GUI.color = Color.black;
+            GUI.Label(new Rect(rect.x + 3f, rect.y + 3f, rect.width, rect.height), text, style);
+            GUI.color = new Color(0.16f, 1f, 0.82f, 1f);
+            GUI.Label(rect, text, style);
+            GUI.color = oldColor;
         }
 
         private void StartLevel(GameMode level)
@@ -418,7 +448,7 @@ namespace HandOfGod.Gameplay
             ReplaceLabObject(PrimitiveType.Cube);
             labCompleted = false;
             tutorialStage = TutorialStage.FindHands;
-            tutorialProgressStart = -1f;
+            tutorialStageSucceeded = false;
             tutorialObjectMoved = false;
             tutorialObjectRotated = false;
             tutorialMapAdjusted = false;
@@ -592,48 +622,59 @@ namespace HandOfGod.Gameplay
             switch (tutorialStage)
             {
                 case TutorialStage.FindHands:
-                    UpdateStageHold(HasLeftAndRightHands(frame), TutorialStage.OneHandDrag);
+                    tutorialStageSucceeded |= HasLeftAndRightHands(frame);
                     break;
                 case TutorialStage.OneHandDrag:
-                    UpdateStageHold(tutorialObjectMoved, TutorialStage.TwoHandRotate);
+                    tutorialStageSucceeded |= tutorialObjectMoved;
                     break;
                 case TutorialStage.TwoHandRotate:
-                    UpdateStageHold(tutorialObjectRotated, TutorialStage.MapControl);
+                    tutorialStageSucceeded |= tutorialObjectRotated;
                     break;
                 case TutorialStage.MapControl:
-                    UpdateStageHold(tutorialMapAdjusted, TutorialStage.Complete);
+                    tutorialStageSucceeded |= tutorialMapAdjusted;
                     break;
                 case TutorialStage.Complete:
                     labCompleted = true;
+                    tutorialStageSucceeded = true;
                     break;
             }
         }
 
-        private void UpdateStageHold(bool condition, TutorialStage nextStage)
+        private bool TutorialStageSucceeded()
         {
-            if (condition)
+            return tutorialStageSucceeded || tutorialStage == TutorialStage.Complete;
+        }
+
+        private void AdvanceTutorialStage()
+        {
+            switch (tutorialStage)
             {
-                tutorialProgressStart = tutorialProgressStart < 0f ? Time.time : tutorialProgressStart;
-                if (Time.time - tutorialProgressStart >= TutorialHoldSeconds)
-                {
-                    tutorialStage = nextStage;
-                    tutorialProgressStart = -1f;
-                    labHeld = false;
-                    twoHandStartDistance = 0f;
-                    twoFingerMapStartDistance = 0f;
-                }
+                case TutorialStage.FindHands:
+                    tutorialStage = TutorialStage.OneHandDrag;
+                    break;
+                case TutorialStage.OneHandDrag:
+                    tutorialStage = TutorialStage.TwoHandRotate;
+                    break;
+                case TutorialStage.TwoHandRotate:
+                    tutorialStage = TutorialStage.MapControl;
+                    break;
+                case TutorialStage.MapControl:
+                    tutorialStage = TutorialStage.Complete;
+                    labCompleted = true;
+                    break;
             }
-            else
-            {
-                tutorialProgressStart = -1f;
-            }
+
+            tutorialStageSucceeded = tutorialStage == TutorialStage.Complete;
+            labHeld = false;
+            twoHandStartDistance = 0f;
+            twoFingerMapStartDistance = 0f;
         }
 
         private string TutorialTitle()
         {
             return tutorialStage switch
             {
-                TutorialStage.FindHands => "1/5 Show both hands and point with index fingers.",
+                TutorialStage.FindHands => "1/5 Move your hands freely.",
                 TutorialStage.OneHandDrag => "2/5 Pinch an object with one hand and drag it.",
                 TutorialStage.TwoHandRotate => "3/5 Pinch both sides and rotate the object.",
                 TutorialStage.MapControl => "4/5 Bring index and middle fingers together on both hands.",
@@ -646,22 +687,13 @@ namespace HandOfGod.Gameplay
         {
             return tutorialStage switch
             {
-                TutorialStage.FindHands => "Keep left and right hands visible. The skeleton labels show which hand is detected.",
+                TutorialStage.FindHands => "Move both hands freely and watch how the game recognizes them on screen.",
                 TutorialStage.OneHandDrag => "Touch thumb and index finger, grab the object, then move it across the practice slab.",
                 TutorialStage.TwoHandRotate => "Pinch the object from both sides, then turn your hands like rotating a real block.",
                 TutorialStage.MapControl => "On each hand, keep index and middle fingertips close, then move both hands to adjust the map.",
                 TutorialStage.Complete => "You can still drag, rotate, and adjust the map. Hold over Next: Level 1 when ready.",
                 _ => "",
             };
-        }
-
-        private float TutorialProgress()
-        {
-            if (tutorialStage == TutorialStage.Complete)
-            {
-                return 1f;
-            }
-            return tutorialProgressStart < 0f ? 0f : Mathf.Clamp01((Time.time - tutorialProgressStart) / TutorialHoldSeconds);
         }
 
         private string HandStatusText()
