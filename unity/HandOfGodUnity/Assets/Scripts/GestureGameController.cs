@@ -111,6 +111,7 @@ namespace HandOfGod.Gameplay
         private Quaternion twoFingerMapStartRotation;
         private Rigidbody obstacleBox;
         private Renderer obstacleRenderer;
+        private Vector3 level1BoxGrabOffset;
         private bool boxHeld;
         private BallController levelBall;
         private Level1Stage level1Stage;
@@ -975,7 +976,7 @@ namespace HandOfGod.Gameplay
 
         private void UpdateLevel1Block(Vector3 target, bool isPinch)
         {
-            var close = DistanceXZ(target, obstacleBox.position) < 0.72f;
+            var close = DistanceXZ(target, obstacleBox.position) < (isPinch ? 1.05f : 0.72f);
             obstacleRenderer.sharedMaterial = boxIdle;
             if (!boxHeld && close)
             {
@@ -984,6 +985,7 @@ namespace HandOfGod.Gameplay
             if (!boxHeld && isPinch && close)
             {
                 boxHeld = true;
+                level1BoxGrabOffset = obstacleBox.position - target;
             }
             if (boxHeld && !isPinch)
             {
@@ -992,6 +994,10 @@ namespace HandOfGod.Gameplay
             if (boxHeld)
             {
                 obstacleRenderer.sharedMaterial = boxHeldMaterial;
+                target += level1BoxGrabOffset;
+                target.x = Mathf.Clamp(target.x, -3.45f, -2.15f);
+                target.z = Mathf.Clamp(target.z, -0.65f, 1.55f);
+                target.y = RoadY(target.x) + 0.37f;
                 obstacleBox.MovePosition(target);
                 obstacleBox.linearVelocity = Vector3.zero;
                 obstacleBox.angularVelocity = Vector3.zero;
@@ -1255,6 +1261,16 @@ namespace HandOfGod.Gameplay
             if (frame.hands != null && frame.hands.Length > 0)
             {
                 hand = frame.hands[0];
+                var bestScore = PrimaryHandScore(hand);
+                for (var i = 1; i < frame.hands.Length; i++)
+                {
+                    var candidateScore = PrimaryHandScore(frame.hands[i]);
+                    if (candidateScore > bestScore)
+                    {
+                        hand = frame.hands[i];
+                        bestScore = candidateScore;
+                    }
+                }
                 return true;
             }
 
@@ -1282,6 +1298,24 @@ namespace HandOfGod.Gameplay
 
             hand = default;
             return false;
+        }
+
+        private float PrimaryHandScore(GestureHandFrame hand)
+        {
+            var score = hand.score;
+            if (IsPinching(hand))
+            {
+                score += 0.45f;
+            }
+            if (hand.indexExtended)
+            {
+                score += 0.25f;
+            }
+            if (!hand.middleExtended && !hand.ringExtended && !hand.pinkyExtended)
+            {
+                score += 0.10f;
+            }
+            return score;
         }
 
         private bool TryGetTwoPinchingHands(out GestureHandFrame a, out GestureHandFrame b)
@@ -1785,6 +1819,7 @@ namespace HandOfGod.Gameplay
             level1BridgeStartDistance = 0f;
             sealHoldStart = -1f;
             level1SuccessUntil = -1f;
+            level1BoxGrabOffset = Vector3.zero;
             twoHandStartDistance = 0f;
         }
 

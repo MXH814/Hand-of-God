@@ -19,6 +19,13 @@ FINGERS = {
 }
 
 
+class LandmarkPoint:
+    def __init__(self, x, y, z):
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+
+
 class SmoothedPoint:
     def __init__(self, x, y, z):
         self.x = float(x)
@@ -32,10 +39,13 @@ class SmoothedPoint:
         dx = x - self.x
         dy = y - self.y
         dz = z - self.z
-        speed = float(np.linalg.norm(np.array([dx, dy, dz])) / dt)
+        displacement = float(np.linalg.norm(np.array([dx, dy, dz])))
+        speed = displacement / dt
         edge = max(abs(x - 0.5), abs(y - 0.5)) * 2.0
-        alpha = 0.16 + min(speed * 0.018, 0.22) - max(edge - 0.72, 0.0) * 0.08
-        alpha = max(0.10, min(0.42, alpha))
+        alpha = 0.12 + min(speed * 0.010, 0.16) - max(edge - 0.66, 0.0) * 0.10
+        if displacement < 0.006:
+            alpha *= 0.45
+        alpha = max(0.045, min(0.32, alpha))
         self.x += dx * alpha
         self.y += dy * alpha
         self.z += dz * alpha
@@ -45,15 +55,17 @@ class SmoothedPoint:
 
 def smooth_landmarks(hand_id, landmarks, smooth_points):
     slots = smooth_points.setdefault(hand_id, {})
-    smoothed = []
+    smoothed_json = []
+    smoothed_points = []
     for index, point in enumerate(landmarks):
         slot = slots.get(index)
         if slot is None:
             slot = SmoothedPoint(point.x, point.y, point.z)
             slots[index] = slot
         x, y, z = slot.update(point.x, point.y, point.z)
-        smoothed.append({"x": float(x), "y": float(y), "z": float(z)})
-    return smoothed
+        smoothed_points.append(LandmarkPoint(x, y, z))
+        smoothed_json.append({"x": float(x), "y": float(y), "z": float(z)})
+    return smoothed_json, smoothed_points
 
 
 class VideoStreamClient:
@@ -254,10 +266,10 @@ def main():
                     category = handedness_list[index].classification[0] if index < len(handedness_list) else None
                     label = category.label if category else "Unknown"
                     score = category.score if category else 1.0
-                    hand_id = f"{label}-{index}"
+                    hand_id = label if label in ("Left", "Right") else f"Unknown-{index}"
                     active_ids.add(hand_id)
-                    smoothed_landmarks = smooth_landmarks(hand_id, hand.landmark, smooth_landmarks_by_hand)
-                    hand_payload, raw = analyze_hand(hand.landmark, label, score, hand_id, neutral, smoothed_landmarks)
+                    smoothed_landmarks, smoothed_points = smooth_landmarks(hand_id, hand.landmark, smooth_landmarks_by_hand)
+                    hand_payload, raw = analyze_hand(smoothed_points, label, score, hand_id, neutral, smoothed_landmarks)
                     last_raw = raw
 
                     distance = raw["pinchDistance"]
@@ -265,12 +277,20 @@ def main():
                     latched = distance < (0.92 if latched else 0.72)
                     pinch_latches[hand_id] = latched
 
+                    index_only = (
+                        hand_payload["indexExtended"]
+                        and not hand_payload["middleExtended"]
+                        and not hand_payload["ringExtended"]
+                        and not hand_payload["pinkyExtended"]
+                    )
+                    pinch_alpha = 0.34 if latched else 0.18
+                    index_alpha = 0.12 if index_only else 0.24
                     previous = smooth_cursors.get(hand_id, (hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"]))
                     smoothed = (
-                        previous[0] * 0.72 + hand_payload["pinchX"] * 0.28,
-                        previous[1] * 0.72 + hand_payload["pinchY"] * 0.28,
-                        previous[2] * 0.72 + hand_payload["indexX"] * 0.28,
-                        previous[3] * 0.72 + hand_payload["indexY"] * 0.28,
+                        previous[0] * (1.0 - pinch_alpha) + hand_payload["pinchX"] * pinch_alpha,
+                        previous[1] * (1.0 - pinch_alpha) + hand_payload["pinchY"] * pinch_alpha,
+                        previous[2] * (1.0 - index_alpha) + hand_payload["indexX"] * index_alpha,
+                        previous[3] * (1.0 - index_alpha) + hand_payload["indexY"] * index_alpha,
                     )
                     smooth_cursors[hand_id] = smoothed
 
