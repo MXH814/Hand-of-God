@@ -24,8 +24,19 @@ namespace HandOfGod.Gameplay
             FindHands,
             OneHandDrag,
             TwoHandRotate,
+            BridgePull,
+            PalmActivate,
             MapControl,
             Complete,
+        }
+
+        private enum Level1Stage
+        {
+            ClearBlock,
+            JoinBridge,
+            RotateGate,
+            ActivateSeal,
+            RunToGoal,
         }
 
         private const float CalibrationHoldSeconds = 1f;
@@ -80,8 +91,17 @@ namespace HandOfGod.Gameplay
         private bool tutorialStageSucceeded;
         private bool tutorialObjectMoved;
         private bool tutorialObjectRotated;
+        private bool tutorialBridgePulled;
+        private bool tutorialPalmActivated;
         private bool tutorialMapAdjusted;
         private Vector3 tutorialDragStart;
+        private Transform tutorialBridgeLeft;
+        private Transform tutorialBridgeRight;
+        private Renderer tutorialBridgeLeftRenderer;
+        private Renderer tutorialBridgeRightRenderer;
+        private Renderer tutorialSealRenderer;
+        private float tutorialBridgeStartDistance;
+        private float tutorialPalmStart = -1f;
         private float twoHandStartDistance;
         private float twoHandStartAngle;
         private Quaternion twoHandStartRotation;
@@ -93,6 +113,27 @@ namespace HandOfGod.Gameplay
         private Renderer obstacleRenderer;
         private bool boxHeld;
         private BallController levelBall;
+        private Level1Stage level1Stage;
+        private Renderer blockSlotRenderer;
+        private Transform bridgeLeft;
+        private Transform bridgeRight;
+        private Renderer bridgeLeftRenderer;
+        private Renderer bridgeRightRenderer;
+        private Transform rotateGate;
+        private Renderer rotateGateRenderer;
+        private Renderer sealRenderer;
+        private bool bridgeLocked;
+        private bool rotateGateLocked;
+        private bool sealActivated;
+        private bool rotateGateHeld;
+        private float level1BridgeStartDistance;
+        private float level1RotateStartAngle;
+        private float sealHoldStart = -1f;
+        private GameObject startGate;
+        private GameObject bridgeGate;
+        private GameObject rotateGateStop;
+        private GameObject goalGate;
+        private float level1SuccessUntil = -1f;
         private bool initialized;
         private Texture2D lineTexture;
         private Process bridgeProcess;
@@ -363,7 +404,7 @@ namespace HandOfGod.Gameplay
                 DrawSuccessBanner(new Rect(Screen.width * 0.5f - 210f, panel.yMax + 14f, 420f, 58f), tutorialStage == TutorialStage.Complete ? "TUTORIAL COMPLETE" : "SUCCESS");
                 var buttonLabel = tutorialStage == TutorialStage.Complete ? "Next: Level 1" : "Continue";
                 var buttonAction = tutorialStage == TutorialStage.Complete ? (System.Action)(() => StartLevel(GameMode.Level1)) : AdvanceTutorialStage;
-                DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 120f, panel.yMax + 82f, 240f, 48f), MenuDwellSeconds, buttonAction);
+                DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 170f, panel.yMax + 82f, 340f, 64f), MenuDwellSeconds, buttonAction);
             }
 
             var shapePanel = new Rect(Screen.width - 320f, 260f, 260f, 188f);
@@ -376,11 +417,18 @@ namespace HandOfGod.Gameplay
 
         private void DrawLevel1Hud()
         {
-            DrawPanel(new Rect(24, 24, 360, 166));
-            GUI.Label(new Rect(44, 44, 320, 26), "Level 1: First Path");
-            GUI.Label(new Rect(44, 74, 320, 24), boxHeld ? "Pinch: moving the box" : "Pinch the box and move it away.");
-            GUI.Label(new Rect(44, 100, 320, 24), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}" : "Ball speed: 0.00");
-            DrawHoverButton("level1-calibrate", "Calibrate", new Rect(44, 136, 150, 36), MenuDwellSeconds, ResetToCalibration);
+            var panelWidth = Mathf.Min(Screen.width - 180f, 820f);
+            var panel = new Rect(Screen.width * 0.5f - panelWidth * 0.5f, 42f, panelWidth, 132f);
+            DrawPanel(panel);
+            var titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
+            var objectiveStyle = new GUIStyle(GUI.skin.label) { fontSize = 17, wordWrap = true };
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 1: Trial of the Moving Path", titleStyle);
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 52f, panel.width - 56f, 42f), Level1ObjectiveText(), objectiveStyle);
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 96f, panel.width - 56f, 24f), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}" : "Ball speed: 0.00");
+            if (Time.time < level1SuccessUntil)
+            {
+                DrawSuccessBanner(new Rect(Screen.width * 0.5f - 135f, panel.yMax + 12f, 270f, 50f), "SUCCESS");
+            }
         }
 
         private void DrawPassHud()
@@ -451,8 +499,32 @@ namespace HandOfGod.Gameplay
             tutorialStageSucceeded = false;
             tutorialObjectMoved = false;
             tutorialObjectRotated = false;
+            tutorialBridgePulled = false;
+            tutorialPalmActivated = false;
             tutorialMapAdjusted = false;
+            tutorialPalmStart = -1f;
+            BuildTutorialMechanisms();
             twoFingerMapStartDistance = 0f;
+        }
+
+        private void BuildTutorialMechanisms()
+        {
+            var left = CreateBox("tutorial bridge left half", new Vector3(-0.55f, 0.22f, -1.05f), new Vector3(1.0f, 0.08f, 0.42f), boxHover, levelRoot, Quaternion.identity, true);
+            var right = CreateBox("tutorial bridge right half", new Vector3(0.55f, 0.22f, -1.05f), new Vector3(1.0f, 0.08f, 0.42f), boxHover, levelRoot, Quaternion.identity, true);
+            tutorialBridgeLeft = left.transform;
+            tutorialBridgeRight = right.transform;
+            tutorialBridgeLeftRenderer = left.GetComponent<Renderer>();
+            tutorialBridgeRightRenderer = right.GetComponent<Renderer>();
+
+            var seal = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            seal.name = "tutorial palm seal";
+            seal.transform.SetParent(levelRoot, false);
+            seal.transform.position = new Vector3(0f, 0.16f, 1.05f);
+            seal.transform.localScale = new Vector3(0.56f, 0.04f, 0.56f);
+            tutorialSealRenderer = seal.GetComponent<Renderer>();
+            tutorialSealRenderer.sharedMaterial = amberGlow;
+            DestroyUnityObject(seal.GetComponent<Collider>());
+            CreateTorus("tutorial seal ring", seal.transform.position + new Vector3(0f, 0.04f, 0f), 0.5f, 0.035f, tealGlow, levelRoot);
         }
 
         private void BuildLobbyShell()
@@ -578,6 +650,20 @@ namespace HandOfGod.Gameplay
                 twoHandStartDistance = 0f;
             }
 
+            if (twoHandsPinching && CanPullBridge())
+            {
+                UpdateTutorialBridgePull(a, b);
+            }
+            else if (tutorialStage == TutorialStage.BridgePull)
+            {
+                tutorialBridgeStartDistance = 0f;
+            }
+
+            if (CanActivatePalm())
+            {
+                UpdateTutorialPalmActivation(hand);
+            }
+
             if (CanControlMap() && TryGetTwoFingerMapHands(frame, out var left, out var right))
             {
                 var leftPoint = FingerMidpoint(left);
@@ -617,6 +703,78 @@ namespace HandOfGod.Gameplay
             return tutorialStage == TutorialStage.MapControl || tutorialStage == TutorialStage.Complete;
         }
 
+        private bool CanPullBridge()
+        {
+            return tutorialStage == TutorialStage.BridgePull || tutorialStage == TutorialStage.Complete;
+        }
+
+        private bool CanActivatePalm()
+        {
+            return tutorialStage == TutorialStage.PalmActivate || tutorialStage == TutorialStage.Complete;
+        }
+
+        private void UpdateTutorialBridgePull(GestureHandFrame a, GestureHandFrame b)
+        {
+            if (tutorialBridgeLeft == null || tutorialBridgeRight == null)
+            {
+                return;
+            }
+
+            var distance = Vector2.Distance(new Vector2(a.pinchX, a.pinchY), new Vector2(b.pinchX, b.pinchY));
+            if (tutorialBridgeStartDistance <= 0f)
+            {
+                tutorialBridgeStartDistance = Mathf.Max(distance, 0.001f);
+            }
+
+            var t = Mathf.Clamp01(1f - distance / tutorialBridgeStartDistance);
+            tutorialBridgeLeft.localPosition = Vector3.Lerp(new Vector3(-0.55f, 0.22f, -1.05f), new Vector3(-0.16f, 0.22f, -1.05f), t);
+            tutorialBridgeRight.localPosition = Vector3.Lerp(new Vector3(0.55f, 0.22f, -1.05f), new Vector3(0.16f, 0.22f, -1.05f), t);
+            if (tutorialBridgeLeftRenderer != null)
+            {
+                tutorialBridgeLeftRenderer.sharedMaterial = boxHeldMaterial;
+            }
+            if (tutorialBridgeRightRenderer != null)
+            {
+                tutorialBridgeRightRenderer.sharedMaterial = boxHeldMaterial;
+            }
+            if (distance < tutorialBridgeStartDistance * 0.72f)
+            {
+                tutorialBridgePulled = true;
+                tutorialBridgeLeft.localPosition = new Vector3(-0.16f, 0.22f, -1.05f);
+                tutorialBridgeRight.localPosition = new Vector3(0.16f, 0.22f, -1.05f);
+            }
+        }
+
+        private void UpdateTutorialPalmActivation(GestureHandFrame hand)
+        {
+            if (tutorialSealRenderer == null)
+            {
+                return;
+            }
+
+            var target = ScreenToWorldPlane(hand.indexX, hand.indexY, 0.16f);
+            var nearSeal = DistanceXZ(target, new Vector3(0f, 0f, 1.05f)) < 0.82f;
+            if (hand.openPalm && hand.score >= 0.45f && nearSeal)
+            {
+                tutorialPalmStart = tutorialPalmStart < 0f ? Time.time : tutorialPalmStart;
+                tutorialSealRenderer.sharedMaterial = boxHeldMaterial;
+                if (Time.time - tutorialPalmStart >= 0.7f)
+                {
+                    tutorialPalmActivated = true;
+                }
+            }
+            else if (!tutorialPalmActivated)
+            {
+                tutorialPalmStart = -1f;
+                tutorialSealRenderer.sharedMaterial = amberGlow;
+            }
+
+            if (tutorialPalmActivated)
+            {
+                tutorialSealRenderer.sharedMaterial = tealGlow;
+            }
+        }
+
         private void UpdateTutorialStage(GestureFrame frame)
         {
             switch (tutorialStage)
@@ -629,6 +787,12 @@ namespace HandOfGod.Gameplay
                     break;
                 case TutorialStage.TwoHandRotate:
                     tutorialStageSucceeded |= tutorialObjectRotated;
+                    break;
+                case TutorialStage.BridgePull:
+                    tutorialStageSucceeded |= tutorialBridgePulled;
+                    break;
+                case TutorialStage.PalmActivate:
+                    tutorialStageSucceeded |= tutorialPalmActivated;
                     break;
                 case TutorialStage.MapControl:
                     tutorialStageSucceeded |= tutorialMapAdjusted;
@@ -656,6 +820,12 @@ namespace HandOfGod.Gameplay
                     tutorialStage = TutorialStage.TwoHandRotate;
                     break;
                 case TutorialStage.TwoHandRotate:
+                    tutorialStage = TutorialStage.BridgePull;
+                    break;
+                case TutorialStage.BridgePull:
+                    tutorialStage = TutorialStage.PalmActivate;
+                    break;
+                case TutorialStage.PalmActivate:
                     tutorialStage = TutorialStage.MapControl;
                     break;
                 case TutorialStage.MapControl:
@@ -674,11 +844,13 @@ namespace HandOfGod.Gameplay
         {
             return tutorialStage switch
             {
-                TutorialStage.FindHands => "1/5 Move your hands freely.",
-                TutorialStage.OneHandDrag => "2/5 Pinch an object with one hand and drag it.",
-                TutorialStage.TwoHandRotate => "3/5 Pinch both sides and rotate the object.",
-                TutorialStage.MapControl => "4/5 Bring index and middle fingers together on both hands.",
-                TutorialStage.Complete => "5/5 Tutorial complete. Keep practicing or enter Level 1.",
+                TutorialStage.FindHands => "1/7 Move your hands freely.",
+                TutorialStage.OneHandDrag => "2/7 Pinch an object with one hand and drag it.",
+                TutorialStage.TwoHandRotate => "3/7 Pinch both sides and rotate the object.",
+                TutorialStage.BridgePull => "4/7 Join a bridge with both hands.",
+                TutorialStage.PalmActivate => "5/7 Open your palm over the glowing seal.",
+                TutorialStage.MapControl => "6/7 Bring index and middle fingers together on both hands.",
+                TutorialStage.Complete => "7/7 Tutorial complete. Keep practicing or enter Level 1.",
                 _ => "",
             };
         }
@@ -690,6 +862,8 @@ namespace HandOfGod.Gameplay
                 TutorialStage.FindHands => "Move both hands freely and watch how the game recognizes them on screen.",
                 TutorialStage.OneHandDrag => "Touch thumb and index finger, grab the object, then move it across the practice slab.",
                 TutorialStage.TwoHandRotate => "Pinch the object from both sides, then turn your hands like rotating a real block.",
+                TutorialStage.BridgePull => "Pinch both bridge halves, then move your hands closer together until they lock.",
+                TutorialStage.PalmActivate => "Open one hand and hold it over the glowing seal until it lights up.",
                 TutorialStage.MapControl => "On each hand, keep index and middle fingertips close, then move both hands to adjust the map.",
                 TutorialStage.Complete => "You can still drag, rotate, and adjust the map. Hold over Next: Level 1 when ready.",
                 _ => "",
@@ -708,22 +882,62 @@ namespace HandOfGod.Gameplay
         {
             levelRoot = new GameObject("Level01 First Path").transform;
             var roadRotation = Quaternion.Euler(0f, 0f, Level1RoadAngleDegrees);
-            CreateBox("void shadow plinth", new Vector3(0f, -0.62f, 0f), new Vector3(10.8f, 0.42f, 5.2f), darkStone, levelRoot, Quaternion.identity, false);
-            CreateBox("floating carved base", new Vector3(0f, -0.28f, 0f), new Vector3(9.8f, 0.34f, 3.9f), cliffStone, levelRoot, Quaternion.identity, false);
-            CreateBox("single sloped road", new Vector3(0f, Level1RoadCenterY, 0f), new Vector3(8.8f, 0.28f, 1.55f), paleStone, levelRoot, roadRotation, true);
-            CreateBox("left rail", new Vector3(0f, Level1RoadCenterY + 0.34f, -0.92f), new Vector3(8.75f, 0.58f, 0.18f), stone, levelRoot, roadRotation, true);
-            CreateBox("right rail", new Vector3(0f, Level1RoadCenterY + 0.34f, 0.92f), new Vector3(8.75f, 0.58f, 0.18f), stone, levelRoot, roadRotation, true);
+            level1Stage = Level1Stage.ClearBlock;
+            bridgeLocked = false;
+            rotateGateLocked = false;
+            sealActivated = false;
+            rotateGateHeld = false;
+            level1BridgeStartDistance = 0f;
+            sealHoldStart = -1f;
+            level1SuccessUntil = -1f;
 
-            obstacleBox = CreateBox("Pinch Movable Obstacle Box", new Vector3(-0.45f, RoadY(-0.45f) + 0.37f, 0f), new Vector3(0.78f, 0.74f, 1.12f), boxIdle, levelRoot, roadRotation, true).AddComponent<Rigidbody>();
+            CreateBox("trial void shadow plinth", new Vector3(0f, -0.62f, 0f), new Vector3(10.9f, 0.42f, 5.2f), darkStone, levelRoot, Quaternion.identity, false);
+            CreateBox("trial carved base", new Vector3(0f, -0.28f, 0f), new Vector3(9.9f, 0.34f, 3.9f), cliffStone, levelRoot, Quaternion.identity, false);
+            CreateBox("road segment start", new Vector3(-3.25f, RoadY(-3.25f), 0f), new Vector3(2.45f, 0.28f, 1.55f), paleStone, levelRoot, roadRotation, true);
+            CreateBox("road segment middle", new Vector3(0.38f, RoadY(0.38f), 0f), new Vector3(2.65f, 0.28f, 1.55f), paleStone, levelRoot, roadRotation, true);
+            CreateBox("road segment finish", new Vector3(2.95f, RoadY(2.95f), 0f), new Vector3(2.45f, 0.28f, 1.55f), paleStone, levelRoot, roadRotation, true);
+            CreateBox("left rail start", new Vector3(-3.25f, RoadY(-3.25f) + 0.34f, -0.92f), new Vector3(2.45f, 0.58f, 0.18f), stone, levelRoot, roadRotation, true);
+            CreateBox("right rail start", new Vector3(-3.25f, RoadY(-3.25f) + 0.34f, 0.92f), new Vector3(2.45f, 0.58f, 0.18f), stone, levelRoot, roadRotation, true);
+            CreateBox("left rail finish", new Vector3(2.95f, RoadY(2.95f) + 0.34f, -0.92f), new Vector3(2.45f, 0.58f, 0.18f), stone, levelRoot, roadRotation, true);
+            CreateBox("right rail finish", new Vector3(2.95f, RoadY(2.95f) + 0.34f, 0.92f), new Vector3(2.45f, 0.58f, 0.18f), stone, levelRoot, roadRotation, true);
+
+            obstacleBox = CreateBox("Pinch Movable Obstacle Box", new Vector3(-2.85f, RoadY(-2.85f) + 0.37f, 0f), new Vector3(0.72f, 0.72f, 0.98f), boxIdle, levelRoot, roadRotation, true).AddComponent<Rigidbody>();
             obstacleBox.isKinematic = true;
             obstacleBox.interpolation = RigidbodyInterpolation.Interpolate;
             obstacleBox.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             obstacleRenderer = obstacleBox.GetComponent<Renderer>();
+            var slot = CreateBox("block side slot", new Vector3(-2.85f, RoadY(-2.85f) + 0.08f, 1.35f), new Vector3(0.95f, 0.08f, 0.75f), amberGlow, levelRoot, roadRotation, false);
+            blockSlotRenderer = slot.GetComponent<Renderer>();
+
+            startGate = CreateGate("start release gate", -3.55f);
+            bridgeGate = CreateGate("bridge release gate", -2.05f);
+            rotateGateStop = CreateGate("rotating gate stop", 0.9f);
+            goalGate = CreateGate("goal seal gate", 2.55f);
+
+            var leftBridge = CreateBox("left sliding bridge half", new Vector3(-1.4f, RoadY(-1.4f) + 0.02f, -0.58f), new Vector3(1.3f, 0.18f, 0.62f), boxHover, levelRoot, roadRotation, true);
+            var rightBridge = CreateBox("right sliding bridge half", new Vector3(-1.4f, RoadY(-1.4f) + 0.02f, 0.58f), new Vector3(1.3f, 0.18f, 0.62f), boxHover, levelRoot, roadRotation, true);
+            bridgeLeft = leftBridge.transform;
+            bridgeRight = rightBridge.transform;
+            bridgeLeftRenderer = leftBridge.GetComponent<Renderer>();
+            bridgeRightRenderer = rightBridge.GetComponent<Renderer>();
+
+            var rotateGateObject = CreateBox("rotating path gate", new Vector3(0.92f, RoadY(0.92f) + 0.42f, 0f), new Vector3(1.35f, 0.48f, 0.18f), boxHover, levelRoot, roadRotation * Quaternion.Euler(0f, 90f, 0f), true);
+            rotateGate = rotateGateObject.transform;
+            rotateGateRenderer = rotateGateObject.GetComponent<Renderer>();
+
+            var seal = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            seal.name = "final palm seal";
+            seal.transform.SetParent(levelRoot, false);
+            seal.transform.position = new Vector3(3.35f, RoadY(3.35f) + 0.14f, 1.22f);
+            seal.transform.localScale = new Vector3(0.58f, 0.05f, 0.58f);
+            sealRenderer = seal.GetComponent<Renderer>();
+            sealRenderer.sharedMaterial = amberGlow;
+            CreateTorus("final seal ring", seal.transform.position + new Vector3(0f, 0.06f, 0f), 0.53f, 0.04f, tealGlow, levelRoot);
 
             var ballObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             ballObject.name = "Golden Physics Ball";
             ballObject.transform.SetParent(levelRoot, false);
-            ballObject.transform.position = new Vector3(-4.05f, RoadY(-4.05f) + 0.46f, 0f);
+            ballObject.transform.position = new Vector3(-4.32f, RoadY(-4.32f) + 0.46f, 0f);
             ballObject.transform.localScale = Vector3.one * 0.46f;
             ballObject.GetComponent<Renderer>().sharedMaterial = ballMaterial;
             var body = ballObject.AddComponent<Rigidbody>();
@@ -751,8 +965,17 @@ namespace HandOfGod.Gameplay
             }
 
             var target = MapPinchToRoad(hand.pinchX, hand.pinchY);
-            var close = DistanceXZ(target, obstacleBox.position) < 0.72f;
             var isPinch = IsPinching(hand);
+            var twoHandsPinching = TryGetTwoPinchingHands(out var a, out var b);
+            UpdateLevel1Block(target, isPinch);
+            UpdateLevel1Bridge(a, b, twoHandsPinching);
+            UpdateLevel1RotatingGate(a, b, twoHandsPinching);
+            UpdateLevel1Seal(hand);
+        }
+
+        private void UpdateLevel1Block(Vector3 target, bool isPinch)
+        {
+            var close = DistanceXZ(target, obstacleBox.position) < 0.72f;
             obstacleRenderer.sharedMaterial = boxIdle;
             if (!boxHeld && close)
             {
@@ -773,14 +996,170 @@ namespace HandOfGod.Gameplay
                 obstacleBox.linearVelocity = Vector3.zero;
                 obstacleBox.angularVelocity = Vector3.zero;
             }
+
+            if (level1Stage == Level1Stage.ClearBlock && DistanceXZ(obstacleBox.position, new Vector3(-2.85f, 0f, 1.35f)) < 0.45f)
+            {
+                obstacleRenderer.sharedMaterial = boxHeldMaterial;
+                blockSlotRenderer.sharedMaterial = tealGlow;
+                OpenGate(startGate);
+                AdvanceLevel1(Level1Stage.JoinBridge);
+            }
+        }
+
+        private void UpdateLevel1Bridge(GestureHandFrame a, GestureHandFrame b, bool twoHandsPinching)
+        {
+            if (bridgeLocked || level1Stage != Level1Stage.JoinBridge || !twoHandsPinching || bridgeLeft == null || bridgeRight == null)
+            {
+                if (!bridgeLocked && level1Stage == Level1Stage.JoinBridge)
+                {
+                    level1BridgeStartDistance = 0f;
+                }
+                return;
+            }
+
+            var distance = Vector2.Distance(new Vector2(a.pinchX, a.pinchY), new Vector2(b.pinchX, b.pinchY));
+            if (level1BridgeStartDistance <= 0f)
+            {
+                level1BridgeStartDistance = Mathf.Max(distance, 0.001f);
+            }
+
+            var t = Mathf.Clamp01(1f - distance / level1BridgeStartDistance);
+            var y = RoadY(-1.4f) + 0.02f;
+            bridgeLeft.position = Vector3.Lerp(new Vector3(-1.4f, y, -0.58f), new Vector3(-1.4f, y, -0.28f), t);
+            bridgeRight.position = Vector3.Lerp(new Vector3(-1.4f, y, 0.58f), new Vector3(-1.4f, y, 0.28f), t);
+            bridgeLeftRenderer.sharedMaterial = boxHeldMaterial;
+            bridgeRightRenderer.sharedMaterial = boxHeldMaterial;
+            if (distance < level1BridgeStartDistance * 0.72f)
+            {
+                bridgeLocked = true;
+                bridgeLeft.position = new Vector3(-1.4f, y, -0.28f);
+                bridgeRight.position = new Vector3(-1.4f, y, 0.28f);
+                bridgeLeftRenderer.sharedMaterial = tealGlow;
+                bridgeRightRenderer.sharedMaterial = tealGlow;
+                OpenGate(bridgeGate);
+                AdvanceLevel1(Level1Stage.RotateGate);
+            }
+        }
+
+        private void UpdateLevel1RotatingGate(GestureHandFrame a, GestureHandFrame b, bool twoHandsPinching)
+        {
+            if (rotateGateLocked || level1Stage != Level1Stage.RotateGate || rotateGate == null)
+            {
+                return;
+            }
+
+            if (twoHandsPinching)
+            {
+                var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX);
+                if (!rotateGateHeld)
+                {
+                    rotateGateHeld = true;
+                    level1RotateStartAngle = angle;
+                }
+                var deltaDegrees = Mathf.DeltaAngle(level1RotateStartAngle * Mathf.Rad2Deg, angle * Mathf.Rad2Deg);
+                var yaw = Mathf.Clamp(90f - Mathf.Abs(deltaDegrees), 0f, 90f);
+                rotateGate.rotation = Quaternion.Euler(0f, 0f, Level1RoadAngleDegrees) * Quaternion.Euler(0f, yaw, 0f);
+                rotateGateRenderer.sharedMaterial = boxHeldMaterial;
+                if (yaw <= 12f)
+                {
+                    rotateGateLocked = true;
+                    rotateGate.rotation = Quaternion.Euler(0f, 0f, Level1RoadAngleDegrees);
+                    rotateGateRenderer.sharedMaterial = tealGlow;
+                    DestroyUnityObject(rotateGate.GetComponent<Collider>());
+                    OpenGate(rotateGateStop);
+                    AdvanceLevel1(Level1Stage.ActivateSeal);
+                }
+            }
+            else
+            {
+                rotateGateHeld = false;
+                if (!rotateGateLocked)
+                {
+                    rotateGateRenderer.sharedMaterial = boxHover;
+                }
+            }
+        }
+
+        private void UpdateLevel1Seal(GestureHandFrame hand)
+        {
+            if (sealActivated || level1Stage != Level1Stage.ActivateSeal)
+            {
+                return;
+            }
+
+            var target = ScreenToWorldPlane(hand.indexX, hand.indexY, RoadY(3.35f) + 0.14f);
+            var nearSeal = DistanceXZ(target, new Vector3(3.35f, 0f, 1.22f)) < 0.8f;
+            if (hand.openPalm && hand.score >= 0.45f && nearSeal)
+            {
+                sealHoldStart = sealHoldStart < 0f ? Time.time : sealHoldStart;
+                if (sealRenderer != null)
+                {
+                    sealRenderer.sharedMaterial = boxHeldMaterial;
+                }
+                if (Time.time - sealHoldStart >= 0.85f)
+                {
+                    sealActivated = true;
+                    if (sealRenderer != null)
+                    {
+                        sealRenderer.sharedMaterial = tealGlow;
+                    }
+                    OpenGate(goalGate);
+                    AdvanceLevel1(Level1Stage.RunToGoal);
+                }
+            }
+            else
+            {
+                sealHoldStart = -1f;
+                if (sealRenderer != null)
+                {
+                    sealRenderer.sharedMaterial = amberGlow;
+                }
+            }
+        }
+
+        private GameObject CreateGate(string name, float x)
+        {
+            return CreateBox(name, new Vector3(x, RoadY(x) + 0.66f, 0f), new Vector3(0.16f, 1.05f, 1.85f), amberGlow, levelRoot, Quaternion.Euler(0f, 0f, Level1RoadAngleDegrees), true);
+        }
+
+        private void OpenGate(GameObject gate)
+        {
+            if (gate != null)
+            {
+                gate.SetActive(false);
+            }
+        }
+
+        private void AdvanceLevel1(Level1Stage nextStage)
+        {
+            if (level1Stage == nextStage)
+            {
+                return;
+            }
+
+            level1Stage = nextStage;
+            level1SuccessUntil = Time.time + 1.2f;
+        }
+
+        private string Level1ObjectiveText()
+        {
+            return level1Stage switch
+            {
+                Level1Stage.ClearBlock => "Move the block into the glowing side slot to release the ball.",
+                Level1Stage.JoinBridge => "Pinch both bridge halves and pull your hands together to join the bridge.",
+                Level1Stage.RotateGate => "Pinch with both hands and rotate the gate until it aligns with the path.",
+                Level1Stage.ActivateSeal => "Open your palm over the glowing seal to unlock the final gate.",
+                Level1Stage.RunToGoal => "The path is open. Guide the ball safely to the altar.",
+                _ => "",
+            };
         }
 
         private Vector3 MapPinchToRoad(float normalizedX, float normalizedY)
         {
-            var x = Mathf.Lerp(-1.2f, 1.2f, Mathf.Clamp01(normalizedX));
-            var z = Mathf.Lerp(1.25f, -1.25f, Mathf.Clamp01(normalizedY));
-            x = Mathf.Clamp(x, -1.2f, 1.2f);
-            z = Mathf.Clamp(z, -1.25f, 1.25f);
+            var x = Mathf.Lerp(-4.2f, 4.15f, Mathf.Clamp01(normalizedX));
+            var z = Mathf.Lerp(1.55f, -1.55f, Mathf.Clamp01(normalizedY));
+            x = Mathf.Clamp(x, -4.2f, 4.15f);
+            z = Mathf.Clamp(z, -1.55f, 1.55f);
             return new Vector3(x, RoadY(x) + 0.37f, z);
         }
 
@@ -1384,9 +1763,28 @@ namespace HandOfGod.Gameplay
             labRenderer = null;
             obstacleBox = null;
             obstacleRenderer = null;
+            blockSlotRenderer = null;
+            bridgeLeft = null;
+            bridgeRight = null;
+            bridgeLeftRenderer = null;
+            bridgeRightRenderer = null;
+            rotateGate = null;
+            rotateGateRenderer = null;
+            sealRenderer = null;
             levelBall = null;
             labHeld = false;
             boxHeld = false;
+            bridgeLocked = false;
+            rotateGateLocked = false;
+            sealActivated = false;
+            rotateGateHeld = false;
+            startGate = null;
+            bridgeGate = null;
+            rotateGateStop = null;
+            goalGate = null;
+            level1BridgeStartDistance = 0f;
+            sealHoldStart = -1f;
+            level1SuccessUntil = -1f;
             twoHandStartDistance = 0f;
         }
 
