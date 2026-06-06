@@ -23,7 +23,7 @@ namespace HandOfGod.Gameplay
         {
             FindHands,
             OneHandDrag,
-            TwoHandScale,
+            TwoHandRotate,
             MapControl,
             Complete,
         }
@@ -79,11 +79,10 @@ namespace HandOfGod.Gameplay
         private TutorialStage tutorialStage = TutorialStage.FindHands;
         private float tutorialProgressStart = -1f;
         private bool tutorialObjectMoved;
-        private bool tutorialObjectScaled;
+        private bool tutorialObjectRotated;
         private bool tutorialMapAdjusted;
         private Vector3 tutorialDragStart;
         private float twoHandStartDistance;
-        private float twoHandStartScale;
         private float twoHandStartAngle;
         private Quaternion twoHandStartRotation;
         private float twoFingerMapStartDistance;
@@ -303,10 +302,11 @@ namespace HandOfGod.Gameplay
 
         private void DrawGlobalControls()
         {
-            DrawUtilityButton("global-exit", "Exit", new Rect(Screen.width - 104, 24, 80, 34), SafeDwellSeconds, QuitGame);
+            var exitRect = new Rect(Screen.width - 176, 38, 128, 46);
+            DrawUtilityButton("global-exit", "Exit", exitRect, SafeDwellSeconds, QuitGame);
             if (mode != GameMode.CalibrationOpen && mode != GameMode.CalibrationPinch)
             {
-                DrawUtilityButton("global-recalibrate", "Calibrate", new Rect(Screen.width - 214, 24, 102, 34), MenuDwellSeconds, ResetToCalibration);
+                DrawUtilityButton("global-recalibrate", "Calibrate", new Rect(exitRect.x - 150, exitRect.y, 132, 46), MenuDwellSeconds, ResetToCalibration);
             }
         }
 
@@ -316,30 +316,37 @@ namespace HandOfGod.Gameplay
             GUI.Label(new Rect(70, 62, 300, 30), "Hand of God");
             GUI.Label(new Rect(70, 92, 320, 24), "Hover your index finger over an option.");
             DrawHoverButton("start", "Start Game", new Rect(70, 120, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
-            DrawHoverButton("level0", "Level 0: Gesture Lab", new Rect(70, 172, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
+            DrawHoverButton("level0", "Level 0: Tutorial", new Rect(70, 172, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
             DrawHoverButton("level1", "Level 1: First Path", new Rect(70, 224, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             DrawHoverButton("recalibrate", "Recalibrate", new Rect(70, 276, 260, 42), MenuDwellSeconds, ResetToCalibration);
         }
 
         private void DrawLevel0Hud()
         {
-            DrawPanel(new Rect(24, 24, 430, 250));
-            GUI.Label(new Rect(44, 44, 360, 26), "Level 0: Gesture Tutorial");
-            GUI.Label(new Rect(44, 74, 380, 24), TutorialTitle());
-            GUI.Label(new Rect(44, 102, 385, 48), TutorialDetail());
-            DrawProgressBar(TutorialProgress(), new Rect(44, 158, 360, 18));
-            GUI.Label(new Rect(44, 184, 380, 24), HandStatusText());
-            GUI.Label(new Rect(44, 210, 380, 24), $"Pinch threshold: {pinchThreshold:0.00}");
+            var titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
+            var stepStyle = new GUIStyle(GUI.skin.label) { fontSize = 18, fontStyle = FontStyle.Bold };
+            var detailStyle = new GUIStyle(GUI.skin.label) { fontSize = 15, wordWrap = true };
+            var statusStyle = new GUIStyle(GUI.skin.label) { fontSize = 13 };
+            var panelWidth = Mathf.Min(Screen.width - 160f, 860f);
+            var panel = new Rect(Screen.width * 0.5f - panelWidth * 0.5f, 42f, panelWidth, 184f);
+            DrawPanel(panel);
+            GUI.Label(new Rect(panel.x + 32f, panel.y + 16f, panel.width - 64f, 32f), "Level 0: Gesture Tutorial", titleStyle);
+            GUI.Label(new Rect(panel.x + 32f, panel.y + 52f, panel.width - 64f, 28f), TutorialTitle(), stepStyle);
+            GUI.Label(new Rect(panel.x + 32f, panel.y + 84f, panel.width - 64f, 42f), TutorialDetail(), detailStyle);
+            DrawProgressBar(TutorialProgress(), new Rect(panel.x + 32f, panel.y + 132f, panel.width - 64f, 22f));
+            GUI.Label(new Rect(panel.x + 32f, panel.y + 158f, panel.width - 64f, 22f), $"{HandStatusText()}    Pinch threshold: {pinchThreshold:0.00}", statusStyle);
+
             if (tutorialStage == TutorialStage.Complete)
             {
-                DrawHoverButton("next-level", "Next: Level 1", new Rect(44, 232, 180, 36), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
+                DrawHoverButton("next-level", "Next: Level 1", new Rect(Screen.width * 0.5f - 120f, panel.yMax + 18f, 240f, 48f), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             }
 
-            DrawPanel(new Rect(Screen.width - 280, 70, 240, 190));
-            GUI.Label(new Rect(Screen.width - 260, 92, 200, 24), "Practice object");
-            DrawHoverButton("shape-cube", "Cube", new Rect(Screen.width - 260, 122, 190, 34), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cube));
-            DrawHoverButton("shape-sphere", "Sphere", new Rect(Screen.width - 260, 162, 190, 34), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Sphere));
-            DrawHoverButton("shape-cylinder", "Cylinder", new Rect(Screen.width - 260, 202, 190, 34), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cylinder));
+            var shapePanel = new Rect(Screen.width - 320f, 260f, 260f, 188f);
+            DrawPanel(shapePanel);
+            GUI.Label(new Rect(shapePanel.x + 20f, shapePanel.y + 18f, 220f, 24f), "Practice object");
+            DrawHoverButton("shape-cube", "Cube", new Rect(shapePanel.x + 20f, shapePanel.y + 50f, 210f, 34f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cube));
+            DrawHoverButton("shape-sphere", "Sphere", new Rect(shapePanel.x + 20f, shapePanel.y + 94f, 210f, 34f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Sphere));
+            DrawHoverButton("shape-cylinder", "Cylinder", new Rect(shapePanel.x + 20f, shapePanel.y + 138f, 210f, 34f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cylinder));
         }
 
         private void DrawLevel1Hud()
@@ -389,7 +396,7 @@ namespace HandOfGod.Gameplay
             tutorialStage = TutorialStage.FindHands;
             tutorialProgressStart = -1f;
             tutorialObjectMoved = false;
-            tutorialObjectScaled = false;
+            tutorialObjectRotated = false;
             tutorialMapAdjusted = false;
             twoFingerMapStartDistance = 0f;
         }
@@ -459,14 +466,15 @@ namespace HandOfGod.Gameplay
             UpdateTutorialStage(frame);
             var target = ScreenToWorldPlane(hand.pinchX, hand.pinchY, 0.7f);
             var isPinch = IsPinching(hand);
+            var twoHandsPinching = TryGetTwoPinchingHands(out var a, out var b);
             var close = Vector3.Distance(target, labBody.position) < 1.0f;
-            if (!labHeld && isPinch && close && tutorialStage == TutorialStage.OneHandDrag)
+            if (!labHeld && isPinch && close && !twoHandsPinching && CanDragLabObject())
             {
                 labHeld = true;
                 labVelocity = Vector3.zero;
                 tutorialDragStart = labBody.position;
             }
-            if (labHeld && !isPinch)
+            if (labHeld && (!isPinch || twoHandsPinching))
             {
                 labHeld = false;
             }
@@ -479,28 +487,26 @@ namespace HandOfGod.Gameplay
                 tutorialObjectMoved = Vector3.Distance(labBody.position, tutorialDragStart) > 0.55f;
             }
 
-            if (tutorialStage == TutorialStage.TwoHandScale && TryGetTwoPinchingHands(out var a, out var b))
+            if (twoHandsPinching && CanRotateLabObject())
             {
-                var distance = Vector2.Distance(new Vector2(a.pinchX, a.pinchY), new Vector2(b.pinchX, b.pinchY));
                 var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX);
                 if (twoHandStartDistance <= 0f)
                 {
+                    var distance = Vector2.Distance(new Vector2(a.pinchX, a.pinchY), new Vector2(b.pinchX, b.pinchY));
                     twoHandStartDistance = Mathf.Max(distance, 0.001f);
-                    twoHandStartScale = labObject.transform.localScale.x;
                     twoHandStartAngle = angle;
                     twoHandStartRotation = labObject.transform.rotation;
                 }
-                var scale = Mathf.Clamp(twoHandStartScale * distance / twoHandStartDistance, 0.45f, 1.6f);
-                labObject.transform.localScale = Vector3.one * scale;
-                labObject.transform.rotation = twoHandStartRotation * Quaternion.Euler(0f, -(angle - twoHandStartAngle) * Mathf.Rad2Deg, 0f);
-                tutorialObjectScaled = Mathf.Abs(scale - twoHandStartScale) > 0.18f;
+                var deltaDegrees = Mathf.DeltaAngle(twoHandStartAngle * Mathf.Rad2Deg, angle * Mathf.Rad2Deg);
+                labObject.transform.rotation = twoHandStartRotation * Quaternion.Euler(0f, deltaDegrees, 0f);
+                tutorialObjectRotated = Mathf.Abs(deltaDegrees) > 12f;
             }
             else
             {
                 twoHandStartDistance = 0f;
             }
 
-            if (tutorialStage == TutorialStage.MapControl && TryGetTwoFingerMapHands(frame, out var left, out var right))
+            if (CanControlMap() && TryGetTwoFingerMapHands(frame, out var left, out var right))
             {
                 var leftPoint = FingerMidpoint(left);
                 var rightPoint = FingerMidpoint(right);
@@ -524,6 +530,21 @@ namespace HandOfGod.Gameplay
             }
         }
 
+        private bool CanDragLabObject()
+        {
+            return tutorialStage == TutorialStage.OneHandDrag || tutorialStage == TutorialStage.Complete;
+        }
+
+        private bool CanRotateLabObject()
+        {
+            return tutorialStage == TutorialStage.TwoHandRotate || tutorialStage == TutorialStage.Complete;
+        }
+
+        private bool CanControlMap()
+        {
+            return tutorialStage == TutorialStage.MapControl || tutorialStage == TutorialStage.Complete;
+        }
+
         private void UpdateTutorialStage(GestureFrame frame)
         {
             switch (tutorialStage)
@@ -532,10 +553,10 @@ namespace HandOfGod.Gameplay
                     UpdateStageHold(HasLeftAndRightHands(frame), TutorialStage.OneHandDrag);
                     break;
                 case TutorialStage.OneHandDrag:
-                    UpdateStageHold(tutorialObjectMoved, TutorialStage.TwoHandScale);
+                    UpdateStageHold(tutorialObjectMoved, TutorialStage.TwoHandRotate);
                     break;
-                case TutorialStage.TwoHandScale:
-                    UpdateStageHold(tutorialObjectScaled, TutorialStage.MapControl);
+                case TutorialStage.TwoHandRotate:
+                    UpdateStageHold(tutorialObjectRotated, TutorialStage.MapControl);
                     break;
                 case TutorialStage.MapControl:
                     UpdateStageHold(tutorialMapAdjusted, TutorialStage.Complete);
@@ -572,9 +593,9 @@ namespace HandOfGod.Gameplay
             {
                 TutorialStage.FindHands => "1/5 Show both hands and point with index fingers.",
                 TutorialStage.OneHandDrag => "2/5 Pinch an object with one hand and drag it.",
-                TutorialStage.TwoHandScale => "3/5 Pinch with both hands to scale and rotate it.",
+                TutorialStage.TwoHandRotate => "3/5 Pinch both sides and rotate the object.",
                 TutorialStage.MapControl => "4/5 Bring index and middle fingers together on both hands.",
-                TutorialStage.Complete => "5/5 Tutorial complete.",
+                TutorialStage.Complete => "5/5 Tutorial complete. Keep practicing or enter Level 1.",
                 _ => "",
             };
         }
@@ -585,9 +606,9 @@ namespace HandOfGod.Gameplay
             {
                 TutorialStage.FindHands => "Keep left and right hands visible. The skeleton labels show which hand is detected.",
                 TutorialStage.OneHandDrag => "Touch thumb and index finger, grab the object, then move it across the practice slab.",
-                TutorialStage.TwoHandScale => "Pinch with both hands at the same time. Move hands apart or twist them.",
+                TutorialStage.TwoHandRotate => "Pinch the object from both sides, then turn your hands like rotating a real block.",
                 TutorialStage.MapControl => "On each hand, keep index and middle fingertips close, then move both hands to adjust the map.",
-                TutorialStage.Complete => "Hold over Next: Level 1 when you are ready.",
+                TutorialStage.Complete => "You can still drag, rotate, and adjust the map. Hold over Next: Level 1 when ready.",
                 _ => "",
             };
         }
