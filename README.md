@@ -459,6 +459,12 @@ cd "unity\gesture_bridge"
 - OpenCV：摄像头采集、镜像、缩放和 JPEG 编码。
 - NumPy：手部距离、速度和平滑计算。
 
+## 开源项目与资料来源
+
+- MediaPipe：Google 开源的跨平台感知计算框架。本项目通过 `mediapipe==0.10.14` Python package 使用其 Hands solution，获取手部 21 点 landmarks、handedness 和识别置信度。
+  - GitHub: `https://github.com/google-ai-edge/mediapipe`
+  - Documentation: `https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker`
+
 ## Git 与提交约定
 
 - README 与功能实现保持同步。
