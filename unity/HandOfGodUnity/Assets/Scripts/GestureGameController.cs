@@ -405,7 +405,7 @@ namespace HandOfGod.Gameplay
                 DrawSuccessBanner(new Rect(Screen.width * 0.5f - 210f, panel.yMax + 14f, 420f, 58f), tutorialStage == TutorialStage.Complete ? "TUTORIAL COMPLETE" : "SUCCESS");
                 var buttonLabel = tutorialStage == TutorialStage.Complete ? "Next: Level 1" : "Continue";
                 var buttonAction = tutorialStage == TutorialStage.Complete ? (System.Action)(() => StartLevel(GameMode.Level1)) : AdvanceTutorialStage;
-                DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 170f, panel.yMax + 82f, 340f, 64f), MenuDwellSeconds, buttonAction);
+                DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 170f, panel.yMax + 82f, 340f, 64f), MenuDwellSeconds, buttonAction, 24);
             }
 
             var shapePanel = new Rect(Screen.width - 320f, 260f, 260f, 188f);
@@ -446,8 +446,8 @@ namespace HandOfGod.Gameplay
             GUI.color = new Color(0.92f, 1f, 0.94f, 1f);
             GUI.Label(new Rect(panelX + 48, 166, 364, 30), "The ball reached the altar.", messageStyle);
             GUI.color = Color.white;
-            DrawHoverButton("pass-restart", "Restart", new Rect(Screen.width / 2f - 150f, 222, 130, 44), MenuDwellSeconds, () => StartLevel(lastLevel));
-            DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 20f, 222, 130, 44), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
+            DrawHoverButton("pass-restart", "Restart", new Rect(Screen.width / 2f - 170f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(lastLevel), 20);
+            DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 20f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level0), 20);
         }
 
         private void DrawSuccessBanner(Rect rect, string text)
@@ -1353,17 +1353,17 @@ namespace HandOfGod.Gameplay
             GUI.color = Color.white;
         }
 
-        private void DrawHoverButton(string key, string label, Rect rect, float dwellSeconds, System.Action action)
+        private void DrawHoverButton(string key, string label, Rect rect, float dwellSeconds, System.Action action, int fontSize = 0)
         {
-            DrawButtonCore(key, label, rect, dwellSeconds, action, false);
+            DrawButtonCore(key, label, rect, dwellSeconds, action, false, fontSize);
         }
 
         private void DrawUtilityButton(string key, string label, Rect rect, float dwellSeconds, System.Action action)
         {
-            DrawButtonCore(key, label, rect, dwellSeconds, action, true);
+            DrawButtonCore(key, label, rect, dwellSeconds, action, true, 0);
         }
 
-        private void DrawButtonCore(string key, string label, Rect rect, float dwellSeconds, System.Action action, bool allowMouseClick)
+        private void DrawButtonCore(string key, string label, Rect rect, float dwellSeconds, System.Action action, bool allowMouseClick, int fontSize)
         {
             var cursor = CursorScreen();
             var inside = rect.Contains(cursor);
@@ -1382,10 +1382,18 @@ namespace HandOfGod.Gameplay
             }
 
             var progress = hoverKey == key && hoverStart >= 0f ? Mathf.Clamp01((Time.time - hoverStart) / dwellSeconds) : 0f;
-            var clicked = allowMouseClick ? GUI.Button(rect, label) : false;
+            var style = fontSize > 0
+                ? new GUIStyle(GUI.skin.button)
+                {
+                    fontSize = fontSize,
+                    fontStyle = FontStyle.Bold,
+                    alignment = TextAnchor.MiddleCenter,
+                }
+                : GUI.skin.button;
+            var clicked = allowMouseClick ? GUI.Button(rect, label, style) : false;
             if (!allowMouseClick)
             {
-                GUI.Box(rect, label);
+                GUI.Box(rect, label, style);
             }
             var bar = new Rect(rect.x, rect.yMax - 6f, rect.width * progress, 6f);
             GUI.color = Color.cyan;

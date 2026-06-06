@@ -125,7 +125,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - 可操作物体接近手势点时高亮。
 - 抓取、旋转、桥板合拢和神印激活时使用高亮材质。
 - 成功提示使用更大的字号、暖色高亮和脉冲式视觉反馈。
-- `Continue` 和 `Next: Level 1` 按钮尺寸较大，位于成功提示下方，便于手势悬停选择。
+- `Continue` 和 `Next: Level 1` 按钮尺寸和字体都较大，位于成功提示下方，便于手势悬停选择。
 
 ### Level 1: Trial of the Moving Path
 
