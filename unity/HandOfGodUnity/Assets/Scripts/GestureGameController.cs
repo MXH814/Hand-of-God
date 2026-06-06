@@ -19,9 +19,19 @@ namespace HandOfGod.Gameplay
             Pass,
         }
 
+        private enum TutorialStage
+        {
+            FindHands,
+            OneHandDrag,
+            TwoHandScale,
+            MapControl,
+            Complete,
+        }
+
         private const float CalibrationHoldSeconds = 1f;
         private const float MenuDwellSeconds = 0.85f;
         private const float SafeDwellSeconds = 1f;
+        private const float TutorialHoldSeconds = 0.75f;
         private const float Level1RoadCenterY = 1f;
         private const float Level1RoadAngleDegrees = -8f;
         private static readonly int[] HandConnectionPairs =
@@ -66,10 +76,20 @@ namespace HandOfGod.Gameplay
         private Vector3 labVelocity;
         private bool labHeld;
         private bool labCompleted;
+        private TutorialStage tutorialStage = TutorialStage.FindHands;
+        private float tutorialProgressStart = -1f;
+        private bool tutorialObjectMoved;
+        private bool tutorialObjectScaled;
+        private bool tutorialMapAdjusted;
+        private Vector3 tutorialDragStart;
         private float twoHandStartDistance;
         private float twoHandStartScale;
         private float twoHandStartAngle;
         private Quaternion twoHandStartRotation;
+        private float twoFingerMapStartDistance;
+        private float twoFingerMapStartAngle;
+        private Vector3 twoFingerMapStartScale;
+        private Quaternion twoFingerMapStartRotation;
         private Rigidbody obstacleBox;
         private Renderer obstacleRenderer;
         private Vector3 boxVelocity;
@@ -106,6 +126,7 @@ namespace HandOfGod.Gameplay
             BuildCameraAndLights();
             BuildLobbyShell();
             ResetToCalibration();
+            StartGestureBridgeIfNeeded();
         }
 
         private void Awake()
@@ -163,9 +184,17 @@ namespace HandOfGod.Gameplay
                 bridgeStatus = $"Camera bridge exited ({bridgeProcess.ExitCode}). Check gesture-bridge-runtime.log.";
                 launchedBridge = false;
             }
+            else if (cameraFrames != null && cameraFrames.HasFreshFrame)
+            {
+                bridgeStatus = "Camera image live; show your hand to the camera.";
+            }
             else if (usesExternalBridge)
             {
-                bridgeStatus = "Launcher started camera bridge; waiting for hand...";
+                bridgeStatus = "Launcher started camera bridge; waiting for camera image...";
+            }
+            else if (launchedBridge)
+            {
+                bridgeStatus = "Starting camera bridge; waiting for camera image...";
             }
         }
 
@@ -201,7 +230,7 @@ namespace HandOfGod.Gameplay
         private void ResetToCalibration()
         {
             ClearLevel();
-            SetLobbyVisible(true);
+            SetLobbyVisible(false);
             mode = GameMode.CalibrationOpen;
             holdStart = -1f;
             hoverKey = "";
@@ -238,7 +267,7 @@ namespace HandOfGod.Gameplay
                 {
                     var average = pinchSampleCount > 0 ? pinchSampleSum / pinchSampleCount : 0.34f;
                     pinchThreshold = Mathf.Clamp(average * 1.65f, 0.36f, 0.62f);
-                    mode = GameMode.Menu;
+                    StartLevel(GameMode.Level0);
                     holdStart = -1f;
                 }
             }
@@ -250,7 +279,7 @@ namespace HandOfGod.Gameplay
 
         private void DrawCalibration()
         {
-            var panel = new Rect(30, 30, 450, 248);
+            var panel = new Rect(Screen.width / 2f - 250f, 34, 500, 252);
             var title = mode == GameMode.CalibrationOpen ? "Calibration: Open Hand" : "Calibration: Pinch";
             var detail = mode == GameMode.CalibrationOpen
                 ? "Hold an open palm for 1 second."
@@ -258,31 +287,26 @@ namespace HandOfGod.Gameplay
             var progress = holdStart < 0f ? 0f : Mathf.Clamp01((Time.time - holdStart) / CalibrationHoldSeconds);
 
             DrawPanel(panel);
-            GUI.Label(new Rect(50, 48, 380, 30), "Hand of God");
-            GUI.Label(new Rect(50, 80, 380, 26), title);
-            GUI.Label(new Rect(50, 110, 390, 24), detail);
-            DrawProgressBar(progress, new Rect(50, 138, 360, 18));
+            GUI.Label(new Rect(panel.x + 24, panel.y + 18, 430, 30), "Hand of God");
+            GUI.Label(new Rect(panel.x + 24, panel.y + 50, 430, 26), title);
+            GUI.Label(new Rect(panel.x + 24, panel.y + 82, 440, 24), detail);
+            DrawProgressBar(progress, new Rect(panel.x + 24, panel.y + 112, 410, 18));
             var cameraStatus = cameraFrames != null && cameraFrames.HasFreshFrame ? "Camera image: live" : "Camera image: waiting";
-            GUI.Label(new Rect(50, 164, 410, 24), receiver != null && receiver.HasFreshFrame ? "Camera: tracking hand" : $"{bridgeStatus} | {cameraStatus}");
-            DrawUtilityButton("start-camera", "Start Camera", new Rect(50, 194, 180, 34), SafeDwellSeconds, StartVisibleGestureBridge);
-            DrawHoverButton("skip", "Skip calibration", new Rect(250, 194, 180, 34), SafeDwellSeconds, () =>
+            GUI.Label(new Rect(panel.x + 24, panel.y + 140, 450, 24), receiver != null && receiver.HasFreshFrame ? "Camera: tracking hand" : $"{bridgeStatus} | {cameraStatus}");
+            DrawUtilityButton("start-camera", "Start / Retry Camera", new Rect(panel.x + 24, panel.y + 178, 190, 34), SafeDwellSeconds, StartVisibleGestureBridge);
+            DrawHoverButton("skip", "Skip calibration", new Rect(panel.x + 236, panel.y + 178, 190, 34), SafeDwellSeconds, () =>
             {
                 pinchThreshold = 0.56f;
-                mode = GameMode.Menu;
+                StartLevel(GameMode.Level0);
             });
         }
 
         private void DrawGlobalControls()
         {
             DrawUtilityButton("global-exit", "Exit", new Rect(Screen.width - 104, 24, 80, 34), SafeDwellSeconds, QuitGame);
-            if (mode != GameMode.Menu && mode != GameMode.CalibrationOpen && mode != GameMode.CalibrationPinch)
+            if (mode != GameMode.CalibrationOpen && mode != GameMode.CalibrationPinch)
             {
-                DrawUtilityButton("global-menu", "Menu", new Rect(Screen.width - 198, 24, 86, 34), MenuDwellSeconds, () =>
-                {
-                    ClearLevel();
-                    SetLobbyVisible(true);
-                    mode = GameMode.Menu;
-                });
+                DrawUtilityButton("global-recalibrate", "Calibrate", new Rect(Screen.width - 214, 24, 102, 34), MenuDwellSeconds, ResetToCalibration);
             }
         }
 
@@ -299,20 +323,23 @@ namespace HandOfGod.Gameplay
 
         private void DrawLevel0Hud()
         {
-            DrawPanel(new Rect(24, 24, 380, 245));
-            GUI.Label(new Rect(44, 44, 320, 26), "Level 0: Gesture Lab");
-            GUI.Label(new Rect(44, 74, 330, 24), labCompleted ? "Complete: you moved the object." : "Pinch the object and move it.");
-            GUI.Label(new Rect(44, 100, 330, 24), $"Pinch threshold: {pinchThreshold:0.00}");
-            if (labCompleted)
+            DrawPanel(new Rect(24, 24, 430, 250));
+            GUI.Label(new Rect(44, 44, 360, 26), "Level 0: Gesture Tutorial");
+            GUI.Label(new Rect(44, 74, 380, 24), TutorialTitle());
+            GUI.Label(new Rect(44, 102, 385, 48), TutorialDetail());
+            DrawProgressBar(TutorialProgress(), new Rect(44, 158, 360, 18));
+            GUI.Label(new Rect(44, 184, 380, 24), HandStatusText());
+            GUI.Label(new Rect(44, 210, 380, 24), $"Pinch threshold: {pinchThreshold:0.00}");
+            if (tutorialStage == TutorialStage.Complete)
             {
-                DrawHoverButton("next-level", "Next: Level 1", new Rect(44, 150, 210, 38), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
+                DrawHoverButton("next-level", "Next: Level 1", new Rect(44, 232, 180, 36), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             }
-            DrawHoverButton("lab-menu", "Menu", new Rect(44, 198, 150, 36), MenuDwellSeconds, () => mode = GameMode.Menu);
 
-            DrawPanel(new Rect(Screen.width - 270, 36, 230, 170));
-            DrawHoverButton("shape-cube", "Cube", new Rect(Screen.width - 250, 56, 190, 38), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cube));
-            DrawHoverButton("shape-sphere", "Sphere", new Rect(Screen.width - 250, 102, 190, 38), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Sphere));
-            DrawHoverButton("shape-cylinder", "Cylinder", new Rect(Screen.width - 250, 148, 190, 38), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cylinder));
+            DrawPanel(new Rect(Screen.width - 280, 70, 240, 190));
+            GUI.Label(new Rect(Screen.width - 260, 92, 200, 24), "Practice object");
+            DrawHoverButton("shape-cube", "Cube", new Rect(Screen.width - 260, 122, 190, 34), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cube));
+            DrawHoverButton("shape-sphere", "Sphere", new Rect(Screen.width - 260, 162, 190, 34), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Sphere));
+            DrawHoverButton("shape-cylinder", "Cylinder", new Rect(Screen.width - 260, 202, 190, 34), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cylinder));
         }
 
         private void DrawLevel1Hud()
@@ -321,7 +348,7 @@ namespace HandOfGod.Gameplay
             GUI.Label(new Rect(44, 44, 320, 26), "Level 1: First Path");
             GUI.Label(new Rect(44, 74, 320, 24), boxHeld ? "Pinch: moving the box" : "Pinch the box and move it away.");
             GUI.Label(new Rect(44, 100, 320, 24), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}" : "Ball speed: 0.00");
-            DrawHoverButton("level1-menu", "Menu", new Rect(44, 136, 150, 36), MenuDwellSeconds, () => mode = GameMode.Menu);
+            DrawHoverButton("level1-calibrate", "Calibrate", new Rect(44, 136, 150, 36), MenuDwellSeconds, ResetToCalibration);
         }
 
         private void DrawPassHud()
@@ -331,7 +358,7 @@ namespace HandOfGod.Gameplay
             GUI.Label(new Rect(panelX + 40, 98, 300, 34), "PASS");
             GUI.Label(new Rect(panelX + 40, 132, 300, 24), "The ball reached the altar.");
             DrawHoverButton("pass-restart", "Restart", new Rect(Screen.width / 2f - 140f, 170, 120, 40), MenuDwellSeconds, () => StartLevel(lastLevel));
-            DrawHoverButton("pass-menu", "Menu", new Rect(Screen.width / 2f + 20f, 170, 120, 40), MenuDwellSeconds, () => mode = GameMode.Menu);
+            DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 20f, 170, 120, 40), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
         }
 
         private void StartLevel(GameMode level)
@@ -359,6 +386,12 @@ namespace HandOfGod.Gameplay
             CreateBox("lab guide", new Vector3(0f, 0.02f, 0f), new Vector3(3.6f, 0.05f, 2.0f), paleStone, levelRoot, Quaternion.identity, false);
             ReplaceLabObject(PrimitiveType.Cube);
             labCompleted = false;
+            tutorialStage = TutorialStage.FindHands;
+            tutorialProgressStart = -1f;
+            tutorialObjectMoved = false;
+            tutorialObjectScaled = false;
+            tutorialMapAdjusted = false;
+            twoFingerMapStartDistance = 0f;
         }
 
         private void BuildLobbyShell()
@@ -422,13 +455,16 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
+            var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
+            UpdateTutorialStage(frame);
             var target = ScreenToWorldPlane(hand.pinchX, hand.pinchY, 0.7f);
             var isPinch = IsPinching(hand);
             var close = Vector3.Distance(target, labBody.position) < 1.0f;
-            if (!labHeld && isPinch && close)
+            if (!labHeld && isPinch && close && tutorialStage == TutorialStage.OneHandDrag)
             {
                 labHeld = true;
                 labVelocity = Vector3.zero;
+                tutorialDragStart = labBody.position;
             }
             if (labHeld && !isPinch)
             {
@@ -440,10 +476,10 @@ namespace HandOfGod.Gameplay
                 target.z = Mathf.Clamp(target.z, -1.0f, 1.0f);
                 target.y = 0.7f;
                 labBody.MovePosition(Vector3.SmoothDamp(labBody.position, target, ref labVelocity, 0.055f));
-                labCompleted = true;
+                tutorialObjectMoved = Vector3.Distance(labBody.position, tutorialDragStart) > 0.55f;
             }
 
-            if (TryGetTwoPinchingHands(out var a, out var b))
+            if (tutorialStage == TutorialStage.TwoHandScale && TryGetTwoPinchingHands(out var a, out var b))
             {
                 var distance = Vector2.Distance(new Vector2(a.pinchX, a.pinchY), new Vector2(b.pinchX, b.pinchY));
                 var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX);
@@ -457,11 +493,120 @@ namespace HandOfGod.Gameplay
                 var scale = Mathf.Clamp(twoHandStartScale * distance / twoHandStartDistance, 0.45f, 1.6f);
                 labObject.transform.localScale = Vector3.one * scale;
                 labObject.transform.rotation = twoHandStartRotation * Quaternion.Euler(0f, -(angle - twoHandStartAngle) * Mathf.Rad2Deg, 0f);
+                tutorialObjectScaled = Mathf.Abs(scale - twoHandStartScale) > 0.18f;
             }
             else
             {
                 twoHandStartDistance = 0f;
             }
+
+            if (tutorialStage == TutorialStage.MapControl && TryGetTwoFingerMapHands(frame, out var left, out var right))
+            {
+                var leftPoint = FingerMidpoint(left);
+                var rightPoint = FingerMidpoint(right);
+                var distance = Vector2.Distance(leftPoint, rightPoint);
+                var angle = Mathf.Atan2(rightPoint.y - leftPoint.y, rightPoint.x - leftPoint.x);
+                if (twoFingerMapStartDistance <= 0f)
+                {
+                    twoFingerMapStartDistance = Mathf.Max(distance, 0.001f);
+                    twoFingerMapStartAngle = angle;
+                    twoFingerMapStartScale = levelRoot.localScale;
+                    twoFingerMapStartRotation = levelRoot.rotation;
+                }
+                var mapScale = Mathf.Clamp(twoFingerMapStartScale.x * distance / twoFingerMapStartDistance, 0.82f, 1.22f);
+                levelRoot.localScale = Vector3.one * mapScale;
+                levelRoot.rotation = twoFingerMapStartRotation * Quaternion.Euler(0f, -(angle - twoFingerMapStartAngle) * Mathf.Rad2Deg, 0f);
+                tutorialMapAdjusted = Mathf.Abs(mapScale - twoFingerMapStartScale.x) > 0.06f || Mathf.Abs(Mathf.DeltaAngle(levelRoot.eulerAngles.y, twoFingerMapStartRotation.eulerAngles.y)) > 7f;
+            }
+            else
+            {
+                twoFingerMapStartDistance = 0f;
+            }
+        }
+
+        private void UpdateTutorialStage(GestureFrame frame)
+        {
+            switch (tutorialStage)
+            {
+                case TutorialStage.FindHands:
+                    UpdateStageHold(HasLeftAndRightHands(frame), TutorialStage.OneHandDrag);
+                    break;
+                case TutorialStage.OneHandDrag:
+                    UpdateStageHold(tutorialObjectMoved, TutorialStage.TwoHandScale);
+                    break;
+                case TutorialStage.TwoHandScale:
+                    UpdateStageHold(tutorialObjectScaled, TutorialStage.MapControl);
+                    break;
+                case TutorialStage.MapControl:
+                    UpdateStageHold(tutorialMapAdjusted, TutorialStage.Complete);
+                    break;
+                case TutorialStage.Complete:
+                    labCompleted = true;
+                    break;
+            }
+        }
+
+        private void UpdateStageHold(bool condition, TutorialStage nextStage)
+        {
+            if (condition)
+            {
+                tutorialProgressStart = tutorialProgressStart < 0f ? Time.time : tutorialProgressStart;
+                if (Time.time - tutorialProgressStart >= TutorialHoldSeconds)
+                {
+                    tutorialStage = nextStage;
+                    tutorialProgressStart = -1f;
+                    labHeld = false;
+                    twoHandStartDistance = 0f;
+                    twoFingerMapStartDistance = 0f;
+                }
+            }
+            else
+            {
+                tutorialProgressStart = -1f;
+            }
+        }
+
+        private string TutorialTitle()
+        {
+            return tutorialStage switch
+            {
+                TutorialStage.FindHands => "1/5 Show both hands and point with index fingers.",
+                TutorialStage.OneHandDrag => "2/5 Pinch an object with one hand and drag it.",
+                TutorialStage.TwoHandScale => "3/5 Pinch with both hands to scale and rotate it.",
+                TutorialStage.MapControl => "4/5 Bring index and middle fingers together on both hands.",
+                TutorialStage.Complete => "5/5 Tutorial complete.",
+                _ => "",
+            };
+        }
+
+        private string TutorialDetail()
+        {
+            return tutorialStage switch
+            {
+                TutorialStage.FindHands => "Keep left and right hands visible. The skeleton labels show which hand is detected.",
+                TutorialStage.OneHandDrag => "Touch thumb and index finger, grab the object, then move it across the practice slab.",
+                TutorialStage.TwoHandScale => "Pinch with both hands at the same time. Move hands apart or twist them.",
+                TutorialStage.MapControl => "On each hand, keep index and middle fingertips close, then move both hands to adjust the map.",
+                TutorialStage.Complete => "Hold over Next: Level 1 when you are ready.",
+                _ => "",
+            };
+        }
+
+        private float TutorialProgress()
+        {
+            if (tutorialStage == TutorialStage.Complete)
+            {
+                return 1f;
+            }
+            return tutorialProgressStart < 0f ? 0f : Mathf.Clamp01((Time.time - tutorialProgressStart) / TutorialHoldSeconds);
+        }
+
+        private string HandStatusText()
+        {
+            var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
+            var left = HasHandedness(frame, "Left") ? "Left: yes" : "Left: waiting";
+            var right = HasHandedness(frame, "Right") ? "Right: yes" : "Right: waiting";
+            return $"{left}    {right}    Hands: {frame.handCount}";
         }
 
         private void BuildLevel1()
@@ -548,6 +693,87 @@ namespace HandOfGod.Gameplay
         private bool IsPinching(GestureHandFrame hand)
         {
             return hand.score >= 0.35f && hand.pinchDistance < pinchThreshold;
+        }
+
+        private static bool HasLeftAndRightHands(GestureFrame frame)
+        {
+            return HasHandedness(frame, "Left") && HasHandedness(frame, "Right");
+        }
+
+        private static bool HasHandedness(GestureFrame frame, string handedness)
+        {
+            if (frame.hands == null)
+            {
+                return false;
+            }
+
+            foreach (var hand in frame.hands)
+            {
+                if (hand.score >= 0.35f && string.Equals(hand.handedness, handedness, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool TryGetTwoFingerMapHands(GestureFrame frame, out GestureHandFrame a, out GestureHandFrame b)
+        {
+            a = default;
+            b = default;
+            if (frame.hands == null || frame.hands.Length < 2)
+            {
+                return false;
+            }
+
+            var found = 0;
+            foreach (var hand in frame.hands)
+            {
+                if (hand.score < 0.35f || !IndexMiddleTogether(hand))
+                {
+                    continue;
+                }
+
+                if (found == 0)
+                {
+                    a = hand;
+                }
+                else
+                {
+                    b = hand;
+                    return true;
+                }
+                found++;
+            }
+            return false;
+        }
+
+        private static bool IndexMiddleTogether(GestureHandFrame hand)
+        {
+            if (hand.landmarks == null || hand.landmarks.Length < 21 || hand.palmSpan <= 0f)
+            {
+                return false;
+            }
+
+            var indexTip = hand.landmarks[8];
+            var middleTip = hand.landmarks[12];
+            var dx = indexTip.x - middleTip.x;
+            var dy = indexTip.y - middleTip.y;
+            var dz = indexTip.z - middleTip.z;
+            var distance = Mathf.Sqrt(dx * dx + dy * dy + dz * dz) / Mathf.Max(hand.palmSpan, 0.0001f);
+            return distance < 0.55f && hand.indexExtended && hand.middleExtended;
+        }
+
+        private static Vector2 FingerMidpoint(GestureHandFrame hand)
+        {
+            if (hand.landmarks == null || hand.landmarks.Length < 13)
+            {
+                return new Vector2(hand.indexX, hand.indexY);
+            }
+
+            return new Vector2(
+                (hand.landmarks[8].x + hand.landmarks[12].x) * 0.5f,
+                (hand.landmarks[8].y + hand.landmarks[12].y) * 0.5f);
         }
 
         private bool TryGetPrimaryHand(out GestureHandFrame hand)
@@ -690,7 +916,10 @@ namespace HandOfGod.Gameplay
                     continue;
                 }
 
-                var pinchColor = IsPinching(hand) ? new Color(0.12f, 1f, 0.85f, 1f) : new Color(1f, 1f, 1f, 0.92f);
+                var baseColor = string.Equals(hand.handedness, "Left", System.StringComparison.OrdinalIgnoreCase)
+                    ? new Color(0.20f, 0.74f, 1f, 0.96f)
+                    : new Color(1f, 0.72f, 0.20f, 0.96f);
+                var pinchColor = IsPinching(hand) ? new Color(0.12f, 1f, 0.85f, 1f) : baseColor;
                 for (var i = 0; i < HandConnectionPairs.Length; i += 2)
                 {
                     var a = LandmarkToScreen(hand.landmarks[HandConnectionPairs[i]]);
@@ -702,9 +931,13 @@ namespace HandOfGod.Gameplay
                 {
                     var point = LandmarkToScreen(hand.landmarks[i]);
                     var radius = i == 4 || i == 8 ? 5f : 3.5f;
-                    GUI.color = i == 4 || i == 8 ? Color.cyan : new Color(1f, 0.25f, 0.38f, 1f);
+                    GUI.color = i == 4 || i == 8 ? Color.cyan : baseColor;
                     GUI.DrawTexture(new Rect(point.x - radius, point.y - radius, radius * 2f, radius * 2f), Texture2D.whiteTexture);
                 }
+                var label = $"{hand.handedness} {hand.score:0.00}";
+                var labelPoint = LandmarkToScreen(hand.landmarks[0]);
+                GUI.color = baseColor;
+                GUI.Label(new Rect(labelPoint.x + 8f, labelPoint.y - 10f, 110f, 22f), label);
                 GUI.color = Color.white;
             }
         }
@@ -991,8 +1224,12 @@ namespace HandOfGod.Gameplay
             {
                 if (!bridgeProcess.HasExited)
                 {
-                    bridgeProcess.Kill();
-                    bridgeProcess.WaitForExit(500);
+                    KillProcessTree(bridgeProcess.Id);
+                    if (!bridgeProcess.WaitForExit(1200))
+                    {
+                        bridgeProcess.Kill();
+                        bridgeProcess.WaitForExit(500);
+                    }
                 }
             }
             catch (System.Exception)
@@ -1004,6 +1241,33 @@ namespace HandOfGod.Gameplay
                 bridgeProcess.Dispose();
                 bridgeProcess = null;
                 launchedBridge = false;
+            }
+        }
+
+        private static void KillProcessTree(int processId)
+        {
+            if (processId <= 0)
+            {
+                return;
+            }
+
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "taskkill",
+                    Arguments = $"/PID {processId} /T /F",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
+                };
+                using var killer = Process.Start(startInfo);
+                killer?.WaitForExit(1000);
+            }
+            catch (System.Exception)
+            {
+                // Fall back to Process.Kill in the caller.
             }
         }
 

@@ -19,6 +19,43 @@ FINGERS = {
 }
 
 
+class SmoothedPoint:
+    def __init__(self, x, y, z):
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+        self.last_time = time.time()
+
+    def update(self, x, y, z):
+        now = time.time()
+        dt = max(now - self.last_time, 1e-3)
+        dx = x - self.x
+        dy = y - self.y
+        dz = z - self.z
+        speed = float(np.linalg.norm(np.array([dx, dy, dz])) / dt)
+        edge = max(abs(x - 0.5), abs(y - 0.5)) * 2.0
+        alpha = 0.16 + min(speed * 0.018, 0.22) - max(edge - 0.72, 0.0) * 0.08
+        alpha = max(0.10, min(0.42, alpha))
+        self.x += dx * alpha
+        self.y += dy * alpha
+        self.z += dz * alpha
+        self.last_time = now
+        return self.x, self.y, self.z
+
+
+def smooth_landmarks(hand_id, landmarks, smooth_points):
+    slots = smooth_points.setdefault(hand_id, {})
+    smoothed = []
+    for index, point in enumerate(landmarks):
+        slot = slots.get(index)
+        if slot is None:
+            slot = SmoothedPoint(point.x, point.y, point.z)
+            slots[index] = slot
+        x, y, z = slot.update(point.x, point.y, point.z)
+        smoothed.append({"x": float(x), "y": float(y), "z": float(z)})
+    return smoothed
+
+
 class VideoStreamClient:
     def __init__(self, host, port):
         self.host = host
@@ -88,7 +125,7 @@ def finger_extended(landmarks, name):
     return tip_to_wrist > pip_to_wrist and landmarks[tip].y < landmarks[pip].y
 
 
-def analyze_hand(landmarks, handedness, score, hand_id, neutral):
+def analyze_hand(landmarks, handedness, score, hand_id, neutral, smoothed_landmarks):
     wrist = landmarks[0]
     middle_mcp = landmarks[9]
     index_mcp = landmarks[5]
@@ -130,7 +167,7 @@ def analyze_hand(landmarks, handedness, score, hand_id, neutral):
         "middleExtended": fingers["middle"],
         "ringExtended": fingers["ring"],
         "pinkyExtended": fingers["pinky"],
-        "landmarks": [{"x": float(p.x), "y": float(p.y), "z": float(p.z)} for p in landmarks],
+        "landmarks": smoothed_landmarks,
     }, {"roll": raw_roll, "pitch": raw_pitch, "yaw": raw_yaw, "pinchDistance": pinch_distance}
 
 
@@ -191,7 +228,8 @@ def main():
     neutral = None
     last_raw = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
     pinch_latches = {}
-    smooth_points = {}
+    smooth_landmarks_by_hand = {}
+    smooth_cursors = {}
 
     print("Hand of God bridge: headless camera tracking started. Use --preview for a debug window.")
     try:
@@ -209,6 +247,7 @@ def main():
             payload = neutral_payload()
             analyzed = []
 
+            active_ids = set()
             if result.multi_hand_landmarks:
                 handedness_list = result.multi_handedness or []
                 for index, hand in enumerate(result.multi_hand_landmarks[:2]):
@@ -216,7 +255,9 @@ def main():
                     label = category.label if category else "Unknown"
                     score = category.score if category else 1.0
                     hand_id = f"{label}-{index}"
-                    hand_payload, raw = analyze_hand(hand.landmark, label, score, hand_id, neutral)
+                    active_ids.add(hand_id)
+                    smoothed_landmarks = smooth_landmarks(hand_id, hand.landmark, smooth_landmarks_by_hand)
+                    hand_payload, raw = analyze_hand(hand.landmark, label, score, hand_id, neutral, smoothed_landmarks)
                     last_raw = raw
 
                     distance = raw["pinchDistance"]
@@ -224,14 +265,14 @@ def main():
                     latched = distance < (0.92 if latched else 0.72)
                     pinch_latches[hand_id] = latched
 
-                    previous = smooth_points.get(hand_id, (hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"]))
+                    previous = smooth_cursors.get(hand_id, (hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"]))
                     smoothed = (
                         previous[0] * 0.72 + hand_payload["pinchX"] * 0.28,
                         previous[1] * 0.72 + hand_payload["pinchY"] * 0.28,
                         previous[2] * 0.72 + hand_payload["indexX"] * 0.28,
                         previous[3] * 0.72 + hand_payload["indexY"] * 0.28,
                     )
-                    smooth_points[hand_id] = smoothed
+                    smooth_cursors[hand_id] = smoothed
 
                     hand_payload["pinch"] = latched
                     hand_payload["openPalm"] = hand_payload["openPalm"] and not latched
@@ -239,6 +280,11 @@ def main():
                     analyzed.append(hand_payload)
                     if args.preview:
                         drawing.draw_landmarks(frame, hand, mp.solutions.hands.HAND_CONNECTIONS)
+            stale_ids = [hand_id for hand_id in smooth_landmarks_by_hand if hand_id not in active_ids]
+            for hand_id in stale_ids:
+                smooth_landmarks_by_hand.pop(hand_id, None)
+                smooth_cursors.pop(hand_id, None)
+                pinch_latches.pop(hand_id, None)
 
             if analyzed:
                 primary = sorted(analyzed, key=lambda h: (h["pinch"], h["score"]), reverse=True)[0]
