@@ -464,6 +464,14 @@ cd "unity\gesture_bridge"
 - MediaPipe：Google 开源的跨平台感知计算框架。本项目通过 `mediapipe==0.10.14` Python package 使用其 Hands solution，获取手部 21 点 landmarks、handedness 和识别置信度。
   - GitHub: `https://github.com/google-ai-edge/mediapipe`
   - Documentation: `https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker`
+- OpenCV：开源计算机视觉库。本项目通过 `opencv-python` 采集摄像头、镜像画面、调整分辨率并将摄像头帧编码为 JPEG。
+  - GitHub: `https://github.com/opencv/opencv`
+  - Python package: `https://pypi.org/project/opencv-python/`
+- NumPy：开源数值计算库。本项目在 Python 桥接中用于 landmark 距离、速度和平滑相关的向量计算。
+  - GitHub: `https://github.com/numpy/numpy`
+  - Documentation: `https://numpy.org/doc/`
+- One Euro Filter：实时交互场景中常用的低延迟平滑算法资料。本项目包含 Unity 侧 `OneEuroFilter` 实现，并在 Python 桥接中采用速度感知的轻量平滑策略来降低边缘抖动。
+  - Project page: `https://gery.casiez.net/1euro/`
 
 ## Git 与提交约定
 
