@@ -31,7 +31,7 @@ namespace HandOfGod.Gameplay
         private const float CalibrationHoldSeconds = 1f;
         private const float MenuDwellSeconds = 0.85f;
         private const float SafeDwellSeconds = 1f;
-        private const float TutorialHoldSeconds = 0.75f;
+        private const float TutorialHoldSeconds = 3f;
         private const float Level1RoadCenterY = 1f;
         private const float Level1RoadAngleDegrees = -8f;
         private static readonly int[] HandConnectionPairs =
@@ -73,7 +73,8 @@ namespace HandOfGod.Gameplay
         private float hoverStart = -1f;
         private GameObject labObject;
         private Rigidbody labBody;
-        private Vector3 labVelocity;
+        private Renderer labRenderer;
+        private Vector3 labGrabOffset;
         private bool labHeld;
         private bool labCompleted;
         private TutorialStage tutorialStage = TutorialStage.FindHands;
@@ -91,7 +92,6 @@ namespace HandOfGod.Gameplay
         private Quaternion twoFingerMapStartRotation;
         private Rigidbody obstacleBox;
         private Renderer obstacleRenderer;
-        private Vector3 boxVelocity;
         private bool boxHeld;
         private BallController levelBall;
         private bool initialized;
@@ -143,6 +143,11 @@ namespace HandOfGod.Gameplay
             RefreshBridgeStatus();
             UpdateCameraBackground();
 
+            if (HandleLevel1BallState())
+            {
+                return;
+            }
+
             if (!TryGetPrimaryHand(out var hand))
             {
                 return;
@@ -164,10 +169,29 @@ namespace HandOfGod.Gameplay
                     break;
             }
 
-            if (mode == GameMode.Level1 && levelBall != null && levelBall.ReachedGoal)
+            HandleLevel1BallState();
+        }
+
+        private bool HandleLevel1BallState()
+        {
+            if (mode != GameMode.Level1 || levelBall == null)
+            {
+                return false;
+            }
+
+            if (levelBall.Failed)
+            {
+                StartLevel(GameMode.Level1);
+                return true;
+            }
+
+            if (levelBall.ReachedGoal)
             {
                 mode = GameMode.Pass;
+                return true;
             }
+
+            return false;
         }
 
         private void RefreshBridgeStatus()
@@ -453,6 +477,7 @@ namespace HandOfGod.Gameplay
             labBody = labObject.AddComponent<Rigidbody>();
             labBody.isKinematic = true;
             labBody.interpolation = RigidbodyInterpolation.Interpolate;
+            labRenderer = labObject.GetComponent<Renderer>();
         }
 
         private void UpdateLevel0(GestureHandFrame hand)
@@ -468,27 +493,44 @@ namespace HandOfGod.Gameplay
             var isPinch = IsPinching(hand);
             var twoHandsPinching = TryGetTwoPinchingHands(out var a, out var b);
             var close = Vector3.Distance(target, labBody.position) < 1.0f;
+            if (labRenderer != null)
+            {
+                labRenderer.sharedMaterial = boxIdle;
+            }
             if (!labHeld && isPinch && close && !twoHandsPinching && CanDragLabObject())
             {
                 labHeld = true;
-                labVelocity = Vector3.zero;
+                labGrabOffset = labBody.position - target;
                 tutorialDragStart = labBody.position;
             }
             if (labHeld && (!isPinch || twoHandsPinching))
             {
                 labHeld = false;
             }
+            if (!labHeld && close && CanDragLabObject() && labRenderer != null)
+            {
+                labRenderer.sharedMaterial = boxHover;
+            }
             if (labHeld)
             {
-                target.x = Mathf.Clamp(target.x, -1.75f, 1.75f);
-                target.z = Mathf.Clamp(target.z, -1.0f, 1.0f);
+                target += labGrabOffset;
+                target.x = Mathf.Clamp(target.x, -2.45f, 2.45f);
+                target.z = Mathf.Clamp(target.z, -1.35f, 1.35f);
                 target.y = 0.7f;
-                labBody.MovePosition(Vector3.SmoothDamp(labBody.position, target, ref labVelocity, 0.055f));
+                labBody.MovePosition(target);
                 tutorialObjectMoved = Vector3.Distance(labBody.position, tutorialDragStart) > 0.55f;
+                if (labRenderer != null)
+                {
+                    labRenderer.sharedMaterial = boxHeldMaterial;
+                }
             }
 
             if (twoHandsPinching && CanRotateLabObject())
             {
+                if (labRenderer != null)
+                {
+                    labRenderer.sharedMaterial = boxHeldMaterial;
+                }
                 var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX);
                 if (twoHandStartDistance <= 0f)
                 {
@@ -521,7 +563,7 @@ namespace HandOfGod.Gameplay
                 }
                 var mapScale = Mathf.Clamp(twoFingerMapStartScale.x * distance / twoFingerMapStartDistance, 0.82f, 1.22f);
                 levelRoot.localScale = Vector3.one * mapScale;
-                levelRoot.rotation = twoFingerMapStartRotation * Quaternion.Euler(0f, -(angle - twoFingerMapStartAngle) * Mathf.Rad2Deg, 0f);
+                levelRoot.rotation = twoFingerMapStartRotation * Quaternion.Euler(0f, (angle - twoFingerMapStartAngle) * Mathf.Rad2Deg, 0f);
                 tutorialMapAdjusted = Mathf.Abs(mapScale - twoFingerMapStartScale.x) > 0.06f || Mathf.Abs(Mathf.DeltaAngle(levelRoot.eulerAngles.y, twoFingerMapStartRotation.eulerAngles.y)) > 7f;
             }
             else
@@ -687,7 +729,6 @@ namespace HandOfGod.Gameplay
             if (!boxHeld && isPinch && close)
             {
                 boxHeld = true;
-                boxVelocity = Vector3.zero;
             }
             if (boxHeld && !isPinch)
             {
@@ -696,7 +737,7 @@ namespace HandOfGod.Gameplay
             if (boxHeld)
             {
                 obstacleRenderer.sharedMaterial = boxHeldMaterial;
-                obstacleBox.MovePosition(Vector3.SmoothDamp(obstacleBox.position, target, ref boxVelocity, 0.055f));
+                obstacleBox.MovePosition(target);
                 obstacleBox.linearVelocity = Vector3.zero;
                 obstacleBox.angularVelocity = Vector3.zero;
             }
@@ -1308,6 +1349,7 @@ namespace HandOfGod.Gameplay
             levelRoot = null;
             labObject = null;
             labBody = null;
+            labRenderer = null;
             obstacleBox = null;
             obstacleRenderer = null;
             levelBall = null;

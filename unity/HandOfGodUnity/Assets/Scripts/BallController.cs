@@ -13,8 +13,10 @@ namespace HandOfGod.Gameplay
         private Rigidbody body;
         private Vector3 startPosition;
         private bool reachedGoal;
+        private bool failed;
 
         public bool ReachedGoal => reachedGoal;
+        public bool Failed => failed;
         public float Speed => body.linearVelocity.magnitude;
 
         public void Configure(Transform goalTransform)
@@ -25,10 +27,13 @@ namespace HandOfGod.Gameplay
         public void ResetBall()
         {
             reachedGoal = false;
+            failed = false;
+            gameObject.SetActive(true);
             transform.position = startPosition;
             transform.rotation = Quaternion.identity;
             body.linearVelocity = Vector3.zero;
             body.angularVelocity = Vector3.zero;
+            body.isKinematic = false;
             body.Sleep();
         }
 
@@ -44,8 +49,11 @@ namespace HandOfGod.Gameplay
         {
             if (reachedGoal)
             {
-                body.linearVelocity *= 0.92f;
-                body.angularVelocity *= 0.92f;
+                return;
+            }
+
+            if (failed)
+            {
                 return;
             }
 
@@ -56,13 +64,24 @@ namespace HandOfGod.Gameplay
 
             if (transform.position.y < resetY)
             {
-                ResetBall();
+                failed = true;
+                StopAndHide();
+                return;
             }
 
             if (goal != null && Vector3.Distance(ProjectXZ(transform.position), ProjectXZ(goal.position)) <= goalRadius)
             {
                 reachedGoal = true;
+                StopAndHide();
             }
+        }
+
+        private void StopAndHide()
+        {
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+            body.isKinematic = true;
+            gameObject.SetActive(false);
         }
 
         private static Vector3 ProjectXZ(Vector3 value)
