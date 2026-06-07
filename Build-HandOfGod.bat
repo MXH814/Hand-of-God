@@ -3,9 +3,9 @@ setlocal
 chcp 65001 >nul
 
 set "ROOT=%~dp0"
-set "UNITY_EXE=E:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com"
+set "UNITY_EXE=D:\Unity\Editors\6000.4.10f1\Editor\Unity.com"
 set "UNITY_PROJECT=%ROOT%unity\HandOfGodUnity"
-set "LOG=E:\Unity\hand-of-god-build.log"
+set "LOG=D:\Unity\hand-of-god-build.log"
 
 if not exist "%UNITY_EXE%" (
   echo Unity.com was not found:

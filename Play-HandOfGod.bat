@@ -7,7 +7,7 @@ set "UNITY_PROJECT=%ROOT%unity\HandOfGodUnity"
 set "GAME_EXE=%UNITY_PROJECT%\Builds\Windows\HandOfGod.exe"
 set "BRIDGE_DIR=%ROOT%unity\gesture_bridge"
 set "BRIDGE_PY=%BRIDGE_DIR%\mediapipe_udp_sender.py"
-set "BRIDGE_RUNTIME=E:\Unity\HandOfGodGestureBridge"
+set "BRIDGE_RUNTIME=%ROOT%venv"
 set "VENV_PY=%BRIDGE_RUNTIME%\.venv\Scripts\python.exe"
 
 if not exist "%GAME_EXE%" (
