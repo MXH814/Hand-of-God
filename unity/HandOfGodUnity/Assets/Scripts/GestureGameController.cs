@@ -147,6 +147,8 @@ namespace HandOfGod.Gameplay
         private GameObject portalKey;
         private Rigidbody portalKeyBody;
         private Renderer portalKeyRenderer;
+        private Renderer[] portalKeyRenderers;
+        private Material[] portalKeyIdleMaterials;
         private Transform runeLeft;
         private Transform runeRight;
         private Renderer runeLeftRenderer;
@@ -166,11 +168,24 @@ namespace HandOfGod.Gameplay
         private AirBeltTrigger[] airBeltTriggers;
         private Transform[] airBeltArrowTransforms;
         private Renderer[] airBeltArrowRenderers;
+        private Transform[] airBeltStreaks;
+        private Renderer[] airBeltStreakRenderers;
         private Rigidbody levelBallBody;
-        private const float AirBeltForce = 40f;
+        private Renderer levelBallRenderer;
+        private Material levelBallRuntimeMaterial;
+        private Vector3 levelBallBaseScale = Vector3.one;
+        private const float AirBeltForce = 5.2f;
         private bool keyHeld;
         private Vector3 keyGrabOffset;
         private float level2LastTeleport = -10f;
+        private bool level2Teleporting;
+        private float level2TeleportStart;
+        private Vector3 level2TeleportStartPosition;
+        private Vector3 level2TeleportEndPosition;
+        private int pendingAirDirection;
+        private float pendingAirDirectionStart = -1f;
+        private const float AirflowDirectionDeadZone = 0.045f;
+        private const float AirflowDirectionHoldSeconds = 0.25f;
         private float levelStartTime = -10f;
 
         // tuning: larger grab radii for the portal key to make it easier to pick up
@@ -585,13 +600,15 @@ namespace HandOfGod.Gameplay
             var detail = level1Stage switch
             {
                 Level1Stage.ClearBlock => "Drag the glowing key onto the left rune to unlock the path.",
-                Level1Stage.JoinBridge => "Use the airflow gesture (index+middle together) over a belt to set its direction.",
+                Level1Stage.JoinBridge => "Use the airflow gesture: thumb out, index+middle together, ring+pinky folded.",
                 Level1Stage.RotateGate => "Place the key on the right rune to activate the portal.",
                 Level1Stage.RunToGoal => "The path is open. Guide the ball to the altar.",
                 _ => "",
             };
             GUI.Label(new Rect(panel.x + 28f, panel.y + 52f, panel.width - 56f, 42f), detail, objectiveStyle);
-            GUI.Label(new Rect(panel.x + 28f, panel.y + 96f, panel.width - 56f, 24f), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}" : "Ball speed: 0.00");
+            var wind = airBeltDirection != null && airBeltDirection.Length > 0 ? airBeltDirection[0] : 0;
+            var windText = wind == 1 ? "RIGHT" : (wind == -1 ? "LEFT" : "OFF");
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 96f, panel.width - 56f, 24f), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}    Airflow: {windText}" : $"Ball speed: 0.00    Airflow: {windText}");
 
             // dynamic level hints
             if (!string.IsNullOrEmpty(level2HintMessage))
@@ -1006,7 +1023,7 @@ namespace HandOfGod.Gameplay
                 TutorialStage.TwoHandRotate => "3/7 Pinch both sides and rotate the object.",
                 TutorialStage.BridgePull => "4/7 Join a bridge with both hands.",
                 TutorialStage.PalmActivate => "5/7 Open your palm over the glowing seal.",
-                TutorialStage.MapControl => "6/7 Bring index and middle fingers together on both hands.",
+                TutorialStage.MapControl => "6/7 Join index+middle, fold ring+pinky.",
                 TutorialStage.Complete => "7/7 Tutorial complete. Keep practicing or enter Level 1.",
                 _ => "",
             };
@@ -1021,7 +1038,7 @@ namespace HandOfGod.Gameplay
                 TutorialStage.TwoHandRotate => "Pinch the object from both sides, then turn your hands like rotating a real block.",
                 TutorialStage.BridgePull => "Pinch both bridge halves, then move your hands closer together until they lock.",
                 TutorialStage.PalmActivate => "Open one hand and hold it over the glowing seal until it lights up.",
-                TutorialStage.MapControl => "On each hand, keep index and middle fingertips close, then move both hands to adjust the map.",
+                TutorialStage.MapControl => "On each hand, keep index and middle fingertips close, with ring and pinky folded, then move both hands to adjust the map or airflow.",
                 TutorialStage.Complete => "You can still drag, rotate, and adjust the map. Hold over Next: Level 1 when ready.",
                 _ => "",
             };
@@ -1357,14 +1374,24 @@ namespace HandOfGod.Gameplay
             runeLeftArrow = null;
             runeRightArrow = null;
 
-            // draggable key
-            var key = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            // draggable geometric key
+            var key = new GameObject("Portal Key");
             key.name = "Portal Key";
             key.transform.SetParent(levelRoot, false);
             key.transform.position = new Vector3(-4.2f, 0.18f, 1.9f);
-            key.transform.localScale = Vector3.one * 0.60f;
-            portalKeyRenderer = key.GetComponent<Renderer>();
-            portalKeyRenderer.sharedMaterial = boxIdle;
+            key.transform.rotation = Quaternion.Euler(0f, 18f, 0f);
+            var keyCollider = key.AddComponent<BoxCollider>();
+            keyCollider.center = new Vector3(0.18f, 0.06f, 0f);
+            keyCollider.size = new Vector3(0.95f, 0.28f, 0.34f);
+            CreatePortalKeyVisual(key.transform);
+            portalKeyRenderers = key.GetComponentsInChildren<Renderer>();
+            portalKeyIdleMaterials = new Material[portalKeyRenderers.Length];
+            for (var i = 0; i < portalKeyRenderers.Length; i++)
+            {
+                portalKeyIdleMaterials[i] = portalKeyRenderers[i].sharedMaterial;
+            }
+            portalKeyRenderer = portalKeyRenderers.Length > 0 ? portalKeyRenderers[0] : null;
+            RestorePortalKeyMaterial();
             portalKeyBody = key.AddComponent<Rigidbody>();
             portalKeyBody.isKinematic = true;
             portalKeyBody.interpolation = RigidbodyInterpolation.Interpolate;
@@ -1401,6 +1428,8 @@ namespace HandOfGod.Gameplay
             airBeltTriggers = new AirBeltTrigger[1];
             airBeltArrowRenderers = new Renderer[1];
             airBeltArrowTransforms = new Transform[1];
+            airBeltStreaks = new Transform[5];
+            airBeltStreakRenderers = new Renderer[5];
             
             var beltX = 0.8f; // To the right of portal B (0.5), ball feels wind after reaching B
             var beltY = 0.25f;
@@ -1417,23 +1446,33 @@ namespace HandOfGod.Gameplay
             trigger.beltIndex = 0;
             trigger.direction = 0; // Default: OFF
             trigger.force = AirBeltForce;
+            trigger.maxWindSpeed = 1.95f;
+            trigger.rampSeconds = 1.45f;
             airBeltTriggers[0] = trigger;
 
-            var arrow = CreateBox("air arrow", belt.transform.position + new Vector3(0f, 0.25f, 0f), new Vector3(0.4f, 0.02f, 0.2f), boxIdle, belt.transform, Quaternion.identity, false);
+            var arrow = CreateBox("air arrow", belt.transform.position + new Vector3(0f, 0.28f, 0f), new Vector3(0.62f, 0.035f, 0.18f), boxIdle, belt.transform, Quaternion.identity, false);
             airBeltArrowRenderers[0] = arrow.GetComponent<Renderer>();
             airBeltArrowTransforms[0] = arrow.transform;
 
-            // Visual: idle color when off - hide belt visuals (keep trigger active) so player sees text hint instead
+            for (var i = 0; i < airBeltStreaks.Length; i++)
+            {
+                var xOffset = Mathf.Lerp(-0.78f, 0.78f, i / (float)(airBeltStreaks.Length - 1));
+                var zOffset = i % 2 == 0 ? -0.42f : 0.42f;
+                var streak = CreateBox($"air flow streak {i + 1}", belt.transform.position + new Vector3(xOffset, 0.31f, zOffset), new Vector3(0.46f, 0.025f, 0.045f), tealGlow, belt.transform, Quaternion.identity, false);
+                airBeltStreaks[i] = streak.transform;
+                airBeltStreakRenderers[i] = streak.GetComponent<Renderer>();
+            }
+
+            // Visual: faint belt when off; animated arrows and streaks make active wind readable.
             if (airBeltRenderers[0] != null)
             {
                 airBeltRenderers[0].sharedMaterial = boxIdle;
-                airBeltRenderers[0].enabled = false; // hide the bulky belt box
             }
             if (airBeltArrowRenderers[0] != null)
             {
                 airBeltArrowRenderers[0].sharedMaterial = boxIdle;
-                airBeltArrowRenderers[0].enabled = false; // hide arrow indicator; use HUD text instead
             }
+            UpdateAirBeltVisuals();
 
             // single gate between portal A and portal B
             startGate = null;
@@ -1448,7 +1487,11 @@ namespace HandOfGod.Gameplay
             ballObject.transform.SetParent(levelRoot, false);
             ballObject.transform.position = portalAPosition + new Vector3(0f, 0.2f, 0f);
             ballObject.transform.localScale = Vector3.one * 0.46f;
-            ballObject.GetComponent<Renderer>().sharedMaterial = ballMaterial;
+            levelBallBaseScale = ballObject.transform.localScale;
+            levelBallRenderer = ballObject.GetComponent<Renderer>();
+            levelBallRuntimeMaterial = new Material(ballMaterial) { name = "Golden physics ball runtime" };
+            ConfigureTransparentMaterial(levelBallRuntimeMaterial);
+            levelBallRenderer.sharedMaterial = levelBallRuntimeMaterial;
             var body = ballObject.AddComponent<Rigidbody>();
             body.mass = 1.1f;
             body.linearDamping = 0.02f;
@@ -1475,6 +1518,12 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
+            UpdateAirBeltVisuals();
+            if (level2Teleporting)
+            {
+                UpdateLevel2Teleport();
+            }
+
             var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
             var target = MapPinchToRoad(hand.pinchX, hand.pinchY);
             var isPinch = IsPinching(hand);
@@ -1482,12 +1531,15 @@ namespace HandOfGod.Gameplay
             // key dragging + magnet snap + UI state
             var grabRadius = isPinch ? PortalKeyGrabPinchRadius : PortalKeyGrabIdleRadius;
             var close = DistanceXZ(target, portalKey.transform.position) < grabRadius;
-            portalKeyRenderer.sharedMaterial = boxIdle;
+            RestorePortalKeyMaterial();
 
             // update UI debug flags
             lastKeyInRange = close;
             lastPinchState = isPinch;
-            level2HintMessage = "";
+            if (!level2Teleporting)
+            {
+                level2HintMessage = "";
+            }
 
             // hover dwell hint
             if (!keyHeld && close && !isPinch)
@@ -1495,7 +1547,7 @@ namespace HandOfGod.Gameplay
                 if (keyHoverStart < 0f) keyHoverStart = Time.time;
                 if (Time.time - keyHoverStart >= KeyDwellSeconds)
                 {
-                    portalKeyRenderer.sharedMaterial = boxHover;
+                    SetPortalKeyMaterial(boxHover);
                     level2HintMessage = "Pinch to grab the key";
                 }
             }
@@ -1523,7 +1575,7 @@ namespace HandOfGod.Gameplay
             }
             if (keyHeld)
             {
-                portalKeyRenderer.sharedMaterial = boxHeldMaterial;
+                SetPortalKeyMaterial(boxHeldMaterial);
                 var pos = target + keyGrabOffset;
                 pos.y = 0.18f;
                 portalKeyBody.MovePosition(pos);
@@ -1541,108 +1593,316 @@ namespace HandOfGod.Gameplay
                     if (runeLeftRenderer != null) runeLeftRenderer.sharedMaterial = tealGlow;
                     if (portalARenderer != null) portalARenderer.sharedMaterial = tealGlow;
                     if (portalBRenderer != null) portalBRenderer.sharedMaterial = tealGlow;
-                    level2HintMessage = "Teleport activated! Ball will teleport to the right side.";
+                    level2HintMessage = "Teleport activated. Watch the ball cross the gate.";
                 }
             }
 
-            // when rune is activated, immediately teleport ball from A to B
-            if (level1Stage == Level1Stage.ClearBlock && portalAActive)
+            // when rune is activated, animate the ball from portal A to B
+            if (level1Stage == Level1Stage.ClearBlock && portalAActive && !level2Teleporting)
             {
-                Debug.Log("[Level2] Teleport check: level1Stage=ClearBlock, portalAActive=true");
-                var bpos = levelBall.transform.position;
-                // Teleport ball immediately when rune is activated
                 if (Time.time - level2LastTeleport > 0.5f)
                 {
-                    Debug.Log("[Level2] Teleporting ball from A to B");
-                    // Diagnostic: ensure ball and rigidbody are valid and active
-                    if (levelBall == null)
-                    {
-                        Debug.LogWarning("[Level2] levelBall is null - cannot teleport.");
-                    }
-                    else
-                    {
-                        Debug.Log($"[Level2] levelBall.activeSelf={levelBall.gameObject.activeSelf}, levelBall.position={levelBall.transform.position}");
-                    }
-                    if (levelBallBody == null)
-                    {
-                        Debug.LogWarning("[Level2] levelBallBody is null - teleport via transform.");
-                        levelBall.transform.position = portalBPosition + new Vector3(0f, 0.2f, 0f);
-                    }
-                    else
-                    {
-                        Debug.Log($"[Level2] levelBallBody.isKinematic={levelBallBody.isKinematic}");
-                        // Ensure ball is active and non-kinematic so MovePosition has visible effect
-                        levelBall.gameObject.SetActive(true);
-                        levelBallBody.isKinematic = false;
-                        var targetPos = portalBPosition + new Vector3(0f, 0.2f, 0f);
-                        Debug.Log($"[Level2] Moving ball to {targetPos}");
-                        // Use MovePosition to cooperate with physics solver
-                        levelBallBody.MovePosition(targetPos);
-                        // As a fallback also set transform
-                        levelBall.transform.position = targetPos;
-                        levelBallBody.linearVelocity = Vector3.zero;
-                        levelBallBody.angularVelocity = Vector3.zero;
-                        levelBallBody.WakeUp();
-                    }
-                    level2LastTeleport = Time.time;
-
-                    // Open gate after teleport
-                    OpenGate(bridgeGate);
-                    AdvanceLevel1(Level1Stage.JoinBridge);
-                    level2HintMessage = "Use airflow gesture to set wind direction!";
-                }
-                else
-                {
-                    Debug.Log("[Level2] Teleport cooldown active");
+                    BeginLevel2Teleport();
                 }
             }
 
             // airflow gesture: change belt direction
             if (TryGetAirflowHand(frame, out var ghand))
             {
-                var handPoint = ScreenToWorldPlane(ghand.indexX, ghand.indexY, 0.12f);
                 var dirX = ghand.landmarks != null && ghand.landmarks.Length > 8 ? ghand.landmarks[8].x - ghand.landmarks[0].x : ghand.indexX - ghand.pinchX;
-                var newDir = dirX > 0f ? 1 : (dirX < 0f ? -1 : 0);
-                
-                airBeltDirection[0] = newDir;
-                if (airBeltRenderers[0] != null)
+                var candidateDir = Mathf.Abs(dirX) < AirflowDirectionDeadZone ? 0 : (dirX > 0f ? 1 : -1);
+                if (candidateDir != 0)
                 {
-                    airBeltRenderers[0].sharedMaterial = newDir == 1 ? tealGlow : (newDir == -1 ? amberGlow : boxIdle);
+                    if (pendingAirDirection != candidateDir)
+                    {
+                        pendingAirDirection = candidateDir;
+                        pendingAirDirectionStart = Time.time;
+                    }
+                    else if (Time.time - pendingAirDirectionStart >= AirflowDirectionHoldSeconds)
+                    {
+                        SetAirBeltDirection(candidateDir);
+                    }
                 }
-                if (airBeltTriggers[0] != null)
+            }
+            else
+            {
+                pendingAirDirection = 0;
+                pendingAirDirectionStart = -1f;
+            }
+
+            if (level1Stage == Level1Stage.JoinBridge || level1Stage == Level1Stage.RunToGoal)
+            {
+                if (airBeltDirection != null && airBeltDirection.Length > 0 && airBeltDirection[0] == 1)
                 {
-                    airBeltTriggers[0].direction = newDir;
-                }
-                if (airBeltArrowRenderers[0] != null)
-                {
-                    airBeltArrowRenderers[0].sharedMaterial = newDir == 1 ? tealGlow : (newDir == -1 ? amberGlow : boxIdle);
-                }
-                
-                if (newDir == 1)
-                {
-                    level2HintMessage = "Wind direction: RIGHT - Ball will move to goal!";
-                    // Open gate between belt and goal when direction is RIGHT
+                    level2HintMessage = "Airflow: RIGHT. The wind will gradually carry the ball to the altar.";
                     if (rotateGateStop != null)
                     {
                         OpenGate(rotateGateStop);
                         AdvanceLevel1(Level1Stage.RunToGoal);
                     }
                 }
-                else if (newDir == -1)
+                else if (airBeltDirection != null && airBeltDirection.Length > 0 && airBeltDirection[0] == -1)
                 {
-                    level2HintMessage = "Wind direction: LEFT - Change to RIGHT to reach goal!";
+                    level2HintMessage = "Airflow: LEFT. Turn your gesture the other way to reach the goal.";
+                }
+            }
+        }
+
+        private void CreatePortalKeyVisual(Transform keyTransform)
+        {
+            CreateTorus("portal key ring", keyTransform.position + new Vector3(-0.24f, 0.06f, 0f), 0.22f, 0.035f, brass, keyTransform);
+            CreateBox("portal key core", keyTransform.position + new Vector3(-0.24f, 0.06f, 0f), new Vector3(0.18f, 0.08f, 0.18f), tealGlow, keyTransform, keyTransform.rotation, false);
+            CreateBox("portal key shaft", keyTransform.position + new Vector3(0.17f, 0.06f, 0f), new Vector3(0.62f, 0.10f, 0.12f), brass, keyTransform, keyTransform.rotation, false);
+            CreateBox("portal key upper tooth", keyTransform.position + new Vector3(0.48f, 0.06f, 0.13f), new Vector3(0.15f, 0.10f, 0.22f), amberGlow, keyTransform, keyTransform.rotation, false);
+            CreateBox("portal key lower tooth", keyTransform.position + new Vector3(0.62f, 0.06f, -0.10f), new Vector3(0.18f, 0.10f, 0.18f), amberGlow, keyTransform, keyTransform.rotation, false);
+            CreateBox("portal key tip", keyTransform.position + new Vector3(0.78f, 0.06f, 0f), new Vector3(0.16f, 0.10f, 0.12f), tealGlow, keyTransform, keyTransform.rotation, false);
+        }
+
+        private void SetPortalKeyMaterial(Material material)
+        {
+            if (portalKeyRenderers == null)
+            {
+                if (portalKeyRenderer != null) portalKeyRenderer.sharedMaterial = material;
+                return;
+            }
+
+            foreach (var renderer in portalKeyRenderers)
+            {
+                if (renderer != null) renderer.sharedMaterial = material;
+            }
+        }
+
+        private void RestorePortalKeyMaterial()
+        {
+            if (portalKeyRenderers == null || portalKeyIdleMaterials == null)
+            {
+                if (portalKeyRenderer != null) portalKeyRenderer.sharedMaterial = brass;
+                return;
+            }
+
+            for (var i = 0; i < portalKeyRenderers.Length; i++)
+            {
+                if (portalKeyRenderers[i] != null && i < portalKeyIdleMaterials.Length)
+                {
+                    portalKeyRenderers[i].sharedMaterial = portalKeyIdleMaterials[i];
+                }
+            }
+        }
+
+        private void BeginLevel2Teleport()
+        {
+            if (levelBall == null)
+            {
+                return;
+            }
+
+            level2Teleporting = true;
+            level2TeleportStart = Time.time;
+            level2TeleportStartPosition = portalAPosition + new Vector3(0f, 0.2f, 0f);
+            level2TeleportEndPosition = portalBPosition + new Vector3(0f, 0.2f, 0f);
+            level2LastTeleport = Time.time;
+            level2HintMessage = "Portal transfer in progress...";
+
+            levelBall.gameObject.SetActive(true);
+            levelBall.transform.localScale = levelBallBaseScale;
+            if (levelBallBody != null)
+            {
+                levelBallBody.linearVelocity = Vector3.zero;
+                levelBallBody.angularVelocity = Vector3.zero;
+                levelBallBody.isKinematic = true;
+            }
+            SetBallAlpha(1f);
+        }
+
+        private void UpdateLevel2Teleport()
+        {
+            if (levelBall == null)
+            {
+                level2Teleporting = false;
+                return;
+            }
+
+            const float duration = 1.55f;
+            var progress = Mathf.Clamp01((Time.time - level2TeleportStart) / duration);
+            var rise = new Vector3(0f, 0.78f, 0f);
+
+            if (progress < 0.38f)
+            {
+                var t = Mathf.SmoothStep(0f, 1f, progress / 0.38f);
+                levelBall.transform.position = Vector3.Lerp(level2TeleportStartPosition, level2TeleportStartPosition + rise, t);
+                levelBall.transform.localScale = levelBallBaseScale * Mathf.Lerp(1f, 0.58f, t);
+                SetBallAlpha(1f - t);
+            }
+            else if (progress < 0.55f)
+            {
+                levelBall.transform.position = level2TeleportEndPosition + rise;
+                levelBall.transform.localScale = levelBallBaseScale * 0.58f;
+                SetBallAlpha(0f);
+            }
+            else if (progress < 1f)
+            {
+                var t = Mathf.SmoothStep(0f, 1f, (progress - 0.55f) / 0.45f);
+                levelBall.transform.position = Vector3.Lerp(level2TeleportEndPosition + rise, level2TeleportEndPosition, t);
+                levelBall.transform.localScale = levelBallBaseScale * Mathf.Lerp(0.58f, 1f, t);
+                SetBallAlpha(t);
+            }
+            else
+            {
+                levelBall.transform.position = level2TeleportEndPosition;
+                levelBall.transform.localScale = levelBallBaseScale;
+                SetBallAlpha(1f);
+                if (levelBallBody != null)
+                {
+                    levelBallBody.isKinematic = false;
+                    levelBallBody.linearVelocity = Vector3.zero;
+                    levelBallBody.angularVelocity = Vector3.zero;
+                    levelBallBody.WakeUp();
+                }
+                OpenGate(bridgeGate);
+                AdvanceLevel1(Level1Stage.JoinBridge);
+                level2Teleporting = false;
+                level2HintMessage = "Use the airflow gesture to set wind direction.";
+            }
+        }
+
+        private void SetBallAlpha(float alpha)
+        {
+            if (levelBallRuntimeMaterial == null || levelBallRenderer == null)
+            {
+                return;
+            }
+
+            var color = levelBallRuntimeMaterial.color;
+            color.a = Mathf.Clamp01(alpha);
+            levelBallRuntimeMaterial.color = color;
+            levelBallRenderer.sharedMaterial = levelBallRuntimeMaterial;
+        }
+
+        private static void ConfigureTransparentMaterial(Material material)
+        {
+            material.SetFloat("_Mode", 3f);
+            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetInt("_ZWrite", 0);
+            material.DisableKeyword("_ALPHATEST_ON");
+            material.EnableKeyword("_ALPHABLEND_ON");
+            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        }
+
+        private void SetAirBeltDirection(int direction)
+        {
+            if (airBeltDirection == null || airBeltDirection.Length == 0)
+            {
+                return;
+            }
+
+            airBeltDirection[0] = direction;
+            if (airBeltTriggers != null && airBeltTriggers.Length > 0 && airBeltTriggers[0] != null)
+            {
+                airBeltTriggers[0].direction = direction;
+            }
+            if (airBeltRenderers != null && airBeltRenderers.Length > 0 && airBeltRenderers[0] != null)
+            {
+                airBeltRenderers[0].sharedMaterial = direction == 1 ? tealGlow : (direction == -1 ? amberGlow : boxIdle);
+            }
+            if (airBeltArrowRenderers != null && airBeltArrowRenderers.Length > 0 && airBeltArrowRenderers[0] != null)
+            {
+                airBeltArrowRenderers[0].sharedMaterial = direction == 1 ? tealGlow : (direction == -1 ? amberGlow : boxIdle);
+            }
+            if (airBeltArrowTransforms != null && airBeltArrowTransforms.Length > 0 && airBeltArrowTransforms[0] != null)
+            {
+                airBeltArrowTransforms[0].localPosition = new Vector3(direction < 0 ? -0.18f : 0.18f, 0.28f, 0f);
+            }
+            UpdateAirBeltVisuals();
+        }
+
+        private void UpdateAirBeltVisuals()
+        {
+            if (airBelts == null || airBelts.Length == 0 || airBelts[0] == null)
+            {
+                return;
+            }
+
+            var direction = airBeltDirection != null && airBeltDirection.Length > 0 ? airBeltDirection[0] : 0;
+            var active = direction != 0;
+            var material = direction == -1 ? amberGlow : (direction == 1 ? tealGlow : boxIdle);
+            if (airBeltRenderers != null && airBeltRenderers.Length > 0 && airBeltRenderers[0] != null)
+            {
+                airBeltRenderers[0].enabled = true;
+                airBeltRenderers[0].sharedMaterial = material;
+            }
+            if (airBeltArrowRenderers != null && airBeltArrowRenderers.Length > 0 && airBeltArrowRenderers[0] != null)
+            {
+                airBeltArrowRenderers[0].enabled = true;
+                airBeltArrowRenderers[0].sharedMaterial = material;
+            }
+
+            if (airBeltStreaks == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < airBeltStreaks.Length; i++)
+            {
+                var streak = airBeltStreaks[i];
+                if (streak == null)
+                {
+                    continue;
+                }
+
+                var baseZ = i % 2 == 0 ? -0.42f : 0.42f;
+                var cycle = Mathf.Repeat(Time.time * (active ? 0.72f : 0.18f) + i * 0.23f, 1f);
+                var x = active ? Mathf.Lerp(-0.86f, 0.86f, direction > 0 ? cycle : 1f - cycle) : Mathf.Lerp(-0.78f, 0.78f, i / (float)Mathf.Max(airBeltStreaks.Length - 1, 1));
+                streak.localPosition = new Vector3(x, 0.31f, baseZ);
+                streak.localScale = new Vector3(active ? 0.58f : 0.36f, 0.025f, 0.045f);
+                if (airBeltStreakRenderers != null && i < airBeltStreakRenderers.Length && airBeltStreakRenderers[i] != null)
+                {
+                    airBeltStreakRenderers[i].enabled = true;
+                    airBeltStreakRenderers[i].sharedMaterial = material;
                 }
             }
         }
 
         private static bool IsAirflowGesture(GestureHandFrame hand)
         {
-            // index and middle together, thumb extended, ring and pinky retracted
             if (hand.landmarks == null || hand.landmarks.Length < 21)
             {
                 return false;
             }
-            return IndexMiddleTogether(hand) && hand.thumbExtended && !hand.ringExtended && !hand.pinkyExtended;
+
+            if (hand.openPalm || hand.palmSpan <= 0f || !hand.thumbExtended || !IndexMiddleTogether(hand))
+            {
+                return false;
+            }
+
+            var ringCurled = FingerCurled(hand, 16, 14, 13);
+            var pinkyCurled = FingerCurled(hand, 20, 18, 17);
+            return ringCurled && pinkyCurled && !hand.ringExtended && !hand.pinkyExtended;
+        }
+
+        private static bool FingerCurled(GestureHandFrame hand, int tipIndex, int pipIndex, int mcpIndex)
+        {
+            var wrist = hand.landmarks[0];
+            var tip = hand.landmarks[tipIndex];
+            var pip = hand.landmarks[pipIndex];
+            var mcp = hand.landmarks[mcpIndex];
+            var span = Mathf.Max(hand.palmSpan, 0.0001f);
+            var tipToWrist = LandmarkDistance(tip, wrist) / span;
+            var pipToWrist = LandmarkDistance(pip, wrist) / span;
+            var mcpToWrist = LandmarkDistance(mcp, wrist) / span;
+
+            var foldedTowardPalm = tipToWrist < pipToWrist * 1.08f || tipToWrist < mcpToWrist * 1.28f;
+            var notPointingUp = tip.y > pip.y - span * 0.04f;
+            return foldedTowardPalm || notPointingUp;
+        }
+
+        private static float LandmarkDistance(GestureLandmark a, GestureLandmark b)
+        {
+            var dx = a.x - b.x;
+            var dy = a.y - b.y;
+            var dz = a.z - b.z;
+            return Mathf.Sqrt(dx * dx + dy * dy + dz * dz);
         }
 
         private bool TryGetAirflowHand(GestureFrame frame, out GestureHandFrame hand)
@@ -1654,7 +1914,7 @@ namespace HandOfGod.Gameplay
             }
             foreach (var h in frame.hands)
             {
-                if (h.score >= 0.35f && IsAirflowGesture(h))
+                if (h.score >= 0.45f && IsAirflowGesture(h))
                 {
                     hand = h; return true;
                 }
