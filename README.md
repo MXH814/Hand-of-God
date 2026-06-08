@@ -24,6 +24,7 @@
 - 校准界面只显示摄像头背景、手骨架和清晰提示，避免地图物体干扰。
 - 所有主要 UI 按钮支持食指悬停选择，同时保留鼠标点击兜底。
 - 右上角 `Exit` / `Calibrate` 按钮放大并向屏幕内侧移动，降低边缘手势抖动和误触。
+- 校准完成后，右侧常驻 `Level Select` 选关栏，可随时进入或重进 Level 0、Level 1、Level 2。
 - `Start / Retry Camera` 可在自动桥接失败时手动重试。
 - Python 桥接使用本地锁端口 `5007` 保证单实例运行。
 - Unity 退出时会关闭由 Unity 启动的桥接进程，释放摄像头。
@@ -79,6 +80,8 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - `Skip Calibration`：食指悬停跳过校准，用于课堂展示或无摄像头环境。
 - `Exit`：退出游戏。
 - 鼠标点击：所有 UI 按钮仍可用鼠标触发。
+
+校准完成后，游戏界面右侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path` 或 `Level 2: Portals`；在关卡中选择当前关卡会重新开始该关。
 
 ## 手势与交互
 
@@ -483,6 +486,7 @@ cd "unity\gesture_bridge"
 - 张掌保持和捏合保持均可完成校准。
 - `Start / Retry Camera` 可重新启动桥接。
 - `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Restart`、`Tutorial` 都可用食指悬停触发。
+- 校准完成后的右侧 `Level Select` 可随时选择 Level 0、Level 1、Level 2。
 - 按钮尺寸和位置适合手势悬停，不需要把手移动到屏幕极边缘。
 
 第 0 关：

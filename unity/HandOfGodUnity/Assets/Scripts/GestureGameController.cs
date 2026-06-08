@@ -374,6 +374,7 @@ namespace HandOfGod.Gameplay
                 GUI.color = Color.white;
             }
             DrawGlobalControls();
+            DrawLevelSelectSidebar();
         }
 
         private void ResetToCalibration()
@@ -460,6 +461,34 @@ namespace HandOfGod.Gameplay
             }
         }
 
+        private void DrawLevelSelectSidebar()
+        {
+            if (mode == GameMode.CalibrationOpen || mode == GameMode.CalibrationPinch)
+            {
+                return;
+            }
+
+            var panel = new Rect(Screen.width - 276f, 104f, 228f, 190f);
+            DrawPanel(panel);
+            var titleStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 17,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+            };
+            GUI.Label(new Rect(panel.x + 12f, panel.y + 12f, panel.width - 24f, 26f), "Level Select", titleStyle);
+
+            DrawLevelSelectButton("select-level0", "Level 0: Tutorial", GameMode.Level0, new Rect(panel.x + 18f, panel.y + 48f, panel.width - 36f, 34f));
+            DrawLevelSelectButton("select-level1", "Level 1: Moving Path", GameMode.Level1, new Rect(panel.x + 18f, panel.y + 92f, panel.width - 36f, 34f));
+            DrawLevelSelectButton("select-level2", "Level 2: Portals", GameMode.Level2, new Rect(panel.x + 18f, panel.y + 136f, panel.width - 36f, 34f));
+        }
+
+        private void DrawLevelSelectButton(string key, string label, GameMode targetMode, Rect rect)
+        {
+            var active = mode == targetMode;
+            DrawHoverButton(key, active ? $"> {label}" : label, rect, MenuDwellSeconds, () => StartLevel(targetMode), 15);
+        }
+
         private void DrawMenu()
         {
             DrawPanel(new Rect(40, 40, 390, 300));
@@ -494,7 +523,7 @@ namespace HandOfGod.Gameplay
                 DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 170f, panel.yMax + 82f, 340f, 64f), MenuDwellSeconds, buttonAction, 24);
             }
 
-            var shapePanel = new Rect(Screen.width - 320f, 260f, 260f, 188f);
+            var shapePanel = new Rect(Screen.width - 320f, 330f, 260f, 188f);
             DrawPanel(shapePanel);
             GUI.Label(new Rect(shapePanel.x + 20f, shapePanel.y + 18f, 220f, 24f), "Practice object");
             DrawHoverButton("shape-cube", "Cube", new Rect(shapePanel.x + 20f, shapePanel.y + 50f, 210f, 34f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cube));
