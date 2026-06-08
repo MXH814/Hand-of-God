@@ -321,6 +321,7 @@ namespace HandOfGod.Gameplay
                     ReleaseLevel2KeyIfTrackingLost();
                     pendingAirDirection = 0;
                     pendingAirDirectionStart = -1f;
+                    SetAirBeltDirection(0);
                 }
                 return;
             }
@@ -796,10 +797,10 @@ namespace HandOfGod.Gameplay
             tutorialAirflowRoot = new GameObject("tutorial level2 airflow props").transform;
             tutorialAirflowRoot.SetParent(levelRoot, false);
 
-            var floor = CreateBox("tutorial level2 central wind gallery floor", new Vector3(1.25f, -0.015f, 0f), new Vector3(4.95f, 0.13f, 1.72f), level2FloorMaterial, tutorialAirflowRoot, Quaternion.identity, false);
+            var floor = CreateBox("tutorial level2 central wind gallery floor", new Vector3(0f, -0.015f, 0f), new Vector3(4.95f, 0.13f, 1.72f), level2FloorMaterial, tutorialAirflowRoot, Quaternion.identity, false);
             tutorialAirflowPadRenderer = floor.GetComponent<Renderer>();
-            CreateTutorialChamberFrame(1.25f, 4.95f, 1.72f);
-            CreateBox("tutorial level2 wind channel low glow", new Vector3(1.25f, 0.055f, 0f), new Vector3(4.65f, 0.006f, 0.045f), level2WallMaterial, tutorialAirflowRoot, Quaternion.identity, false);
+            CreateTutorialChamberFrame(0f, 4.95f, 1.72f);
+            CreateBox("tutorial level2 wind channel low glow", new Vector3(0f, 0.055f, 0f), new Vector3(4.65f, 0.006f, 0.045f), level2WallMaterial, tutorialAirflowRoot, Quaternion.identity, false);
             CreateTutorialWindFloorHints();
 
             airBelts = new Transform[1];
@@ -813,7 +814,7 @@ namespace HandOfGod.Gameplay
             airBeltMistQuads = new Transform[4];
             airBeltMistRenderers = new Renderer[4];
 
-            var belt = CreateBox("tutorial air belt trigger", new Vector3(1.25f, 0.18f, 0f), new Vector3(4.95f, 0.36f, 1.65f), level2WindMaterial, tutorialAirflowRoot, Quaternion.identity, true);
+            var belt = CreateBox("tutorial air belt trigger", new Vector3(0f, 0.18f, 0f), new Vector3(4.95f, 0.36f, 1.65f), level2WindMaterial, tutorialAirflowRoot, Quaternion.identity, true);
             airBelts[0] = belt.transform;
             airBeltRenderers[0] = belt.GetComponent<Renderer>();
             airBeltDirection[0] = 0;
@@ -882,11 +883,11 @@ namespace HandOfGod.Gameplay
 
         private void CreateTutorialWindFloorHints()
         {
-            CreateTutorialWindGrille("tutorial level2 wind intake grille", new Vector3(-0.95f, 0.118f, 0f));
-            CreateTutorialWindGrille("tutorial level2 wind output grille", new Vector3(3.38f, 0.118f, 0f));
-            CreateTutorialWindChevron(new Vector3(0.12f, 0.142f, 0f), 0.50f);
-            CreateTutorialWindChevron(new Vector3(1.25f, 0.142f, 0f), 0.50f);
-            CreateTutorialWindChevron(new Vector3(2.38f, 0.142f, 0f), 0.50f);
+            CreateTutorialWindGrille("tutorial level2 wind intake grille", new Vector3(-2.20f, 0.118f, 0f));
+            CreateTutorialWindGrille("tutorial level2 wind output grille", new Vector3(2.13f, 0.118f, 0f));
+            CreateTutorialWindChevron(new Vector3(-1.13f, 0.142f, 0f), 0.50f);
+            CreateTutorialWindChevron(new Vector3(0f, 0.142f, 0f), 0.50f);
+            CreateTutorialWindChevron(new Vector3(1.13f, 0.142f, 0f), 0.50f);
         }
 
         private void CreateTutorialWindGrille(string name, Vector3 position)
@@ -2270,27 +2271,24 @@ namespace HandOfGod.Gameplay
 
             // airflow gesture: change belt direction only after the portal transfer unlocks the wind gallery.
             var airflowUnlocked = level1Stage == Level1Stage.JoinBridge || level1Stage == Level1Stage.RunToGoal;
-            if (airflowUnlocked && TryGetAirflowHand(frame, out var ghand))
+            if (airflowUnlocked && TryGetAirflowDirectionCandidate(frame, out var candidateDir) && candidateDir != 0)
             {
-                var dirX = ghand.landmarks != null && ghand.landmarks.Length > 8 ? ghand.landmarks[8].x - ghand.landmarks[0].x : ghand.indexX - ghand.pinchX;
-                var candidateDir = Mathf.Abs(dirX) < AirflowDirectionDeadZone ? 0 : (dirX > 0f ? 1 : -1);
-                if (candidateDir != 0)
+                if (pendingAirDirection != candidateDir)
                 {
-                    if (pendingAirDirection != candidateDir)
-                    {
-                        pendingAirDirection = candidateDir;
-                        pendingAirDirectionStart = Time.time;
-                    }
-                    else if (Time.time - pendingAirDirectionStart >= AirflowDirectionHoldSeconds)
-                    {
-                        SetAirBeltDirection(candidateDir);
-                    }
+                    pendingAirDirection = candidateDir;
+                    pendingAirDirectionStart = Time.time;
+                    SetAirBeltDirection(0);
+                }
+                else if (Time.time - pendingAirDirectionStart >= AirflowDirectionHoldSeconds)
+                {
+                    SetAirBeltDirection(candidateDir);
                 }
             }
             else
             {
                 pendingAirDirection = 0;
                 pendingAirDirectionStart = -1f;
+                SetAirBeltDirection(0);
             }
 
         }
@@ -2303,6 +2301,12 @@ namespace HandOfGod.Gameplay
             }
 
             UpdateAirBeltVisuals();
+            var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
+            var airflowUnlocked = level1Stage == Level1Stage.JoinBridge || level1Stage == Level1Stage.RunToGoal;
+            if (airflowUnlocked && (!TryGetAirflowDirectionCandidate(frame, out var currentAirflowDirection) || currentAirflowDirection == 0))
+            {
+                SetAirBeltDirection(0);
+            }
             if (level2Teleporting)
             {
                 UpdateLevel2Teleport();
@@ -2331,6 +2335,10 @@ namespace HandOfGod.Gameplay
                 else if (direction == -1)
                 {
                     level2HintMessage = "Airflow: LEFT. Turn your gesture the other way to reach the goal.";
+                }
+                else
+                {
+                    level2HintMessage = "Hold the airflow gesture to create wind.";
                 }
             }
         }
@@ -2803,6 +2811,19 @@ namespace HandOfGod.Gameplay
                 }
             }
             return false;
+        }
+
+        private bool TryGetAirflowDirectionCandidate(GestureFrame frame, out int direction)
+        {
+            direction = 0;
+            if (!TryGetAirflowHand(frame, out var hand))
+            {
+                return false;
+            }
+
+            var dirX = hand.landmarks != null && hand.landmarks.Length > 8 ? hand.landmarks[8].x - hand.landmarks[0].x : hand.indexX - hand.pinchX;
+            direction = Mathf.Abs(dirX) < AirflowDirectionDeadZone ? 0 : (dirX > 0f ? 1 : -1);
+            return true;
         }
 
         // -------------------- End Level2 methods --------------------
