@@ -46,6 +46,7 @@ namespace HandOfGod.Gameplay
         private const float SafeDwellSeconds = 1f;
         private const float Level1RoadCenterY = 1f;
         private const float Level1RoadAngleDegrees = -8f;
+        private const float Level1RotatePlatformStartYaw = 55f;
         private static readonly int[] HandConnectionPairs =
         {
             0, 1, 1, 2, 2, 3, 3, 4,
@@ -1448,21 +1449,19 @@ namespace HandOfGod.Gameplay
             level1SuccessUntil = -1f;
 
             CreateBox("trial void shadow plinth", new Vector3(0f, -0.62f, 0f), new Vector3(10.9f, 0.42f, 5.2f), darkStone, levelRoot, Quaternion.identity, false);
-            CreateBox("trial carved base", new Vector3(0f, -0.28f, 0f), new Vector3(9.9f, 0.34f, 3.9f), cliffStone, levelRoot, Quaternion.identity, false);
-            CreateBox("road segment start", new Vector3(-3.25f, RoadY(-3.25f), 0f), new Vector3(2.45f, 0.28f, 1.55f), paleStone, levelRoot, roadRotation, true);
-            CreateBox("road segment middle", new Vector3(0.38f, RoadY(0.38f), 0f), new Vector3(2.65f, 0.28f, 1.55f), paleStone, levelRoot, roadRotation, true);
-            CreateBox("road segment finish", new Vector3(2.95f, RoadY(2.95f), 0f), new Vector3(2.45f, 0.28f, 1.55f), paleStone, levelRoot, roadRotation, true);
-            CreateBox("left rail start", new Vector3(-3.25f, RoadY(-3.25f) + 0.34f, -0.92f), new Vector3(2.45f, 0.58f, 0.18f), stone, levelRoot, roadRotation, true);
-            CreateBox("right rail start", new Vector3(-3.25f, RoadY(-3.25f) + 0.34f, 0.92f), new Vector3(2.45f, 0.58f, 0.18f), stone, levelRoot, roadRotation, true);
-            CreateBox("left rail finish", new Vector3(2.95f, RoadY(2.95f) + 0.34f, -0.92f), new Vector3(2.45f, 0.58f, 0.18f), stone, levelRoot, roadRotation, true);
-            CreateBox("right rail finish", new Vector3(2.95f, RoadY(2.95f) + 0.34f, 0.92f), new Vector3(2.45f, 0.58f, 0.18f), stone, levelRoot, roadRotation, true);
+            CreateBox("trial dungeon base", new Vector3(0f, -0.28f, 0f), new Vector3(9.9f, 0.34f, 3.9f), level2WallMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox("road segment start", new Vector3(-3.25f, RoadY(-3.25f), 0f), new Vector3(2.45f, 0.28f, 1.55f), level2FloorMaterial, levelRoot, roadRotation, true);
+            CreateBox("road segment middle", new Vector3(0.38f, RoadY(0.38f), 0f), new Vector3(2.65f, 0.28f, 1.55f), level2FloorMaterial, levelRoot, roadRotation, true);
+            CreateBox("road segment finish", new Vector3(2.95f, RoadY(2.95f), 0f), new Vector3(2.45f, 0.28f, 1.55f), level2FloorMaterial, levelRoot, roadRotation, true);
+            CreateBox("road start brass centerline", new Vector3(-3.25f, RoadY(-3.25f) + 0.155f, 0f), new Vector3(2.16f, 0.018f, 0.055f), level2TrimMaterial, levelRoot, roadRotation, false);
+            CreateBox("road finish brass centerline", new Vector3(2.95f, RoadY(2.95f) + 0.155f, 0f), new Vector3(2.16f, 0.018f, 0.055f), level2TrimMaterial, levelRoot, roadRotation, false);
 
-            obstacleBox = CreateBox("Pinch Movable Obstacle Box", new Vector3(-2.85f, RoadY(-2.85f) + 0.37f, 0f), new Vector3(0.72f, 0.72f, 0.98f), boxIdle, levelRoot, roadRotation, true).AddComponent<Rigidbody>();
+            obstacleBox = CreateBox("Pinch Movable Obstacle Box", new Vector3(-2.85f, RoadY(-2.85f) + 0.37f, 0f), new Vector3(0.72f, 0.72f, 0.98f), level2TrimMaterial, levelRoot, roadRotation, true).AddComponent<Rigidbody>();
             obstacleBox.isKinematic = true;
             obstacleBox.interpolation = RigidbodyInterpolation.Interpolate;
             obstacleBox.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             obstacleRenderer = obstacleBox.GetComponent<Renderer>();
-            var slot = CreateBox("block side slot", new Vector3(-2.85f, RoadY(-2.85f) + 0.08f, 1.35f), new Vector3(0.95f, 0.08f, 0.75f), amberGlow, levelRoot, roadRotation, false);
+            var slot = CreateBox("block open side slot", new Vector3(-2.85f, RoadY(-2.85f) + 0.09f, 1.18f), new Vector3(1.05f, 0.045f, 0.82f), level2RuneMaterial, levelRoot, roadRotation, false);
             blockSlotRenderer = slot.GetComponent<Renderer>();
 
             startGate = CreateGate("start release gate", -3.55f);
@@ -1470,16 +1469,21 @@ namespace HandOfGod.Gameplay
             rotateGateStop = CreateGate("rotating gate stop", 0.9f);
             goalGate = CreateGate("goal seal gate", 2.55f);
 
-            var leftBridge = CreateBox("left sliding bridge half", new Vector3(-1.4f, RoadY(-1.4f) + 0.02f, -0.58f), new Vector3(1.3f, 0.18f, 0.62f), boxHover, levelRoot, roadRotation, true);
-            var rightBridge = CreateBox("right sliding bridge half", new Vector3(-1.4f, RoadY(-1.4f) + 0.02f, 0.58f), new Vector3(1.3f, 0.18f, 0.62f), boxHover, levelRoot, roadRotation, true);
+            var leftBridge = CreateBox("left sliding bridge half", new Vector3(-1.4f, RoadY(-1.4f) + 0.02f, -0.92f), new Vector3(1.3f, 0.18f, 0.56f), level2TrimMaterial, levelRoot, roadRotation, true);
+            var rightBridge = CreateBox("right sliding bridge half", new Vector3(-1.4f, RoadY(-1.4f) + 0.02f, 0.92f), new Vector3(1.3f, 0.18f, 0.56f), level2TrimMaterial, levelRoot, roadRotation, true);
             bridgeLeft = leftBridge.transform;
             bridgeRight = rightBridge.transform;
             bridgeLeftRenderer = leftBridge.GetComponent<Renderer>();
             bridgeRightRenderer = rightBridge.GetComponent<Renderer>();
 
-            var rotateGateObject = CreateBox("rotating path gate", new Vector3(0.92f, RoadY(0.92f) + 0.42f, 0f), new Vector3(1.35f, 0.48f, 0.18f), boxHover, levelRoot, roadRotation * Quaternion.Euler(0f, 90f, 0f), true);
+            var rotateGateObject = CreateBox("rotating low bridge platform", new Vector3(0.92f, RoadY(0.92f) + 0.18f, 0f), new Vector3(1.42f, 0.16f, 1.04f), level2TrimMaterial, levelRoot, roadRotation * Quaternion.Euler(0f, Level1RotatePlatformStartYaw, 0f), true);
             rotateGate = rotateGateObject.transform;
             rotateGateRenderer = rotateGateObject.GetComponent<Renderer>();
+            var rotatePlatformDetail = InstantiateDungeonModel("template-floor-detail", rotateGate.position + new Vector3(0f, 0.095f, 0f), new Vector3(0.92f, 0.16f, 0.92f), rotateGate.rotation, level2FloorMaterial);
+            if (rotatePlatformDetail != null)
+            {
+                rotatePlatformDetail.transform.SetParent(rotateGate, true);
+            }
 
             var seal = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             seal.name = "final palm seal";
@@ -1507,10 +1511,10 @@ namespace HandOfGod.Gameplay
             goal.transform.SetParent(levelRoot, false);
             goal.transform.position = new Vector3(4.1f, RoadY(4.1f) + 0.2f, 0f);
             goal.transform.localScale = new Vector3(0.7f, 0.11f, 0.7f);
-            goal.GetComponent<Renderer>().sharedMaterial = tealGlow;
+            goal.GetComponent<Renderer>().sharedMaterial = level2PortalCoreMaterial;
             DestroyUnityObject(goal.GetComponent<Collider>());
             levelBall.Configure(goal.transform);
-            CreateTorus("goal sacred ring", goal.transform.position + new Vector3(0f, 0.12f, 0f), 0.66f, 0.055f, tealGlow, levelRoot);
+            CreateLevel2GoalArt(goal.transform.position);
         }
 
         private void UpdateLevel1(GestureHandFrame hand)
@@ -1520,7 +1524,7 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
-            var target = MapPinchToRoad(hand.pinchX, hand.pinchY);
+            var target = MapPinchToLevel1DragPlane(hand.pinchX, hand.pinchY);
             var isPinch = IsPinching(hand);
             var twoHandsPinching = TryGetTwoPinchingHands(out var a, out var b);
             UpdateLevel1Block(target, isPinch);
@@ -1531,8 +1535,8 @@ namespace HandOfGod.Gameplay
 
         private void UpdateLevel1Block(Vector3 target, bool isPinch)
         {
-            var close = DistanceXZ(target, obstacleBox.position) < (isPinch ? 1.05f : 0.72f);
-            obstacleRenderer.sharedMaterial = boxIdle;
+            var close = DistanceXZ(target, obstacleBox.position) < (isPinch ? 1.65f : 0.90f);
+            obstacleRenderer.sharedMaterial = level2TrimMaterial;
             if (!boxHeld && close)
             {
                 obstacleRenderer.sharedMaterial = boxHover;
@@ -1540,7 +1544,10 @@ namespace HandOfGod.Gameplay
             if (!boxHeld && isPinch && close)
             {
                 boxHeld = true;
-                level1BoxGrabOffset = obstacleBox.position - target;
+                var snapPos = target;
+                snapPos.y = RoadY(snapPos.x) + 0.37f;
+                obstacleBox.MovePosition(snapPos);
+                level1BoxGrabOffset = Vector3.zero;
             }
             if (boxHeld && !isPinch)
             {
@@ -1551,14 +1558,14 @@ namespace HandOfGod.Gameplay
                 obstacleRenderer.sharedMaterial = boxHeldMaterial;
                 target += level1BoxGrabOffset;
                 target.x = Mathf.Clamp(target.x, -3.45f, -2.15f);
-                target.z = Mathf.Clamp(target.z, -0.65f, 1.55f);
+                target.z = Mathf.Clamp(target.z, -0.70f, 1.46f);
                 target.y = RoadY(target.x) + 0.37f;
                 obstacleBox.MovePosition(target);
                 obstacleBox.linearVelocity = Vector3.zero;
                 obstacleBox.angularVelocity = Vector3.zero;
             }
 
-            if (level1Stage == Level1Stage.ClearBlock && DistanceXZ(obstacleBox.position, new Vector3(-2.85f, 0f, 1.35f)) < 0.45f)
+            if (level1Stage == Level1Stage.ClearBlock && DistanceXZ(obstacleBox.position, new Vector3(-2.85f, 0f, 1.18f)) < 0.48f)
             {
                 obstacleRenderer.sharedMaterial = boxHeldMaterial;
                 blockSlotRenderer.sharedMaterial = tealGlow;
@@ -1586,8 +1593,8 @@ namespace HandOfGod.Gameplay
 
             var t = Mathf.Clamp01(1f - distance / level1BridgeStartDistance);
             var y = RoadY(-1.4f) + 0.02f;
-            bridgeLeft.position = Vector3.Lerp(new Vector3(-1.4f, y, -0.58f), new Vector3(-1.4f, y, -0.28f), t);
-            bridgeRight.position = Vector3.Lerp(new Vector3(-1.4f, y, 0.58f), new Vector3(-1.4f, y, 0.28f), t);
+            bridgeLeft.position = Vector3.Lerp(new Vector3(-1.4f, y, -0.92f), new Vector3(-1.4f, y, -0.28f), t);
+            bridgeRight.position = Vector3.Lerp(new Vector3(-1.4f, y, 0.92f), new Vector3(-1.4f, y, 0.28f), t);
             bridgeLeftRenderer.sharedMaterial = boxHeldMaterial;
             bridgeRightRenderer.sharedMaterial = boxHeldMaterial;
             if (distance < level1BridgeStartDistance * 0.72f)
@@ -1618,7 +1625,7 @@ namespace HandOfGod.Gameplay
                     level1RotateStartAngle = angle;
                 }
                 var deltaDegrees = Mathf.DeltaAngle(level1RotateStartAngle * Mathf.Rad2Deg, angle * Mathf.Rad2Deg);
-                var yaw = Mathf.Clamp(90f - Mathf.Abs(deltaDegrees), 0f, 90f);
+                var yaw = Mathf.Clamp(Level1RotatePlatformStartYaw - Mathf.Abs(deltaDegrees), 0f, Level1RotatePlatformStartYaw);
                 rotateGate.rotation = Quaternion.Euler(0f, 0f, Level1RoadAngleDegrees) * Quaternion.Euler(0f, yaw, 0f);
                 rotateGateRenderer.sharedMaterial = boxHeldMaterial;
                 if (yaw <= 12f)
@@ -1626,7 +1633,6 @@ namespace HandOfGod.Gameplay
                     rotateGateLocked = true;
                     rotateGate.rotation = Quaternion.Euler(0f, 0f, Level1RoadAngleDegrees);
                     rotateGateRenderer.sharedMaterial = tealGlow;
-                    DestroyUnityObject(rotateGate.GetComponent<Collider>());
                     OpenGate(rotateGateStop);
                     AdvanceLevel1(Level1Stage.ActivateSeal);
                 }
@@ -1680,7 +1686,22 @@ namespace HandOfGod.Gameplay
 
         private GameObject CreateGate(string name, float x)
         {
-            return CreateBox(name, new Vector3(x, RoadY(x) + 0.66f, 0f), new Vector3(0.16f, 1.05f, 1.85f), amberGlow, levelRoot, Quaternion.Euler(0f, 0f, Level1RoadAngleDegrees), true);
+            var gateRoot = new GameObject(name);
+            gateRoot.transform.SetParent(levelRoot, false);
+            gateRoot.transform.SetPositionAndRotation(new Vector3(x, RoadY(x) + 0.66f, 0f), Quaternion.Euler(0f, 0f, Level1RoadAngleDegrees));
+            var collider = gateRoot.AddComponent<BoxCollider>();
+            collider.center = Vector3.zero;
+            collider.size = new Vector3(0.18f, 1.12f, 1.82f);
+
+            for (var i = 0; i < 6; i++)
+            {
+                var z = Mathf.Lerp(-0.68f, 0.68f, i / 5f);
+                CreateBox($"{name} dungeon bar {i}", gateRoot.transform.TransformPoint(new Vector3(0f, 0.02f, z)), new Vector3(0.10f, 0.84f, 0.045f), level2WallMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
+            }
+            CreateBox(name + " cyan lock core", gateRoot.transform.TransformPoint(new Vector3(0f, 0.08f, 0f)), new Vector3(0.13f, 0.22f, 0.22f), level2PortalCoreMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
+            CreateBox(name + " brass lintel", gateRoot.transform.TransformPoint(new Vector3(0f, 0.36f, 0f)), new Vector3(0.16f, 0.08f, 1.82f), level2TrimMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
+            CreateBox(name + " brass lower rail", gateRoot.transform.TransformPoint(new Vector3(0f, -0.28f, 0f)), new Vector3(0.16f, 0.08f, 1.82f), level2TrimMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
+            return gateRoot;
         }
 
         private void OpenGate(GameObject gate)
@@ -1708,7 +1729,7 @@ namespace HandOfGod.Gameplay
             {
                 Level1Stage.ClearBlock => "Move the block into the glowing side slot to release the ball.",
                 Level1Stage.JoinBridge => "Pinch both bridge halves and pull your hands together to join the bridge.",
-                Level1Stage.RotateGate => "Pinch with both hands and rotate the gate until it aligns with the path.",
+                Level1Stage.RotateGate => "Pinch with both hands and rotate the low platform until it aligns with the path.",
                 Level1Stage.ActivateSeal => "Open your palm over the glowing seal to unlock the final gate.",
                 Level1Stage.RunToGoal => "The path is open. Guide the ball safely to the altar.",
                 _ => "",
@@ -1722,6 +1743,15 @@ namespace HandOfGod.Gameplay
             x = Mathf.Clamp(x, -4.2f, 4.15f);
             z = Mathf.Clamp(z, -1.55f, 1.55f);
             return new Vector3(x, RoadY(x) + 0.37f, z);
+        }
+
+        private Vector3 MapPinchToLevel1DragPlane(float normalizedX, float normalizedY)
+        {
+            var point = ScreenToWorldPlane(normalizedX, normalizedY, RoadY(-2.85f) + 0.37f);
+            point.x = Mathf.Clamp(point.x, -3.65f, -2.00f);
+            point.z = Mathf.Clamp(point.z, -0.85f, 1.58f);
+            point.y = RoadY(point.x) + 0.37f;
+            return point;
         }
 
         private bool IsPinching(GestureHandFrame hand)
