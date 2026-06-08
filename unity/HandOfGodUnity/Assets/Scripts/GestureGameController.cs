@@ -1589,15 +1589,6 @@ namespace HandOfGod.Gameplay
             CreateCleanChamberFrame(1.25f, 4.95f, 1.72f);
             CreateCleanChamberFrame(4.55f, 1.65f, 2.15f);
 
-            CreateBox("level2 rear wall left", new Vector3(-3.0f, 0.48f, 1.50f), new Vector3(2.55f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 rear wall wind", new Vector3(1.25f, 0.48f, 1.12f), new Vector3(4.95f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 rear wall altar", new Vector3(4.55f, 0.48f, 1.34f), new Vector3(1.65f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
-
-            CreateLevel2Pillar(new Vector3(-4.15f, 0.34f, 1.15f));
-            CreateLevel2Pillar(new Vector3(-1.88f, 0.34f, 1.15f));
-            CreateLevel2Pillar(new Vector3(3.78f, 0.34f, 0.92f));
-            CreateLevel2Pillar(new Vector3(5.18f, 0.34f, 0.92f));
-
             CreateBox("level2 wind channel low glow", new Vector3(1.25f, 0.055f, 0f), new Vector3(4.65f, 0.006f, 0.045f), level2WallMaterial, levelRoot, Quaternion.identity, false);
             CreateLevel2WindFloorHints();
         }

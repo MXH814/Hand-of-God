@@ -198,8 +198,8 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 第二关美术：
 
-- 场景拆分为左侧传送厅、中央气流廊和右侧祭坛房，避免早期长条平台的原型感。
-- 地牢墙体、石板、墙角、地面细节使用 Kenney `Modular Dungeon Kit` 的 FBX 模型，放在 `Assets/Resources/KenneyDungeon/`，运行时通过 `Resources.Load` 加载。
+- 场景拆分为左侧传送平台、中央气流廊和右侧祭坛平台，整体保持开阔俯视视野。
+- 石板、边框和机关细节使用 Kenney `Modular Dungeon Kit` 的 FBX 模型与项目材质风格，放在 `Assets/Resources/KenneyDungeon/`，运行时通过 `Resources.Load` 加载。
 - 传送门钥匙使用 OpenGameArt `Key - low poly` FBX 模型，放在 `Assets/Resources/OpenGameArt/LowPolyKey/`；Unity 只负责归一化尺寸、材质高亮和交互 collider。
 - 气流与传送门漩涡使用 Kenney `Particle Pack` 透明 PNG 贴图，放在 `Assets/Resources/KenneyParticles/`；Unity 通过透明材质、quad 和 particle renderer 组合成动态 VFX。
 - Unity 程序化几何只保留用于物理 collider、钥匙插座、传送门光圈、地面风向标记和必要机关结构。
