@@ -101,36 +101,36 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 ### Level 0: Gesture Tutorial
 
-第 0 关是完整教学关，目标是让玩家在进入正式关卡前理解核心手势。教学提示显示在画面中上方，成功后显示醒目的 `SUCCESS`，玩家再通过大号 `Continue` 按钮进入下一步。教学完成后不会锁定交互，玩家仍可继续练习，直到主动选择 `Next: Level 1`。
+第 0 关是完整教学关，目标是让玩家在进入正式关卡前理解核心手势。教学提示显示在画面中上方，成功后显示醒目的 `SUCCESS`，玩家再通过大号 `Continue` 按钮进入下一步；最后一个教学步骤完成后直接显示 `Next: Level 1`。左侧提供 `Tutorial Steps` 菜单，玩家可以随时跳转到任意教学步骤重新练习。
 
 关卡类型：手势教学与交互练习。
 
-核心物体：
+核心规则：
 
-- 可拖动、可旋转的中心物块。
-- 可切换的物块形状：`Cube`、`Sphere`、`Cylinder`。
-- 可合拢的教学桥板。
-- 可张掌激活的发光神印。
-- 可旋转、缩放的练习地图。
-- 可反馈左右方向的气流练习垫。
+- 教学关地板比正式关前的旧练习台更大，留出更宽的手势活动空间。
+- 每个教学步骤只显示当前步骤需要的道具，避免无关物体干扰识别和理解。
+- 单手拖动和双手旋转步骤显示中心物块，并保留 `Cube`、`Sphere`、`Cylinder` 形状切换。
+- 拉合步骤只显示教学桥板；张掌步骤只显示发光神印；地图控制步骤只保留可旋转、缩放的练习地板。
+- 气流步骤直接使用第 2 关同款中央气流走廊地板、格栅、青色箭头、雾带、流线和粒子风效。
+- 教学完成后不再进入额外的自由操作页，玩家可通过左侧步骤菜单选择任意教学项，或通过 `Next: Level 1` 进入正式关卡。
 
 教学步骤：
 
 | 步骤 | 教学目标 | 成功条件 |
 | --- | --- | --- |
-| 1/8 Move your hands freely | 随意移动双手，观察屏幕上的识别效果 | Unity 同时识别到左右手 |
-| 2/8 Pinch an object with one hand and drag it | 单手拇指和食指捏合拖动物体 | 物体被拖动超过指定距离 |
-| 3/8 Pinch both sides and rotate the object | 双手捏住物体两侧并像真实物体一样旋转 | 物体旋转超过指定角度 |
-| 4/8 Join a bridge with both hands | 双手捏住桥板两端并向内拉合 | 双手距离缩短到阈值，桥板锁定 |
-| 5/8 Open your palm over the glowing seal | 张开手掌悬停在发光神印上 | 神印区域内张掌保持到指定时长 |
-| 6/8 Bring index and middle fingers together on both hands | 双手食指中指并拢控制地图 | 地图旋转或缩放超过指定变化量 |
-| 7/8 Point the airflow with one hand | 单手拇指伸出、食指中指并拢、无名指小指收起，向左或向右指示气流 | 气流练习垫显示 `LEFT` 或 `RIGHT` 方向反馈 |
-| 8/8 Tutorial complete | 完成教学后自由练习并进入 Level 1 | 悬停 `Next: Level 1` |
+| 1/7 Move your hands freely | 随意移动双手，观察屏幕上的识别效果 | Unity 同时识别到左右手 |
+| 2/7 Pinch an object with one hand and drag it | 单手拇指和食指捏合拖动物体 | 物体被拖动超过指定距离 |
+| 3/7 Pinch both sides and rotate the object | 双手捏住物体两侧并像真实物体一样旋转 | 物体旋转超过指定角度 |
+| 4/7 Join a bridge with both hands | 双手捏住桥板两端并向内拉合 | 双手距离缩短到阈值，桥板锁定 |
+| 5/7 Open your palm over the glowing seal | 张开手掌悬停在发光神印上 | 神印区域内张掌保持到指定时长 |
+| 6/7 Bring index and middle fingers together on both hands | 双手食指中指并拢控制地图 | 地图旋转或缩放超过指定变化量 |
+| 7/7 Point the airflow with one hand | 单手拇指伸出、食指中指并拢、无名指小指收起，向左或向右指示气流 | 第 2 关同款气流区显示 `LEFT` 或 `RIGHT` 风效反馈 |
 
 教学关中的交互反馈：
 
 - 可操作物体接近手势点时高亮。
 - 抓取、旋转、桥板合拢和神印激活时使用高亮材质。
+- 第 0 关左侧 `Tutorial Steps` 可随时选择任意教学步骤。
 - 成功提示使用更大的字号、暖色高亮和脉冲式视觉反馈。
 - `Continue` 和 `Next: Level 1` 按钮尺寸和字体都较大，位于成功提示下方，便于手势悬停选择。
 
@@ -508,20 +508,22 @@ cd "unity\gesture_bridge"
 - `Start / Retry Camera` 可重新启动桥接。
 - `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Restart`、`Tutorial` 都可用食指悬停触发。
 - 校准完成后的左侧 `Level Select` 可随时选择 Level 0、Level 1、Level 2。
+- 第 0 关左侧 `Tutorial Steps` 可随时选择任意教学步骤。
 - 按钮尺寸和位置适合手势悬停，不需要把手移动到屏幕极边缘。
 
 第 0 关：
 
 - 左右手识别提示正确。
+- 教学关地板更大，每一步只显示该步用到的道具。
 - 单手捏合拖动物体时物体跟手移动。
 - 单指指向、其他手指弯曲时，骨架和食指悬停点应保持稳定，不应向附近物体明显吸附抖动。
 - 双手捏合旋转物体方向自然，物体不缩放。
 - 双手捏合拉合桥板可成功锁定。
 - 张掌悬停可激活神印。
 - 双手食指中指并拢可控制地图旋转和缩放。
-- 单手气流指向手势可在教学气流垫上显示左风或右风反馈。
+- 单手气流指向手势可在第 2 关同款气流地板、雾带、流线和箭头上显示左风或右风反馈。
 - 每步成功后显示醒目 `SUCCESS`，并等待玩家手动 `Continue`。
-- 完成后仍可练习，悬停 `Next: Level 1` 进入第 1 关。
+- 最后一个教学步骤完成后不进入自由操作页，悬停 `Next: Level 1` 进入第 1 关。
 
 第 1 关：
 

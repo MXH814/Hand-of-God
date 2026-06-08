@@ -110,6 +110,9 @@ namespace HandOfGod.Gameplay
         private Vector3 tutorialDragStart;
         private Transform tutorialBridgeLeft;
         private Transform tutorialBridgeRight;
+        private Transform tutorialBridgeRoot;
+        private Transform tutorialSealRoot;
+        private Transform tutorialAirflowRoot;
         private Renderer tutorialBridgeLeftRenderer;
         private Renderer tutorialBridgeRightRenderer;
         private Renderer tutorialSealRenderer;
@@ -566,8 +569,10 @@ namespace HandOfGod.Gameplay
             var stepStyle = new GUIStyle(GUI.skin.label) { fontSize = 18, fontStyle = FontStyle.Bold };
             var detailStyle = new GUIStyle(GUI.skin.label) { fontSize = 15, wordWrap = true };
             var statusStyle = new GUIStyle(GUI.skin.label) { fontSize = 13 };
-            var panelWidth = Mathf.Min(Screen.width - 160f, 860f);
-            var panel = new Rect(Screen.width * 0.5f - panelWidth * 0.5f, 42f, panelWidth, 170f);
+            var panelLeft = 340f;
+            var panelWidth = Mathf.Min(Screen.width - panelLeft - 70f, 860f);
+            panelLeft = Mathf.Max(panelLeft, Screen.width * 0.5f - panelWidth * 0.5f);
+            var panel = new Rect(panelLeft, 42f, panelWidth, 170f);
             DrawPanel(panel);
             GUI.Label(new Rect(panel.x + 32f, panel.y + 16f, panel.width - 64f, 32f), "Level 0: Gesture Tutorial", titleStyle);
             GUI.Label(new Rect(panel.x + 32f, panel.y + 52f, panel.width - 64f, 28f), TutorialTitle(), stepStyle);
@@ -576,18 +581,50 @@ namespace HandOfGod.Gameplay
 
             if (TutorialStageSucceeded())
             {
-                DrawSuccessBanner(new Rect(Screen.width * 0.5f - 210f, panel.yMax + 14f, 420f, 58f), tutorialStage == TutorialStage.Complete ? "TUTORIAL COMPLETE" : "SUCCESS");
-                var buttonLabel = tutorialStage == TutorialStage.Complete ? "Next: Level 1" : "Continue";
-                var buttonAction = tutorialStage == TutorialStage.Complete ? (System.Action)(() => StartLevel(GameMode.Level1)) : AdvanceTutorialStage;
+                var finalStage = IsFinalTutorialStage();
+                DrawSuccessBanner(new Rect(Screen.width * 0.5f - 210f, panel.yMax + 14f, 420f, 58f), finalStage ? "TUTORIAL COMPLETE" : "SUCCESS");
+                var buttonLabel = finalStage ? "Next: Level 1" : "Continue";
+                var buttonAction = finalStage ? (System.Action)(() => StartLevel(GameMode.Level1)) : AdvanceTutorialStage;
                 DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 170f, panel.yMax + 82f, 340f, 64f), MenuDwellSeconds, buttonAction, 24);
             }
 
-            var shapePanel = new Rect(48f, 316f, 260f, 188f);
-            DrawPanel(shapePanel);
-            GUI.Label(new Rect(shapePanel.x + 20f, shapePanel.y + 18f, 220f, 24f), "Practice object");
-            DrawHoverButton("shape-cube", "Cube", new Rect(shapePanel.x + 20f, shapePanel.y + 50f, 210f, 34f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cube));
-            DrawHoverButton("shape-sphere", "Sphere", new Rect(shapePanel.x + 20f, shapePanel.y + 94f, 210f, 34f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Sphere));
-            DrawHoverButton("shape-cylinder", "Cylinder", new Rect(shapePanel.x + 20f, shapePanel.y + 138f, 210f, 34f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cylinder));
+            DrawTutorialStageMenu();
+            if (TutorialUsesLabObject())
+            {
+                var shapePanel = new Rect(48f, 590f, 260f, 124f);
+                DrawPanel(shapePanel);
+                GUI.Label(new Rect(shapePanel.x + 20f, shapePanel.y + 10f, 220f, 22f), "Practice object");
+                DrawHoverButton("shape-cube", "Cube", new Rect(shapePanel.x + 20f, shapePanel.y + 36f, 210f, 24f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cube), 13);
+                DrawHoverButton("shape-sphere", "Sphere", new Rect(shapePanel.x + 20f, shapePanel.y + 64f, 210f, 24f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Sphere), 13);
+                DrawHoverButton("shape-cylinder", "Cylinder", new Rect(shapePanel.x + 20f, shapePanel.y + 92f, 210f, 24f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cylinder), 13);
+            }
+        }
+
+        private void DrawTutorialStageMenu()
+        {
+            var panel = new Rect(48f, 310f, 260f, 268f);
+            DrawPanel(panel);
+            var titleStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 16,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+            };
+            GUI.Label(new Rect(panel.x + 12f, panel.y + 10f, panel.width - 24f, 24f), "Tutorial Steps", titleStyle);
+            var y = panel.y + 42f;
+            DrawTutorialStageButton("tutorial-jump-hands", "1  Recognize hands", TutorialStage.FindHands, new Rect(panel.x + 18f, y, panel.width - 36f, 26f));
+            DrawTutorialStageButton("tutorial-jump-drag", "2  One-hand drag", TutorialStage.OneHandDrag, new Rect(panel.x + 18f, y + 30f, panel.width - 36f, 26f));
+            DrawTutorialStageButton("tutorial-jump-rotate", "3  Two-hand rotate", TutorialStage.TwoHandRotate, new Rect(panel.x + 18f, y + 60f, panel.width - 36f, 26f));
+            DrawTutorialStageButton("tutorial-jump-bridge", "4  Join bridge", TutorialStage.BridgePull, new Rect(panel.x + 18f, y + 90f, panel.width - 36f, 26f));
+            DrawTutorialStageButton("tutorial-jump-palm", "5  Palm seal", TutorialStage.PalmActivate, new Rect(panel.x + 18f, y + 120f, panel.width - 36f, 26f));
+            DrawTutorialStageButton("tutorial-jump-map", "6  Map control", TutorialStage.MapControl, new Rect(panel.x + 18f, y + 150f, panel.width - 36f, 26f));
+            DrawTutorialStageButton("tutorial-jump-air", "7  Airflow", TutorialStage.AirflowDirection, new Rect(panel.x + 18f, y + 180f, panel.width - 36f, 26f));
+        }
+
+        private void DrawTutorialStageButton(string key, string label, TutorialStage targetStage, Rect rect)
+        {
+            var active = tutorialStage == targetStage;
+            DrawHoverButton(key, active ? $"> {label}" : label, rect, MenuDwellSeconds, () => SelectTutorialStage(targetStage), 12);
         }
 
         private void DrawLevel1Hud()
@@ -709,8 +746,8 @@ namespace HandOfGod.Gameplay
         private void BuildLevel0()
         {
             levelRoot = new GameObject("Level00 Gesture Lab").transform;
-            CreateBox("lab base", new Vector3(0f, -0.15f, 0f), new Vector3(5.5f, 0.3f, 3.2f), darkStone, levelRoot, Quaternion.identity, true);
-            CreateBox("lab guide", new Vector3(0f, 0.02f, 0f), new Vector3(3.6f, 0.05f, 2.0f), paleStone, levelRoot, Quaternion.identity, false);
+            CreateBox("lab base", new Vector3(0f, -0.15f, 0f), new Vector3(8.4f, 0.3f, 4.6f), darkStone, levelRoot, Quaternion.identity, true);
+            CreateBox("lab guide", new Vector3(0f, 0.02f, 0f), new Vector3(6.2f, 0.05f, 3.15f), paleStone, levelRoot, Quaternion.identity, false);
             ReplaceLabObject(PrimitiveType.Cube);
             labCompleted = false;
             tutorialStage = TutorialStage.FindHands;
@@ -725,32 +762,147 @@ namespace HandOfGod.Gameplay
             tutorialPalmStart = -1f;
             BuildTutorialMechanisms();
             twoFingerMapStartDistance = 0f;
+            ApplyTutorialStageVisibility();
         }
 
         private void BuildTutorialMechanisms()
         {
-            var left = CreateBox("tutorial bridge left half", new Vector3(-0.55f, 0.22f, -1.05f), new Vector3(1.0f, 0.08f, 0.42f), boxHover, levelRoot, Quaternion.identity, true);
-            var right = CreateBox("tutorial bridge right half", new Vector3(0.55f, 0.22f, -1.05f), new Vector3(1.0f, 0.08f, 0.42f), boxHover, levelRoot, Quaternion.identity, true);
+            tutorialBridgeRoot = new GameObject("tutorial bridge props").transform;
+            tutorialBridgeRoot.SetParent(levelRoot, false);
+            var left = CreateBox("tutorial bridge left half", new Vector3(-0.55f, 0.22f, -1.05f), new Vector3(1.0f, 0.08f, 0.42f), boxHover, tutorialBridgeRoot, Quaternion.identity, true);
+            var right = CreateBox("tutorial bridge right half", new Vector3(0.55f, 0.22f, -1.05f), new Vector3(1.0f, 0.08f, 0.42f), boxHover, tutorialBridgeRoot, Quaternion.identity, true);
             tutorialBridgeLeft = left.transform;
             tutorialBridgeRight = right.transform;
             tutorialBridgeLeftRenderer = left.GetComponent<Renderer>();
             tutorialBridgeRightRenderer = right.GetComponent<Renderer>();
 
+            tutorialSealRoot = new GameObject("tutorial palm seal props").transform;
+            tutorialSealRoot.SetParent(levelRoot, false);
             var seal = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             seal.name = "tutorial palm seal";
-            seal.transform.SetParent(levelRoot, false);
+            seal.transform.SetParent(tutorialSealRoot, false);
             seal.transform.position = new Vector3(0f, 0.16f, 1.05f);
             seal.transform.localScale = new Vector3(0.56f, 0.04f, 0.56f);
             tutorialSealRenderer = seal.GetComponent<Renderer>();
             tutorialSealRenderer.sharedMaterial = amberGlow;
             DestroyUnityObject(seal.GetComponent<Collider>());
-            CreateTorus("tutorial seal ring", seal.transform.position + new Vector3(0f, 0.04f, 0f), 0.5f, 0.035f, tealGlow, levelRoot);
+            CreateTorus("tutorial seal ring", seal.transform.position + new Vector3(0f, 0.04f, 0f), 0.5f, 0.035f, tealGlow, tutorialSealRoot);
 
-            var airflowPad = CreateBox("tutorial airflow direction pad", new Vector3(1.45f, 0.08f, -1.05f), new Vector3(0.95f, 0.045f, 0.48f), level2WallMaterial, levelRoot, Quaternion.identity, false);
-            tutorialAirflowPadRenderer = airflowPad.GetComponent<Renderer>();
-            tutorialAirflowArrow = CreateBox("tutorial airflow direction arrow", new Vector3(1.45f, 0.14f, -1.05f), new Vector3(0.56f, 0.022f, 0.075f), boxIdle, levelRoot, Quaternion.identity, false).transform;
-            CreateBox("tutorial airflow left fin", new Vector3(1.17f, 0.15f, -0.92f), new Vector3(0.08f, 0.02f, 0.24f), tealGlow, levelRoot, Quaternion.Euler(0f, 35f, 0f), false);
-            CreateBox("tutorial airflow right fin", new Vector3(1.73f, 0.15f, -1.18f), new Vector3(0.08f, 0.02f, 0.24f), tealGlow, levelRoot, Quaternion.Euler(0f, 35f, 0f), false);
+            BuildTutorialAirflowArea();
+        }
+
+        private void BuildTutorialAirflowArea()
+        {
+            tutorialAirflowRoot = new GameObject("tutorial level2 airflow props").transform;
+            tutorialAirflowRoot.SetParent(levelRoot, false);
+
+            var floor = CreateBox("tutorial level2 central wind gallery floor", new Vector3(1.25f, -0.015f, 0f), new Vector3(4.95f, 0.13f, 1.72f), level2FloorMaterial, tutorialAirflowRoot, Quaternion.identity, false);
+            tutorialAirflowPadRenderer = floor.GetComponent<Renderer>();
+            CreateTutorialChamberFrame(1.25f, 4.95f, 1.72f);
+            CreateBox("tutorial level2 wind channel low glow", new Vector3(1.25f, 0.055f, 0f), new Vector3(4.65f, 0.006f, 0.045f), level2WallMaterial, tutorialAirflowRoot, Quaternion.identity, false);
+            CreateTutorialWindFloorHints();
+
+            airBelts = new Transform[1];
+            airBeltDirection = new int[1];
+            airBeltRenderers = new Renderer[1];
+            airBeltTriggers = new AirBeltTrigger[1];
+            airBeltArrowRenderers = new Renderer[1];
+            airBeltArrowTransforms = new Transform[1];
+            airBeltStreaks = new Transform[6];
+            airBeltStreakRenderers = new Renderer[6];
+            airBeltMistQuads = new Transform[4];
+            airBeltMistRenderers = new Renderer[4];
+
+            var belt = CreateBox("tutorial air belt trigger", new Vector3(1.25f, 0.18f, 0f), new Vector3(4.95f, 0.36f, 1.65f), level2WindMaterial, tutorialAirflowRoot, Quaternion.identity, true);
+            airBelts[0] = belt.transform;
+            airBeltRenderers[0] = belt.GetComponent<Renderer>();
+            airBeltDirection[0] = 0;
+            var col = belt.GetComponent<Collider>();
+            col.isTrigger = true;
+            var trigger = belt.AddComponent<AirBeltTrigger>();
+            trigger.beltIndex = 0;
+            trigger.direction = 0;
+            trigger.force = AirBeltForce;
+            trigger.maxWindSpeed = 1.95f;
+            trigger.rampSeconds = 1.45f;
+            airBeltTriggers[0] = trigger;
+
+            var beltVisualRoot = new GameObject("tutorial air belt visual root");
+            beltVisualRoot.transform.SetParent(tutorialAirflowRoot, false);
+            beltVisualRoot.transform.position = belt.transform.position;
+
+            var arrow = CreateBox("tutorial air arrow glow", beltVisualRoot.transform.position + new Vector3(0f, 0.21f, -0.70f), new Vector3(0.34f, 0.018f, 0.055f), level2PortalCoreMaterial, beltVisualRoot.transform, Quaternion.identity, false);
+            tutorialAirflowArrow = arrow.transform;
+            airBeltArrowRenderers[0] = arrow.GetComponent<Renderer>();
+            airBeltArrowTransforms[0] = arrow.transform;
+
+            for (var i = 0; i < airBeltMistQuads.Length; i++)
+            {
+                var xOffset = Mathf.Lerp(-1.68f, 1.68f, i / (float)(airBeltMistQuads.Length - 1));
+                var zOffset = i % 2 == 0 ? -0.28f : 0.28f;
+                var mist = CreateAirflowMist($"tutorial air flow mist sheet {i + 1}", beltVisualRoot.transform, new Vector3(xOffset, 0.285f, zOffset), 2.0f, 0.68f);
+                airBeltMistQuads[i] = mist.transform;
+                airBeltMistRenderers[i] = mist.GetComponent<Renderer>();
+            }
+
+            for (var i = 0; i < airBeltStreaks.Length; i++)
+            {
+                var xOffset = Mathf.Lerp(-2.05f, 2.05f, i / (float)(airBeltStreaks.Length - 1));
+                var zOffset = Mathf.Lerp(-0.58f, 0.58f, i / (float)(airBeltStreaks.Length - 1));
+                var streak = CreateAirflowRibbon($"tutorial air flow texture ribbon {i + 1}", beltVisualRoot.transform, new Vector3(xOffset, 0.33f, zOffset), 1.42f, 0.30f);
+                airBeltStreaks[i] = streak.transform;
+                airBeltStreakRenderers[i] = streak.GetComponent<Renderer>();
+            }
+
+            airBeltParticles = new[]
+            {
+                CreateAirflowParticles("tutorial airflow cyan mist", beltVisualRoot.transform),
+            };
+
+            if (airBeltRenderers[0] != null)
+            {
+                airBeltRenderers[0].enabled = false;
+            }
+            if (airBeltArrowRenderers[0] != null)
+            {
+                airBeltArrowRenderers[0].sharedMaterial = boxIdle;
+            }
+            UpdateAirBeltVisuals();
+        }
+
+        private void CreateTutorialChamberFrame(float centerX, float width, float depth)
+        {
+            var frontZ = -depth * 0.5f;
+            var rearZ = depth * 0.5f;
+            CreateBox("tutorial level2 chamber front trim", new Vector3(centerX, 0.105f, frontZ), new Vector3(width, 0.055f, 0.055f), level2TrimMaterial, tutorialAirflowRoot, Quaternion.identity, false);
+            CreateBox("tutorial level2 chamber rear trim", new Vector3(centerX, 0.105f, rearZ), new Vector3(width, 0.055f, 0.055f), level2TrimMaterial, tutorialAirflowRoot, Quaternion.identity, false);
+            CreateBox("tutorial level2 chamber left trim", new Vector3(centerX - width * 0.5f, 0.105f, 0f), new Vector3(0.055f, 0.055f, depth), level2TrimMaterial, tutorialAirflowRoot, Quaternion.identity, false);
+            CreateBox("tutorial level2 chamber right trim", new Vector3(centerX + width * 0.5f, 0.105f, 0f), new Vector3(0.055f, 0.055f, depth), level2TrimMaterial, tutorialAirflowRoot, Quaternion.identity, false);
+        }
+
+        private void CreateTutorialWindFloorHints()
+        {
+            CreateTutorialWindGrille("tutorial level2 wind intake grille", new Vector3(-0.95f, 0.118f, 0f));
+            CreateTutorialWindGrille("tutorial level2 wind output grille", new Vector3(3.38f, 0.118f, 0f));
+            CreateTutorialWindChevron(new Vector3(0.12f, 0.142f, 0f), 0.50f);
+            CreateTutorialWindChevron(new Vector3(1.25f, 0.142f, 0f), 0.50f);
+            CreateTutorialWindChevron(new Vector3(2.38f, 0.142f, 0f), 0.50f);
+        }
+
+        private void CreateTutorialWindGrille(string name, Vector3 position)
+        {
+            CreateBox(name + " base", position, new Vector3(0.52f, 0.018f, 0.84f), darkStone, tutorialAirflowRoot, Quaternion.identity, false);
+            for (var i = 0; i < 5; i++)
+            {
+                var z = Mathf.Lerp(-0.32f, 0.32f, i / 4f);
+                CreateBox($"{name} cyan slit {i}", position + new Vector3(0f, 0.022f, z), new Vector3(0.42f, 0.012f, 0.030f), level2PortalCoreMaterial, tutorialAirflowRoot, Quaternion.identity, false);
+            }
+        }
+
+        private void CreateTutorialWindChevron(Vector3 position, float length)
+        {
+            CreateBox("tutorial level2 floor wind chevron upper", position + new Vector3(0f, 0f, 0.11f), new Vector3(length, 0.014f, 0.045f), level2PortalCoreMaterial, tutorialAirflowRoot, Quaternion.Euler(0f, 28f, 0f), false);
+            CreateBox("tutorial level2 floor wind chevron lower", position + new Vector3(0f, 0f, -0.11f), new Vector3(length, 0.014f, 0.045f), level2PortalCoreMaterial, tutorialAirflowRoot, Quaternion.Euler(0f, -28f, 0f), false);
         }
 
         private void BuildLobbyShell()
@@ -926,32 +1078,142 @@ namespace HandOfGod.Gameplay
 
         private bool CanDragLabObject()
         {
-            return tutorialStage == TutorialStage.OneHandDrag || tutorialStage == TutorialStage.Complete;
+            return tutorialStage == TutorialStage.OneHandDrag;
         }
 
         private bool CanRotateLabObject()
         {
-            return tutorialStage == TutorialStage.TwoHandRotate || tutorialStage == TutorialStage.Complete;
+            return tutorialStage == TutorialStage.TwoHandRotate;
         }
 
         private bool CanControlMap()
         {
-            return tutorialStage == TutorialStage.MapControl || tutorialStage == TutorialStage.Complete;
+            return tutorialStage == TutorialStage.MapControl;
         }
 
         private bool CanPullBridge()
         {
-            return tutorialStage == TutorialStage.BridgePull || tutorialStage == TutorialStage.Complete;
+            return tutorialStage == TutorialStage.BridgePull;
         }
 
         private bool CanActivatePalm()
         {
-            return tutorialStage == TutorialStage.PalmActivate || tutorialStage == TutorialStage.Complete;
+            return tutorialStage == TutorialStage.PalmActivate;
         }
 
         private bool CanPracticeAirflow()
         {
+            return tutorialStage == TutorialStage.AirflowDirection;
+        }
+
+        private bool TutorialUsesLabObject()
+        {
+            return tutorialStage == TutorialStage.OneHandDrag || tutorialStage == TutorialStage.TwoHandRotate;
+        }
+
+        private bool IsFinalTutorialStage()
+        {
             return tutorialStage == TutorialStage.AirflowDirection || tutorialStage == TutorialStage.Complete;
+        }
+
+        private void SelectTutorialStage(TutorialStage stage)
+        {
+            tutorialStage = stage;
+            ResetTutorialStageProgress();
+            ApplyTutorialStageVisibility();
+        }
+
+        private void ResetTutorialStageProgress()
+        {
+            tutorialStageSucceeded = tutorialStage == TutorialStage.Complete;
+            tutorialObjectMoved = false;
+            tutorialObjectRotated = false;
+            tutorialBridgePulled = false;
+            tutorialPalmActivated = false;
+            tutorialMapAdjusted = false;
+            tutorialAirflowDirected = false;
+            tutorialAirflowPreviewDirection = 0;
+            labHeld = false;
+            tutorialPalmStart = -1f;
+            tutorialBridgeStartDistance = 0f;
+            twoHandStartDistance = 0f;
+            twoFingerMapStartDistance = 0f;
+            if (levelRoot != null)
+            {
+                levelRoot.localScale = Vector3.one;
+                levelRoot.rotation = Quaternion.identity;
+            }
+            if (labObject != null)
+            {
+                labObject.transform.position = new Vector3(0f, 0.7f, 0f);
+                labObject.transform.rotation = Quaternion.identity;
+            }
+            if (tutorialBridgeLeft != null)
+            {
+                tutorialBridgeLeft.localPosition = new Vector3(-0.55f, 0.22f, -1.05f);
+            }
+            if (tutorialBridgeRight != null)
+            {
+                tutorialBridgeRight.localPosition = new Vector3(0.55f, 0.22f, -1.05f);
+            }
+            if (tutorialBridgeLeftRenderer != null)
+            {
+                tutorialBridgeLeftRenderer.sharedMaterial = boxHover;
+            }
+            if (tutorialBridgeRightRenderer != null)
+            {
+                tutorialBridgeRightRenderer.sharedMaterial = boxHover;
+            }
+            if (tutorialSealRenderer != null)
+            {
+                tutorialSealRenderer.sharedMaterial = amberGlow;
+            }
+            SetTutorialAirflowDirection(0);
+        }
+
+        private void ApplyTutorialStageVisibility()
+        {
+            if (labObject != null)
+            {
+                labObject.SetActive(TutorialUsesLabObject());
+            }
+            if (tutorialBridgeRoot != null)
+            {
+                tutorialBridgeRoot.gameObject.SetActive(tutorialStage == TutorialStage.BridgePull);
+            }
+            if (tutorialSealRoot != null)
+            {
+                tutorialSealRoot.gameObject.SetActive(tutorialStage == TutorialStage.PalmActivate);
+            }
+            if (tutorialAirflowRoot != null)
+            {
+                tutorialAirflowRoot.gameObject.SetActive(tutorialStage == TutorialStage.AirflowDirection);
+            }
+        }
+
+        private void SetTutorialAirflowDirection(int direction)
+        {
+            if (airBeltDirection != null && airBeltDirection.Length > 0)
+            {
+                airBeltDirection[0] = direction;
+            }
+            if (airBeltTriggers != null && airBeltTriggers.Length > 0 && airBeltTriggers[0] != null)
+            {
+                airBeltTriggers[0].direction = direction;
+                if (direction == 0)
+                {
+                    airBeltTriggers[0].ResetWindState();
+                }
+            }
+            if (airBeltArrowRenderers != null && airBeltArrowRenderers.Length > 0 && airBeltArrowRenderers[0] != null)
+            {
+                airBeltArrowRenderers[0].sharedMaterial = direction == 1 ? tealGlow : (direction == -1 ? amberGlow : boxIdle);
+            }
+            if (airBeltArrowTransforms != null && airBeltArrowTransforms.Length > 0 && airBeltArrowTransforms[0] != null)
+            {
+                airBeltArrowTransforms[0].localPosition = new Vector3(direction < 0 ? -0.18f : 0.18f, 0.28f, -0.70f);
+            }
+            UpdateAirBeltVisuals();
         }
 
         private void UpdateTutorialAirflow(GestureFrame frame)
@@ -975,21 +1237,10 @@ namespace HandOfGod.Gameplay
         {
             if (tutorialAirflowPadRenderer != null)
             {
-                tutorialAirflowPadRenderer.sharedMaterial = direction == 0
-                    ? level2WallMaterial
-                    : (direction > 0 ? tealGlow : amberGlow);
+                tutorialAirflowPadRenderer.sharedMaterial = level2FloorMaterial;
             }
 
-            if (tutorialAirflowArrow != null)
-            {
-                tutorialAirflowArrow.localPosition = new Vector3(1.45f + direction * 0.12f, 0.14f, -1.05f);
-                tutorialAirflowArrow.localScale = new Vector3(direction == 0 ? 0.42f : 0.68f, 0.022f, 0.075f);
-                var renderer = tutorialAirflowArrow.GetComponent<Renderer>();
-                if (renderer != null)
-                {
-                    renderer.sharedMaterial = direction == 0 ? boxIdle : (direction > 0 ? tealGlow : amberGlow);
-                }
-            }
+            SetTutorialAirflowDirection(direction);
         }
 
         private void UpdateTutorialBridgePull(GestureHandFrame a, GestureHandFrame b)
@@ -1093,51 +1344,62 @@ namespace HandOfGod.Gameplay
 
         private void AdvanceTutorialStage()
         {
+            var nextStage = tutorialStage;
             switch (tutorialStage)
             {
                 case TutorialStage.FindHands:
-                    tutorialStage = TutorialStage.OneHandDrag;
+                    nextStage = TutorialStage.OneHandDrag;
                     break;
                 case TutorialStage.OneHandDrag:
-                    tutorialStage = TutorialStage.TwoHandRotate;
+                    nextStage = TutorialStage.TwoHandRotate;
                     break;
                 case TutorialStage.TwoHandRotate:
-                    tutorialStage = TutorialStage.BridgePull;
+                    nextStage = TutorialStage.BridgePull;
                     break;
                 case TutorialStage.BridgePull:
-                    tutorialStage = TutorialStage.PalmActivate;
+                    nextStage = TutorialStage.PalmActivate;
                     break;
                 case TutorialStage.PalmActivate:
-                    tutorialStage = TutorialStage.MapControl;
+                    nextStage = TutorialStage.MapControl;
                     break;
                 case TutorialStage.MapControl:
-                    tutorialStage = TutorialStage.AirflowDirection;
+                    nextStage = TutorialStage.AirflowDirection;
                     break;
                 case TutorialStage.AirflowDirection:
-                    tutorialStage = TutorialStage.Complete;
-                    labCompleted = true;
-                    break;
+                    StartLevel(GameMode.Level1);
+                    return;
             }
 
-            tutorialStageSucceeded = tutorialStage == TutorialStage.Complete;
-            labHeld = false;
-            twoHandStartDistance = 0f;
-            twoFingerMapStartDistance = 0f;
-            tutorialAirflowPreviewDirection = 0;
+            if (nextStage != tutorialStage)
+            {
+                SelectTutorialStage(nextStage);
+            }
+            else
+            {
+                tutorialStageSucceeded = tutorialStage == TutorialStage.Complete;
+                labHeld = false;
+                twoHandStartDistance = 0f;
+                twoFingerMapStartDistance = 0f;
+                tutorialAirflowPreviewDirection = 0;
+            }
+            if (tutorialStage == TutorialStage.Complete)
+            {
+                labCompleted = true;
+            }
         }
 
         private string TutorialTitle()
         {
             return tutorialStage switch
             {
-                TutorialStage.FindHands => "1/8 Move your hands freely.",
-                TutorialStage.OneHandDrag => "2/8 Pinch an object with one hand and drag it.",
-                TutorialStage.TwoHandRotate => "3/8 Pinch both sides and rotate the object.",
-                TutorialStage.BridgePull => "4/8 Join a bridge with both hands.",
-                TutorialStage.PalmActivate => "5/8 Open your palm over the glowing seal.",
-                TutorialStage.MapControl => "6/8 Join index+middle on both hands.",
-                TutorialStage.AirflowDirection => "7/8 Point the airflow with one hand.",
-                TutorialStage.Complete => "8/8 Tutorial complete. Keep practicing or enter Level 1.",
+                TutorialStage.FindHands => "1/7 Move your hands freely.",
+                TutorialStage.OneHandDrag => "2/7 Pinch an object with one hand and drag it.",
+                TutorialStage.TwoHandRotate => "3/7 Pinch both sides and rotate the object.",
+                TutorialStage.BridgePull => "4/7 Join a bridge with both hands.",
+                TutorialStage.PalmActivate => "5/7 Open your palm over the glowing seal.",
+                TutorialStage.MapControl => "6/7 Join index+middle on both hands.",
+                TutorialStage.AirflowDirection => "7/7 Point the airflow with one hand.",
+                TutorialStage.Complete => "Tutorial complete.",
                 _ => "",
             };
         }
@@ -1153,7 +1415,7 @@ namespace HandOfGod.Gameplay
                 TutorialStage.PalmActivate => "Open one hand and hold it over the glowing seal until it lights up.",
                 TutorialStage.MapControl => "On each hand, keep index and middle fingertips close, with ring and pinky folded, then move both hands to adjust the map.",
                 TutorialStage.AirflowDirection => "Use one hand: extend your thumb, keep index and middle together, fold ring and pinky, then point left or right.",
-                TutorialStage.Complete => "You can still drag, rotate, adjust the map, and practice airflow. Hold over Next: Level 1 when ready.",
+                TutorialStage.Complete => "Hold over Next: Level 1 when ready.",
                 _ => "",
             };
         }
@@ -3177,6 +3439,9 @@ namespace HandOfGod.Gameplay
             labRenderer = null;
             tutorialBridgeLeft = null;
             tutorialBridgeRight = null;
+            tutorialBridgeRoot = null;
+            tutorialSealRoot = null;
+            tutorialAirflowRoot = null;
             tutorialBridgeLeftRenderer = null;
             tutorialBridgeRightRenderer = null;
             tutorialSealRenderer = null;
