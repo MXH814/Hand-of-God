@@ -187,11 +187,11 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 核心物体：
 
-- `Portal Key`：可单手捏合拖动的程序化几何钥匙，由钥匙环、钥匙杆和齿形结构组成，初始位于左上侧。
+- `Portal Key`：可单手捏合拖动的低模钥匙，使用 OpenGameArt CC0 FBX 模型导入，初始位于左上侧。
 - `rune`：钥匙目标符文，位于平台左侧上方区域。
 - `portal A`：小球初始传送门，位于左侧。
 - `portal B`：传送后的落点，位于中右侧。
-- `air belt`：不可见触发器 + 可见气流 VFX，包含发光轨道、方向光带和粒子流；内部触发区负责对小球施加水平加速度。
+- `air belt`：不可见触发器 + 可见气流 VFX，使用 Kenney Particle Pack 的透明粒子贴图制作青色雾带、细流线和方向反馈；内部触发区负责对小球施加水平加速度。
 - `level2 gate`：传送门前铁栅门，传送成功后打开。
 - `level2 gate2`：气流带到终点之间的铁栅门，风向设置为右时打开。
 - `Goal Trigger`：右侧终点祭坛。
@@ -200,8 +200,10 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 - 场景拆分为左侧传送厅、中央气流廊和右侧祭坛房，避免早期长条平台的原型感。
 - 地牢墙体、石板、墙角、地面细节使用 Kenney `Modular Dungeon Kit` 的 FBX 模型，放在 `Assets/Resources/KenneyDungeon/`，运行时通过 `Resources.Load` 加载。
-- Unity 程序化几何只保留用于物理 collider、符文法阵、传送门光圈、气流光带和必要机关结构。
-- 气流带关闭时不显示实体碰撞盒；激活时显示青色流动光带和粒子流。
+- 传送门钥匙使用 OpenGameArt `Key - low poly` FBX 模型，放在 `Assets/Resources/OpenGameArt/LowPolyKey/`；Unity 只负责归一化尺寸、材质高亮和交互 collider。
+- 气流与传送门漩涡使用 Kenney `Particle Pack` 透明 PNG 贴图，放在 `Assets/Resources/KenneyParticles/`；Unity 通过透明材质、quad 和 particle renderer 组合成动态 VFX。
+- Unity 程序化几何只保留用于物理 collider、符文法阵、传送门光圈和必要机关结构。
+- 气流带关闭时不显示实体碰撞盒；激活时显示青色雾带、流线和方向提示。
 - `LevelSceneGenerator.CaptureLevel02Preview` 会生成第二关气流开启状态预览图，输出到 `unity/HandOfGodUnity/Preview/Level02Preview.png`。
 
 关卡结构：
@@ -222,7 +224,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - 气流手势由 `IndexMiddleTogether + thumbExtended + ring/pinky curled + !openPalm` 组成，并带有方向死区和短时间稳定确认，避免张掌或瞬时抖动误触发。
 - Unity 根据食指尖相对手腕的水平偏移判断风向：向右为通关方向，向左会显示提示要求改为向右。
 - 气流带使用 `AirBeltTrigger`，在小球停留于触发区时以渐进强度施加水平方向加速度，并限制最大水平推速，让玩家有时间修正方向。
-- 气流带在关闭时隐藏实体触发器；激活后粒子流和流动光带随风向滚动，HUD 同步显示 `Airflow: OFF / LEFT / RIGHT`。
+- 气流带在关闭时隐藏实体触发器；激活后 Kenney 粒子贴图雾带和流线随风向滚动，HUD 同步显示 `Airflow: OFF / LEFT / RIGHT`。
 - 风向设置为右后，第二道挡门打开，HUD 显示右风提示；左风会显示纠正提示。
 
 ## 技术架构
@@ -332,7 +334,7 @@ Unity 端职责：
 - 将 normalized screen coordinates 映射到 Unity 世界平面。
 - 处理单手拖动、双手旋转、双手拉合、张掌悬停、地图旋转缩放、气流方向设置。
 - 管理 Python 桥接进程启动、失败提示和退出清理。
-- 生成 Level 0、Level 1 的程序化几何体、材质和机关；生成 Level 2 时额外加载 Kenney 地牢模型，组合为第二关独立美术场景。
+- 生成 Level 0、Level 1 的程序化几何体、材质和机关；生成 Level 2 时额外加载 Kenney 地牢模型、Kenney 粒子贴图和 OpenGameArt 钥匙模型，组合为第二关独立美术场景。
 
 ## 算法实现
 
@@ -529,11 +531,11 @@ cd "unity\gesture_bridge"
 
 - 主菜单可直接进入 `Level 2: Portals & Airflow`。
 - Unity Editor 可直接打开 `Level02.unity` 进入第二关；`CaptureLevel02Preview` 可输出第二关截图。
-- 传送门钥匙是几何钥匙，可用单手捏合直接抓取和移动，抓取时整把钥匙高亮。
+- 传送门钥匙是导入的低模钥匙模型，可用单手捏合直接抓取和移动，抓取时整把钥匙高亮。
 - 钥匙放到符文上并释放后，符文和两个传送门变为激活高亮。
 - 小球从 Portal A 升起淡出，再从 Portal B 渐显落下，并打开第一道挡门。
 - 张掌不会触发气流；气流指向手势可被识别：拇指伸出、食指中指并拢、无名指和小指收起。
-- 气流带有可见粒子流、方向光带和发光轨道；HUD 显示当前气流方向。
+- 气流带有可见青色雾带、细流线和方向提示；HUD 显示当前气流方向。
 - 向右指向后 HUD 显示右风提示，第二道挡门打开。
 - 小球进入气流带后逐渐加速并被持续推向终点。
 - 小球到达终点后显示 `PASS`。
@@ -578,6 +580,8 @@ cd "unity\gesture_bridge"
 - OpenCV：摄像头采集、镜像、缩放和 JPEG 编码。
 - NumPy：手部距离、速度和平滑计算。
 - Kenney Modular Dungeon Kit：CC0 模块化地牢 3D 素材。第二关使用其中精选 FBX 模型搭建地牢墙体、地面模块和场景细节，许可证文件保存在 `Assets/Resources/KenneyDungeon/ModularDungeonKit-License.txt`。
+- Kenney Particle Pack：CC0 粒子贴图素材。第二关使用透明 PNG 制作气流雾带、流线和传送门漩涡，许可证文件保存在 `Assets/Resources/KenneyParticles/ParticlePack-License.txt`。
+- OpenGameArt Key - low poly：CC0 低模钥匙模型。第二关使用其中 `key.fbx` 作为传送门钥匙，许可证文件保存在 `Assets/Resources/OpenGameArt/LowPolyKey/LowPolyKey-License.txt`。
 
 ## 开源项目与资料来源
 
@@ -595,6 +599,12 @@ cd "unity\gesture_bridge"
 - Kenney Modular Dungeon Kit：公共领域 CC0 游戏素材包。
   - Source: `https://opengameart.org/content/modular-dungeon-kit`
   - Creator: `https://www.kenney.nl/`
+- Kenney Particle Pack：公共领域 CC0 粒子贴图包。
+  - Source: `https://kenney.nl/assets/particle-pack`
+  - Creator: `https://www.kenney.nl/`
+- OpenGameArt Key - low poly：公共领域 CC0 低模钥匙模型。
+  - Source: `https://opengameart.org/content/key-low-poly`
+  - Creator: `https://opengameart.org/users/knotai`
 
 ## Git 与提交约定
 

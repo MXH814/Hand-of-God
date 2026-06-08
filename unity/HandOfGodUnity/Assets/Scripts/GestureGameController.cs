@@ -76,6 +76,9 @@ namespace HandOfGod.Gameplay
         private Material level2TrimMaterial;
         private Material level2PortalCoreMaterial;
         private Material level2WindMaterial;
+        private Material level2WindRibbonMaterial;
+        private Material level2WindMistMaterial;
+        private Material level2PortalTwirlMaterial;
         private Material level2RuneMaterial;
         private Material cameraBackgroundMaterial;
         private Transform cameraBackgroundPlane;
@@ -176,6 +179,8 @@ namespace HandOfGod.Gameplay
         private Renderer[] airBeltArrowRenderers;
         private Transform[] airBeltStreaks;
         private Renderer[] airBeltStreakRenderers;
+        private Transform[] airBeltMistQuads;
+        private Renderer[] airBeltMistRenderers;
         private ParticleSystem[] airBeltParticles;
         private ParticleSystem portalAParticles;
         private ParticleSystem portalBParticles;
@@ -411,24 +416,6 @@ namespace HandOfGod.Gameplay
             DrawHandSkeletonOverlay();
             DrawCursor();
 
-            // temporary on-screen prompt: draw an arrow and instruction when near the key
-            if (mode == GameMode.Level2 && portalKey != null)
-            {
-                var cursor = CursorScreen();
-                var keyScreen = Camera.main.WorldToScreenPoint(portalKey.transform.position);
-                // convert to GUI coords
-                var keyGui = new Vector2(keyScreen.x, Screen.height - keyScreen.y);
-                var near = lastKeyInRange;
-                var label = near ? "Pinch to grab the key" : "Move index over key to highlight";
-                GUI.color = Color.white;
-                var rect = new Rect(keyGui.x - 80f, keyGui.y - 60f, 160f, 40f);
-                GUI.Box(rect, label);
-                // draw a simple arrow above the key
-                var arrowRect = new Rect(keyGui.x - 12f, keyGui.y - 80f, 24f, 24f);
-                GUI.color = near ? Color.cyan : Color.yellow;
-                GUI.DrawTexture(arrowRect, Texture2D.whiteTexture);
-                GUI.color = Color.white;
-            }
             DrawGlobalControls();
             DrawLevelSelectSidebar();
         }
@@ -1459,8 +1446,10 @@ namespace HandOfGod.Gameplay
             airBeltTriggers = new AirBeltTrigger[1];
             airBeltArrowRenderers = new Renderer[1];
             airBeltArrowTransforms = new Transform[1];
-            airBeltStreaks = new Transform[5];
-            airBeltStreakRenderers = new Renderer[5];
+            airBeltStreaks = new Transform[6];
+            airBeltStreakRenderers = new Renderer[6];
+            airBeltMistQuads = new Transform[4];
+            airBeltMistRenderers = new Renderer[4];
             
             var beltX = 0.8f; // To the right of portal B (0.5), ball feels wind after reaching B
             var beltY = 0.18f;
@@ -1481,19 +1470,31 @@ namespace HandOfGod.Gameplay
             trigger.rampSeconds = 1.45f;
             airBeltTriggers[0] = trigger;
 
-            var arrow = CreateBox("air arrow glow", belt.transform.position + new Vector3(0f, 0.21f, 0f), new Vector3(0.86f, 0.025f, 0.12f), level2PortalCoreMaterial, belt.transform, Quaternion.identity, false);
+            var arrow = CreateBox("air arrow glow", belt.transform.position + new Vector3(0f, 0.21f, -0.70f), new Vector3(0.34f, 0.018f, 0.055f), level2PortalCoreMaterial, belt.transform, Quaternion.identity, false);
             airBeltArrowRenderers[0] = arrow.GetComponent<Renderer>();
             airBeltArrowTransforms[0] = arrow.transform;
 
+            for (var i = 0; i < airBeltMistQuads.Length; i++)
+            {
+                var xOffset = Mathf.Lerp(-0.62f, 0.62f, i / (float)(airBeltMistQuads.Length - 1));
+                var zOffset = i % 2 == 0 ? -0.28f : 0.28f;
+                var mist = CreateAirflowMist($"air flow mist sheet {i + 1}", belt.transform, new Vector3(xOffset, 0.285f, zOffset), 1.25f, 0.68f);
+                airBeltMistQuads[i] = mist.transform;
+                airBeltMistRenderers[i] = mist.GetComponent<Renderer>();
+            }
+
             for (var i = 0; i < airBeltStreaks.Length; i++)
             {
-                var xOffset = Mathf.Lerp(-0.78f, 0.78f, i / (float)(airBeltStreaks.Length - 1));
-                var zOffset = i % 2 == 0 ? -0.42f : 0.42f;
-                var streak = CreateBox($"air flow ribbon {i + 1}", belt.transform.position + new Vector3(xOffset, 0.24f, zOffset), new Vector3(0.58f, 0.018f, 0.035f), level2PortalCoreMaterial, belt.transform, Quaternion.identity, false);
+                var xOffset = Mathf.Lerp(-0.88f, 0.88f, i / (float)(airBeltStreaks.Length - 1));
+                var zOffset = Mathf.Lerp(-0.58f, 0.58f, i / (float)(airBeltStreaks.Length - 1));
+                var streak = CreateAirflowRibbon($"air flow texture ribbon {i + 1}", belt.transform, new Vector3(xOffset, 0.33f, zOffset), 0.94f, 0.30f);
                 airBeltStreaks[i] = streak.transform;
                 airBeltStreakRenderers[i] = streak.GetComponent<Renderer>();
             }
-            airBeltParticles = new[] { CreateAirflowParticles("airflow particle stream", belt.transform) };
+            airBeltParticles = new[]
+            {
+                CreateAirflowParticles("airflow cyan mist", belt.transform),
+            };
 
             if (airBeltRenderers[0] != null)
             {
@@ -1569,63 +1570,30 @@ namespace HandOfGod.Gameplay
             CreateBox("level2 central wind gallery floor", new Vector3(0.75f, -0.015f, 0f), new Vector3(3.95f, 0.13f, 1.72f), level2FloorMaterial, levelRoot, Quaternion.identity, false);
             CreateBox("level2 right altar chamber floor", new Vector3(3.55f, -0.015f, 0f), new Vector3(1.65f, 0.13f, 2.15f), level2FloorMaterial, levelRoot, Quaternion.identity, false);
 
-            CreateBox("level2 left chamber brass border", new Vector3(-3.0f, 0.085f, -1.32f), new Vector3(2.68f, 0.08f, 0.08f), level2TrimMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 left chamber rear border", new Vector3(-3.0f, 0.085f, 1.32f), new Vector3(2.68f, 0.08f, 0.08f), level2TrimMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 wind rail north", new Vector3(0.95f, 0.095f, 0.86f), new Vector3(4.1f, 0.08f, 0.07f), level2TrimMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 wind rail south", new Vector3(0.95f, 0.095f, -0.86f), new Vector3(4.1f, 0.08f, 0.07f), level2TrimMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 altar rear border", new Vector3(3.55f, 0.085f, 1.18f), new Vector3(1.80f, 0.08f, 0.08f), level2TrimMaterial, levelRoot, Quaternion.identity, false);
+            CreateCleanChamberFrame(-3.0f, 2.55f, 2.48f);
+            CreateCleanChamberFrame(0.75f, 3.95f, 1.72f);
+            CreateCleanChamberFrame(3.55f, 1.65f, 2.15f);
 
-            CreateFloorMosaic(-3.0f, 2.05f, 3, 3);
-            CreateFloorMosaic(0.75f, 3.45f, 5, 2);
-            CreateFloorMosaic(3.55f, 1.25f, 2, 3);
+            CreateBox("level2 rear wall left", new Vector3(-3.0f, 0.48f, 1.50f), new Vector3(2.55f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox("level2 rear wall wind", new Vector3(0.75f, 0.48f, 1.12f), new Vector3(3.95f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox("level2 rear wall altar", new Vector3(3.55f, 0.48f, 1.34f), new Vector3(1.65f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
 
-            for (var i = 0; i < 8; i++)
-            {
-                var x = Mathf.Lerp(-4.2f, 4.2f, i / 7f);
-                var back = InstantiateDungeonModel("template-wall", new Vector3(x, 0.28f, 1.58f), new Vector3(0.26f, 0.34f, 0.26f), Quaternion.identity, level2WallMaterial);
-                if (back == null)
-                {
-                    CreateBox($"level2 rear wall segment {i}", new Vector3(x, 0.46f, 1.58f), new Vector3(0.76f, 0.72f, 0.15f), level2WallMaterial, levelRoot, Quaternion.identity, false);
-                }
-            }
+            CreateLevel2Pillar(new Vector3(-4.15f, 0.34f, 1.15f));
+            CreateLevel2Pillar(new Vector3(-1.88f, 0.34f, 1.15f));
+            CreateLevel2Pillar(new Vector3(2.78f, 0.34f, 0.92f));
+            CreateLevel2Pillar(new Vector3(4.18f, 0.34f, 0.92f));
 
-            CreateLowParapet(-3.0f, -1.46f, 2.7f);
-            CreateLowParapet(0.75f, -1.02f, 4.0f);
-            CreateLowParapet(3.55f, -1.24f, 1.9f);
-
-            CreateLevel2Pillar(new Vector3(-4.35f, 0.34f, 1.32f));
-            CreateLevel2Pillar(new Vector3(-1.72f, 0.34f, 1.32f));
-            CreateLevel2Pillar(new Vector3(-1.58f, 0.34f, -1.08f));
-            CreateLevel2Pillar(new Vector3(2.86f, 0.34f, 1.08f));
-            CreateLevel2Pillar(new Vector3(2.92f, 0.34f, -1.02f));
-            CreateLevel2Pillar(new Vector3(4.35f, 0.34f, 1.12f));
-
-            CreateBox("level2 wind channel glow base", new Vector3(0.8f, 0.085f, 0f), new Vector3(2.7f, 0.026f, 0.18f), level2PortalCoreMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 wind channel glow north", new Vector3(0.8f, 0.095f, 0.50f), new Vector3(2.5f, 0.018f, 0.08f), tealGlow, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 wind channel glow south", new Vector3(0.8f, 0.095f, -0.50f), new Vector3(2.5f, 0.018f, 0.08f), tealGlow, levelRoot, Quaternion.identity, false);
+            CreateBox("level2 wind channel low glow", new Vector3(0.8f, 0.055f, 0f), new Vector3(2.85f, 0.006f, 0.045f), level2WallMaterial, levelRoot, Quaternion.identity, false);
         }
 
-        private void CreateFloorMosaic(float centerX, float width, int columns, int rows)
+        private void CreateCleanChamberFrame(float centerX, float width, float depth)
         {
-            for (var ix = 0; ix < columns; ix++)
-            {
-                for (var iz = 0; iz < rows; iz++)
-                {
-                    var x = centerX - width * 0.38f + width * 0.76f * (columns <= 1 ? 0f : ix / (float)(columns - 1));
-                    var z = Mathf.Lerp(-0.55f, 0.55f, rows <= 1 ? 0.5f : iz / (float)(rows - 1));
-                    var tile = InstantiateDungeonModel((ix + iz) % 2 == 0 ? "template-floor-detail" : "template-floor", new Vector3(x, 0.062f, z), new Vector3(0.34f, 0.11f, 0.34f), Quaternion.identity, (ix + iz) % 2 == 0 ? level2TrimMaterial : level2FloorMaterial);
-                    if (tile == null)
-                    {
-                        CreateBox($"level2 mosaic tile {centerX:0.0}-{ix}-{iz}", new Vector3(x, 0.07f, z), new Vector3(0.45f, 0.035f, 0.45f), (ix + iz) % 2 == 0 ? level2TrimMaterial : level2FloorMaterial, levelRoot, Quaternion.identity, false);
-                    }
-                }
-            }
-        }
-
-        private void CreateLowParapet(float centerX, float z, float width)
-        {
-            CreateBox($"level2 low parapet {centerX:0.0}", new Vector3(centerX, 0.22f, z), new Vector3(width, 0.30f, 0.12f), level2WallMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox($"level2 low parapet trim {centerX:0.0}", new Vector3(centerX, 0.40f, z), new Vector3(width, 0.055f, 0.14f), level2TrimMaterial, levelRoot, Quaternion.identity, false);
+            var frontZ = -depth * 0.5f;
+            var rearZ = depth * 0.5f;
+            CreateBox($"level2 chamber front trim {centerX:0.0}", new Vector3(centerX, 0.105f, frontZ), new Vector3(width, 0.055f, 0.055f), level2TrimMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox($"level2 chamber rear trim {centerX:0.0}", new Vector3(centerX, 0.105f, rearZ), new Vector3(width, 0.055f, 0.055f), level2TrimMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox($"level2 chamber left trim {centerX:0.0}", new Vector3(centerX - width * 0.5f, 0.105f, 0f), new Vector3(0.055f, 0.055f, depth), level2TrimMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox($"level2 chamber right trim {centerX:0.0}", new Vector3(centerX + width * 0.5f, 0.105f, 0f), new Vector3(0.055f, 0.055f, depth), level2TrimMaterial, levelRoot, Quaternion.identity, false);
         }
 
         private GameObject InstantiateDungeonModel(string resourceName, Vector3 position, Vector3 scale, Quaternion rotation, Material overrideMaterial)
@@ -1702,7 +1670,16 @@ namespace HandOfGod.Gameplay
             inner.transform.localPosition = new Vector3(0f, 0.16f, 0f);
             inner.transform.localRotation = Quaternion.identity;
 
-            particles = CreatePortalParticles(name + " particles", root.transform, idleMaterial.color);
+            var swirl = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            swirl.name = name + " Kenney particle swirl";
+            swirl.transform.SetParent(root.transform, false);
+            swirl.transform.localPosition = new Vector3(0f, 0.18f, 0f);
+            swirl.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            swirl.transform.localScale = Vector3.one * 0.92f;
+            swirl.GetComponent<Renderer>().sharedMaterial = level2PortalTwirlMaterial != null ? level2PortalTwirlMaterial : level2WindMaterial;
+            DestroyUnityObject(swirl.GetComponent<Collider>());
+
+            particles = null;
             return core.GetComponent<Renderer>();
         }
 
@@ -1752,6 +1729,33 @@ namespace HandOfGod.Gameplay
             return ps;
         }
 
+        private GameObject CreateAirflowRibbon(string name, Transform parent, Vector3 localPosition, float length, float width)
+        {
+            var ribbon = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            ribbon.name = name;
+            ribbon.transform.SetParent(parent, false);
+            ribbon.transform.localPosition = localPosition;
+            ribbon.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            ribbon.transform.localScale = new Vector3(length, width, 1f);
+            var renderer = ribbon.GetComponent<Renderer>();
+            renderer.sharedMaterial = level2WindRibbonMaterial != null ? level2WindRibbonMaterial : level2WindMaterial;
+            DestroyUnityObject(ribbon.GetComponent<Collider>());
+            return ribbon;
+        }
+
+        private GameObject CreateAirflowMist(string name, Transform parent, Vector3 localPosition, float length, float width)
+        {
+            var mist = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            mist.name = name;
+            mist.transform.SetParent(parent, false);
+            mist.transform.localPosition = localPosition;
+            mist.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            mist.transform.localScale = new Vector3(length, width, 1f);
+            mist.GetComponent<Renderer>().sharedMaterial = level2WindMistMaterial != null ? level2WindMistMaterial : level2WindMaterial;
+            DestroyUnityObject(mist.GetComponent<Collider>());
+            return mist;
+        }
+
         private ParticleSystem CreateAirflowParticles(string name, Transform parent)
         {
             var particleObject = new GameObject(name);
@@ -1776,7 +1780,7 @@ namespace HandOfGod.Gameplay
             velocity.space = ParticleSystemSimulationSpace.Local;
             velocity.x = new ParticleSystem.MinMaxCurve(0.2f);
             var renderer = particleObject.GetComponent<ParticleSystemRenderer>();
-            renderer.sharedMaterial = level2WindMaterial;
+            renderer.sharedMaterial = level2WindMistMaterial != null ? level2WindMistMaterial : level2WindMaterial;
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
             return ps;
         }
@@ -1806,8 +1810,6 @@ namespace HandOfGod.Gameplay
             InstantiateDungeonModel("template-detail", position + new Vector3(0f, -0.13f, 0f), new Vector3(0.88f, 0.3f, 0.88f), Quaternion.identity, level2TrimMaterial);
             CreateTorus("level2 goal outer halo", position + new Vector3(0f, 0.13f, 0f), 0.66f, 0.055f, level2PortalCoreMaterial, levelRoot);
             CreateTorus("level2 goal inner halo", position + new Vector3(0f, 0.23f, 0f), 0.40f, 0.030f, tealGlow, levelRoot);
-            var particles = CreatePortalParticles("goal altar motes", levelRoot, tealGlow.color);
-            particles.transform.position = position + new Vector3(0f, 0.18f, 0f);
         }
 
         private void UpdateLevel2(GestureHandFrame hand)
@@ -1949,6 +1951,34 @@ namespace HandOfGod.Gameplay
 
         private void CreatePortalKeyVisual(Transform keyTransform)
         {
+            var importedKey = Resources.Load<GameObject>("OpenGameArt/LowPolyKey/key");
+            if (importedKey != null)
+            {
+                var model = Instantiate(importedKey, keyTransform);
+                model.name = "OpenGameArt low-poly key model";
+                model.transform.localPosition = new Vector3(0.18f, 0.08f, 0f);
+                model.transform.localRotation = Quaternion.Euler(0f, 90f, 90f);
+                model.transform.localScale = Vector3.one;
+                DestroyImportedColliders(model.transform);
+                FitImportedVisual(model.transform, 0.92f);
+
+                foreach (var renderer in model.GetComponentsInChildren<Renderer>())
+                {
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+                    renderer.receiveShadows = true;
+                    renderer.sharedMaterial = brass;
+                }
+
+                var gem = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                gem.name = "portal key inset gem";
+                gem.transform.SetParent(keyTransform, false);
+                gem.transform.localPosition = new Vector3(-0.30f, 0.16f, 0f);
+                gem.transform.localScale = Vector3.one * 0.12f;
+                gem.GetComponent<Renderer>().sharedMaterial = level2PortalCoreMaterial;
+                DestroyUnityObject(gem.GetComponent<Collider>());
+                return;
+            }
+
             var ring = CreateTorus("portal key round bow", keyTransform.position, 0.24f, 0.035f, brass, keyTransform);
             ring.transform.localPosition = new Vector3(-0.30f, 0.08f, 0f);
             ring.transform.localRotation = Quaternion.identity;
@@ -1958,6 +1988,29 @@ namespace HandOfGod.Gameplay
             CreateKeyPrimitive("portal key upper ward", PrimitiveType.Cylinder, keyTransform, new Vector3(0.48f, 0.08f, 0.13f), new Vector3(0.050f, 0.14f, 0.050f), Quaternion.Euler(90f, 0f, 0f), level2TrimMaterial);
             CreateKeyPrimitive("portal key lower ward", PrimitiveType.Cylinder, keyTransform, new Vector3(0.62f, 0.08f, -0.10f), new Vector3(0.050f, 0.13f, 0.050f), Quaternion.Euler(90f, 0f, 0f), level2TrimMaterial);
             CreateKeyPrimitive("portal key luminous bit", PrimitiveType.Sphere, keyTransform, new Vector3(0.76f, 0.08f, 0f), new Vector3(0.15f, 0.11f, 0.11f), Quaternion.identity, level2PortalCoreMaterial);
+        }
+
+        private static void FitImportedVisual(Transform root, float targetLargestAxis)
+        {
+            var renderers = root.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0)
+            {
+                return;
+            }
+
+            var bounds = renderers[0].bounds;
+            for (var i = 1; i < renderers.Length; i++)
+            {
+                bounds.Encapsulate(renderers[i].bounds);
+            }
+
+            var largestAxis = Mathf.Max(bounds.size.x, Mathf.Max(bounds.size.y, bounds.size.z));
+            if (largestAxis <= 0.0001f)
+            {
+                return;
+            }
+
+            root.localScale *= targetLargestAxis / largestAxis;
         }
 
         private void CreateKeyPrimitive(string name, PrimitiveType type, Transform parent, Vector3 localPosition, Vector3 localScale, Quaternion localRotation, Material material)
@@ -2126,7 +2179,7 @@ namespace HandOfGod.Gameplay
             }
             if (airBeltArrowTransforms != null && airBeltArrowTransforms.Length > 0 && airBeltArrowTransforms[0] != null)
             {
-                airBeltArrowTransforms[0].localPosition = new Vector3(direction < 0 ? -0.18f : 0.18f, 0.28f, 0f);
+                airBeltArrowTransforms[0].localPosition = new Vector3(direction < 0 ? -0.18f : 0.18f, 0.28f, -0.70f);
             }
             UpdateAirBeltVisuals();
         }
@@ -2141,6 +2194,9 @@ namespace HandOfGod.Gameplay
             var direction = airBeltDirection != null && airBeltDirection.Length > 0 ? airBeltDirection[0] : 0;
             var active = direction != 0;
             var material = direction == -1 ? amberGlow : (direction == 1 ? tealGlow : boxIdle);
+            var windColor = direction == -1 ? new Color(1f, 0.73f, 0.22f, active ? 0.82f : 0.20f) : new Color(0.38f, 0.95f, 1f, active ? 0.82f : 0.20f);
+            TintParticleMaterial(level2WindRibbonMaterial, windColor);
+            TintParticleMaterial(level2WindMistMaterial, new Color(windColor.r, windColor.g, windColor.b, active ? 0.42f : 0.12f));
             if (airBeltRenderers != null && airBeltRenderers.Length > 0 && airBeltRenderers[0] != null)
             {
                 airBeltRenderers[0].enabled = false;
@@ -2158,6 +2214,29 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
+            if (airBeltMistQuads != null)
+            {
+                for (var i = 0; i < airBeltMistQuads.Length; i++)
+                {
+                    var mist = airBeltMistQuads[i];
+                    if (mist == null)
+                    {
+                        continue;
+                    }
+
+                    var baseZ = i % 2 == 0 ? -0.28f : 0.28f;
+                    var cycle = Mathf.Repeat(Time.time * (active ? 0.30f : 0.08f) + i * 0.19f, 1f);
+                    var x = active ? Mathf.Lerp(-0.78f, 0.78f, direction > 0 ? cycle : 1f - cycle) : Mathf.Lerp(-0.62f, 0.62f, i / (float)Mathf.Max(airBeltMistQuads.Length - 1, 1));
+                    mist.localPosition = new Vector3(x, 0.285f, baseZ);
+                    mist.localScale = new Vector3(active ? 1.32f : 0.95f, active ? 0.74f : 0.44f, 1f);
+                    if (airBeltMistRenderers != null && i < airBeltMistRenderers.Length && airBeltMistRenderers[i] != null)
+                    {
+                        airBeltMistRenderers[i].enabled = active;
+                        airBeltMistRenderers[i].sharedMaterial = level2WindMistMaterial != null ? level2WindMistMaterial : level2WindMaterial;
+                    }
+                }
+            }
+
             for (var i = 0; i < airBeltStreaks.Length; i++)
             {
                 var streak = airBeltStreaks[i];
@@ -2170,14 +2249,26 @@ namespace HandOfGod.Gameplay
                 var cycle = Mathf.Repeat(Time.time * (active ? 0.72f : 0.18f) + i * 0.23f, 1f);
                 var x = active ? Mathf.Lerp(-0.86f, 0.86f, direction > 0 ? cycle : 1f - cycle) : Mathf.Lerp(-0.78f, 0.78f, i / (float)Mathf.Max(airBeltStreaks.Length - 1, 1));
                 streak.localPosition = new Vector3(x, 0.31f, baseZ);
-                streak.localScale = new Vector3(active ? 0.58f : 0.36f, 0.025f, 0.045f);
+                streak.localScale = new Vector3(active ? 0.96f : 0.54f, active ? 0.30f : 0.18f, 1f);
                 if (airBeltStreakRenderers != null && i < airBeltStreakRenderers.Length && airBeltStreakRenderers[i] != null)
                 {
                     airBeltStreakRenderers[i].enabled = active;
-                    airBeltStreakRenderers[i].sharedMaterial = material;
+                    airBeltStreakRenderers[i].sharedMaterial = level2WindRibbonMaterial != null ? level2WindRibbonMaterial : level2WindMaterial;
                 }
             }
             UpdateAirflowParticleVisuals(direction, active, material.color);
+        }
+
+        private static void TintParticleMaterial(Material material, Color color)
+        {
+            if (material == null)
+            {
+                return;
+            }
+
+            material.color = color;
+            if (material.HasProperty("_Color")) material.SetColor("_Color", color);
+            if (material.HasProperty("_TintColor")) material.SetColor("_TintColor", color);
         }
 
         private void UpdateAirflowParticleVisuals(int direction, bool active, Color color)
@@ -2954,6 +3045,9 @@ namespace HandOfGod.Gameplay
             level2TrimMaterial = NewMaterial("Level2 worn brass trim", new Color(0.82f, 0.62f, 0.30f), 0.58f, 0.08f);
             level2PortalCoreMaterial = NewMaterial("Level2 cyan portal core", new Color(0.10f, 0.96f, 1f), 0.18f, 0.95f);
             level2WindMaterial = NewParticleMaterial("Level2 translucent wind", new Color(0.38f, 0.95f, 1f, 0.58f));
+            level2WindRibbonMaterial = NewParticleMaterial("Kenney wind trace material", new Color(0.38f, 0.95f, 1f, 0.78f), Resources.Load<Texture2D>("KenneyParticles/wind_trace"));
+            level2WindMistMaterial = NewParticleMaterial("Kenney wind mist material", new Color(0.38f, 0.95f, 1f, 0.32f), Resources.Load<Texture2D>("KenneyParticles/soft_smoke"));
+            level2PortalTwirlMaterial = NewParticleMaterial("Kenney portal twirl material", new Color(0.10f, 0.96f, 1f, 0.68f), Resources.Load<Texture2D>("KenneyParticles/portal_twirl"));
             level2RuneMaterial = NewMaterial("Level2 active rune gold", new Color(1f, 0.73f, 0.20f), 0.36f, 0.65f);
         }
 
@@ -2971,19 +3065,25 @@ namespace HandOfGod.Gameplay
 
         private static Material NewParticleMaterial(string name, Color color)
         {
-            var shader = Shader.Find("Particles/Standard Unlit");
-            if (shader == null)
-            {
-                shader = Shader.Find("Legacy Shaders/Particles/Additive");
-            }
-            if (shader == null)
-            {
-                shader = Shader.Find("Standard");
-            }
+            return NewParticleMaterial(name, color, null);
+        }
+
+        private static Material NewParticleMaterial(string name, Color color, Texture texture)
+        {
+            var shader = texture != null ? Shader.Find("Legacy Shaders/Particles/Alpha Blended") : Shader.Find("Particles/Standard Unlit");
+            shader ??= texture != null ? Shader.Find("Unlit/Transparent") : null;
+            shader ??= Shader.Find("Legacy Shaders/Particles/Additive");
+            shader ??= Shader.Find("Standard");
 
             var material = new Material(shader) { name = name, color = color };
             if (material.HasProperty("_Color")) material.SetColor("_Color", color);
             if (material.HasProperty("_TintColor")) material.SetColor("_TintColor", color);
+            if (texture != null)
+            {
+                material.mainTexture = texture;
+                if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
+                material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            }
             return material;
         }
 

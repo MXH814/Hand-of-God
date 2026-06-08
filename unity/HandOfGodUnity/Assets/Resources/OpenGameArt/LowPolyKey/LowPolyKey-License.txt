@@ -1,0 +1,7 @@
+OpenGameArt: Key - low poly
+
+Source: https://opengameart.org/content/key-low-poly
+Author: knotai
+License: CC0 1.0 Universal, public domain dedication
+
+Used in this project for the Level 2 portal key interaction object.

@@ -1,0 +1,7 @@
+Kenney Particle Pack
+
+Source: https://kenney.nl/assets/particle-pack
+Author: Kenney
+License: CC0 1.0 Universal, public domain dedication
+
+Used in this project for Level 2 wind streak, mist, and portal swirl textures.
