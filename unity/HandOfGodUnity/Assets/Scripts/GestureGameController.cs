@@ -16,6 +16,7 @@ namespace HandOfGod.Gameplay
             Menu,
             Level0,
             Level1,
+            Level2,
             Pass,
         }
 
@@ -142,10 +143,60 @@ namespace HandOfGod.Gameplay
         private bool usesExternalBridge;
         private string bridgeStatus = "Starting camera...";
 
+        // Level2: Portal + Airflow mechanics
+        private GameObject portalKey;
+        private Rigidbody portalKeyBody;
+        private Renderer portalKeyRenderer;
+        private Transform runeLeft;
+        private Transform runeRight;
+        private Renderer runeLeftRenderer;
+        private Renderer runeRightRenderer;
+        private GameObject runeLeftArrow;
+        private GameObject runeRightArrow;
+        private string level2HintMessage = "";
+        private Vector3 portalAPosition;
+        private Vector3 portalBPosition;
+        private bool portalAActive;
+        private bool portalBActive;
+        private Renderer portalARenderer;
+        private Renderer portalBRenderer;
+        private Transform[] airBelts;
+        private int[] airBeltDirection;
+        private Renderer[] airBeltRenderers;
+        private AirBeltTrigger[] airBeltTriggers;
+        private Transform[] airBeltArrowTransforms;
+        private Renderer[] airBeltArrowRenderers;
+        private Rigidbody levelBallBody;
+        private const float AirBeltForce = 40f;
+        private bool keyHeld;
+        private Vector3 keyGrabOffset;
+        private float level2LastTeleport = -10f;
+        private float levelStartTime = -10f;
+
+        // tuning: larger grab radii for the portal key to make it easier to pick up
+        private const float PortalKeyGrabPinchRadius = 1.6f;
+        private const float PortalKeyGrabIdleRadius = 1.1f;
+
+        // UI/debug helpers
+        private bool lastPinchState = false;
+        private bool lastKeyInRange = false;
+        private float keyHoverStart = -1f;
+        private const float KeyDwellSeconds = 0.6f;
+
         public void Configure(GestureUdpReceiver gestureReceiver, CameraFrameReceiver frameReceiver)
         {
             receiver = gestureReceiver;
             cameraFrames = frameReceiver;
+        }
+
+        // Editor helper: allow editor scripts to start a specific GameMode by index
+        public void EditorStartLevel(int levelIndex)
+        {
+            // levelIndex mapping: 0=CalibrationOpen,1=CalibrationPinch,2=Menu,3=Level0,4=Level1,5=Level2,6=Pass
+            if (levelIndex == 3) StartLevel(GameMode.Level0);
+            else if (levelIndex == 4) StartLevel(GameMode.Level1);
+            else if (levelIndex == 5) StartLevel(GameMode.Level2);
+            else if (levelIndex == 2) { mode = GameMode.Menu; SetLobbyVisible(true); }
         }
 
         public void InitializeForScene()
@@ -208,6 +259,9 @@ namespace HandOfGod.Gameplay
                 case GameMode.Level1:
                     UpdateLevel1(hand);
                     break;
+                case GameMode.Level2:
+                    UpdateLevel2(hand);
+                    break;
             }
 
             HandleLevel1BallState();
@@ -215,21 +269,30 @@ namespace HandOfGod.Gameplay
 
         private bool HandleLevel1BallState()
         {
-            if (mode != GameMode.Level1 || levelBall == null)
+            if ((mode != GameMode.Level1 && mode != GameMode.Level2) || levelBall == null)
             {
                 return false;
             }
 
             if (levelBall.Failed)
             {
-                StartLevel(GameMode.Level1);
+                // restart current level
+                Debug.Log("[LevelState] Ball failed — restarting level");
+                StartLevel(mode == GameMode.Level1 ? GameMode.Level1 : GameMode.Level2);
                 return true;
             }
 
+            // Only allow automatic pass when the level is in the final "RunToGoal" stage.
             if (levelBall.ReachedGoal)
             {
-                mode = GameMode.Pass;
-                return true;
+                Debug.Log($"[LevelState] ReachedGoal detected. mode={mode} level1Stage={level1Stage} ballPos={levelBall.transform.position} timeSinceStart={Time.time - levelStartTime}");
+                if (mode == GameMode.Level1 || (mode == GameMode.Level2 && level1Stage == Level1Stage.RunToGoal))
+                {
+                    Debug.Log("[LevelState] Level pass condition satisfied — switching to Pass mode");
+                    mode = GameMode.Pass;
+                    return true;
+                }
+                // ignore reached goal until level progression reaches running-to-goal phase
             }
 
             return false;
@@ -281,6 +344,9 @@ namespace HandOfGod.Gameplay
                 case GameMode.Level1:
                     DrawLevel1Hud();
                     break;
+                case GameMode.Level2:
+                    DrawLevel2Hud();
+                    break;
                 case GameMode.Pass:
                     DrawPassHud();
                     break;
@@ -288,6 +354,25 @@ namespace HandOfGod.Gameplay
 
             DrawHandSkeletonOverlay();
             DrawCursor();
+
+            // temporary on-screen prompt: draw an arrow and instruction when near the key
+            if (mode == GameMode.Level2 && portalKey != null)
+            {
+                var cursor = CursorScreen();
+                var keyScreen = Camera.main.WorldToScreenPoint(portalKey.transform.position);
+                // convert to GUI coords
+                var keyGui = new Vector2(keyScreen.x, Screen.height - keyScreen.y);
+                var near = lastKeyInRange;
+                var label = near ? "Pinch to grab the key" : "Move index over key to highlight";
+                GUI.color = Color.white;
+                var rect = new Rect(keyGui.x - 80f, keyGui.y - 60f, 160f, 40f);
+                GUI.Box(rect, label);
+                // draw a simple arrow above the key
+                var arrowRect = new Rect(keyGui.x - 12f, keyGui.y - 80f, 24f, 24f);
+                GUI.color = near ? Color.cyan : Color.yellow;
+                GUI.DrawTexture(arrowRect, Texture2D.whiteTexture);
+                GUI.color = Color.white;
+            }
             DrawGlobalControls();
         }
 
@@ -383,7 +468,8 @@ namespace HandOfGod.Gameplay
             DrawHoverButton("start", "Start Game", new Rect(70, 120, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             DrawHoverButton("level0", "Level 0: Tutorial", new Rect(70, 172, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
             DrawHoverButton("level1", "Level 1: First Path", new Rect(70, 224, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
-            DrawHoverButton("recalibrate", "Recalibrate", new Rect(70, 276, 260, 42), MenuDwellSeconds, ResetToCalibration);
+            DrawHoverButton("level2", "Level 2: Portals & Airflow", new Rect(70, 276, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level2));
+            DrawHoverButton("recalibrate", "Recalibrate", new Rect(70, 328, 260, 42), MenuDwellSeconds, ResetToCalibration);
         }
 
         private void DrawLevel0Hud()
@@ -446,8 +532,44 @@ namespace HandOfGod.Gameplay
             GUI.color = new Color(0.92f, 1f, 0.94f, 1f);
             GUI.Label(new Rect(panelX + 48, 166, 364, 30), "The ball reached the altar.", messageStyle);
             GUI.color = Color.white;
-            DrawHoverButton("pass-restart", "Restart", new Rect(Screen.width / 2f - 170f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(lastLevel), 20);
-            DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 20f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level0), 20);
+            DrawHoverButton("pass-restart", "Restart", new Rect(Screen.width / 2f - 230f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(lastLevel), 20);
+            // 当上一关是 Level1 时，显示进入 Level2 的按钮
+            if (lastLevel == GameMode.Level1)
+            {
+                DrawHoverButton("pass-next", "Next: Level 2", new Rect(Screen.width / 2f - 50f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level2), 20);
+                DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 130f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level0), 20);
+            }
+            else
+            {
+                DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 20f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level0), 20);
+            }
+        }
+
+        private void DrawLevel2Hud()
+        {
+            var panelWidth = Mathf.Min(Screen.width - 180f, 820f);
+            var panel = new Rect(Screen.width * 0.5f - panelWidth * 0.5f, 42f, panelWidth, 132f);
+            DrawPanel(panel);
+            var titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
+            var objectiveStyle = new GUIStyle(GUI.skin.label) { fontSize = 17, wordWrap = true };
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 2: Portals & Airflow", titleStyle);
+            var detail = level1Stage switch
+            {
+                Level1Stage.ClearBlock => "Drag the glowing key onto the left rune to unlock the path.",
+                Level1Stage.JoinBridge => "Use the airflow gesture (index+middle together) over a belt to set its direction.",
+                Level1Stage.RotateGate => "Place the key on the right rune to activate the portal.",
+                Level1Stage.RunToGoal => "The path is open. Guide the ball to the altar.",
+                _ => "",
+            };
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 52f, panel.width - 56f, 42f), detail, objectiveStyle);
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 96f, panel.width - 56f, 24f), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}" : "Ball speed: 0.00");
+
+            // dynamic level hints
+            if (!string.IsNullOrEmpty(level2HintMessage))
+            {
+                var hintRect = new Rect(panel.x + 28f, panel.y + 128f, panel.width - 56f, 28f);
+                GUI.Label(hintRect, level2HintMessage);
+            }
         }
 
         private void DrawSuccessBanner(Rect rect, string text)
@@ -480,11 +602,16 @@ namespace HandOfGod.Gameplay
             {
                 BuildLevel0();
             }
-            else
+            else if (level == GameMode.Level1)
             {
                 BuildLevel1();
             }
+            else if (level == GameMode.Level2)
+            {
+                BuildLevel2();
+            }
             mode = level;
+            levelStartTime = Time.time;
             hoverKey = "";
             hoverStart = -1f;
         }
@@ -1173,6 +1300,340 @@ namespace HandOfGod.Gameplay
         {
             return hand.score >= 0.35f && hand.pinchDistance < pinchThreshold;
         }
+
+        // -------------------- Level2: Portals & Airflow --------------------
+        private void BuildLevel2()
+        {
+            levelRoot = new GameObject("Level02 Portal Airflow").transform;
+            Debug.Log("[Level2] BuildLevel2 start");
+            level1Stage = Level1Stage.ClearBlock; // ClearBlock=Place key, JoinBridge=Airflow, RotateGate=Finish
+            portalAActive = false;
+            portalBActive = false;
+            
+            // Portal A: ball spawn point (left side)
+            // Portal B: after gate (right side, where ball teleports to)
+            portalAPosition = new Vector3(-3.5f, 0.15f, 0f);
+            portalBPosition = new Vector3(0.5f, 0.15f, 0f);
+
+            // flat ground layout
+            CreateBox("level2 base", new Vector3(0f, -0.15f, 0f), new Vector3(9.9f, 0.3f, 3.9f), cliffStone, levelRoot, Quaternion.identity, true);
+            CreateBox("level2 platform", new Vector3(0f, 0.02f, 0f), new Vector3(8.5f, 0.04f, 2.2f), paleStone, levelRoot, Quaternion.identity, true);
+
+            // single rune for key placement (activates teleport)
+            var rune = CreateBox("rune", new Vector3(-2.0f, 0.06f, 1.5f), new Vector3(0.9f, 0.06f, 0.9f), amberGlow, levelRoot, Quaternion.identity, true);
+            runeLeft = rune.transform;
+            runeLeftRenderer = rune.GetComponent<Renderer>();
+            runeRight = null;
+            runeRightRenderer = null;
+            runeLeftArrow = null;
+            runeRightArrow = null;
+
+            // draggable key
+            var key = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            key.name = "Portal Key";
+            key.transform.SetParent(levelRoot, false);
+            key.transform.position = new Vector3(-4.2f, 0.18f, 1.9f);
+            key.transform.localScale = Vector3.one * 0.60f;
+            portalKeyRenderer = key.GetComponent<Renderer>();
+            portalKeyRenderer.sharedMaterial = boxIdle;
+            portalKeyBody = key.AddComponent<Rigidbody>();
+            portalKeyBody.isKinematic = true;
+            portalKeyBody.interpolation = RigidbodyInterpolation.Interpolate;
+            portalKeyBody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            portalKey = key;
+
+            // Remove any decorative arrow objects placed near the key (player prefers text hint)
+            if (levelRoot != null)
+            {
+                foreach (Transform t in levelRoot.GetComponentsInChildren<Transform>(true))
+                {
+                    if (t == null || t == key.transform) continue;
+                    var lname = t.name != null ? t.name.ToLowerInvariant() : "";
+                    if (lname.Contains("arrow") || lname.Contains("indicator") || lname.Contains("pointer"))
+                    {
+                        if (Vector3.Distance(t.position, key.transform.position) < 1.0f)
+                        {
+                            DestroyUnityObject(t.gameObject);
+                        }
+                    }
+                }
+            }
+
+            // portals visual markers
+            var portalAObj = CreateBox("portal A", portalAPosition, new Vector3(0.6f, 0.02f, 0.6f), tealGlow, levelRoot, Quaternion.identity, true);
+            var portalBObj = CreateBox("portal B", portalBPosition, new Vector3(0.6f, 0.02f, 0.6f), amberGlow, levelRoot, Quaternion.identity, true);
+            portalARenderer = portalAObj.GetComponent<Renderer>();
+            portalBRenderer = portalBObj.GetComponent<Renderer>();
+
+            // single air belt (default direction: RIGHT, pushes ball from portal B toward goal)
+            airBelts = new Transform[1];
+            airBeltDirection = new int[1];
+            airBeltRenderers = new Renderer[1];
+            airBeltTriggers = new AirBeltTrigger[1];
+            airBeltArrowRenderers = new Renderer[1];
+            airBeltArrowTransforms = new Transform[1];
+            
+            var beltX = 0.8f; // To the right of portal B (0.5), ball feels wind after reaching B
+            var beltY = 0.25f;
+            // Use keepCollider=true to preserve the collider, then set it as trigger
+            var belt = CreateBox("air belt", new Vector3(beltX, beltY, 0f), new Vector3(2.0f, 0.4f, 2.0f), boxIdle, levelRoot, Quaternion.identity, true);
+            airBelts[0] = belt.transform;
+            airBeltRenderers[0] = belt.GetComponent<Renderer>();
+            airBeltDirection[0] = 0; // Default: OFF (no wind)
+
+            var col = belt.GetComponent<Collider>();
+            col.isTrigger = true;
+
+            var trigger = belt.AddComponent<AirBeltTrigger>();
+            trigger.beltIndex = 0;
+            trigger.direction = 0; // Default: OFF
+            trigger.force = AirBeltForce;
+            airBeltTriggers[0] = trigger;
+
+            var arrow = CreateBox("air arrow", belt.transform.position + new Vector3(0f, 0.25f, 0f), new Vector3(0.4f, 0.02f, 0.2f), boxIdle, belt.transform, Quaternion.identity, false);
+            airBeltArrowRenderers[0] = arrow.GetComponent<Renderer>();
+            airBeltArrowTransforms[0] = arrow.transform;
+
+            // Visual: idle color when off - hide belt visuals (keep trigger active) so player sees text hint instead
+            if (airBeltRenderers[0] != null)
+            {
+                airBeltRenderers[0].sharedMaterial = boxIdle;
+                airBeltRenderers[0].enabled = false; // hide the bulky belt box
+            }
+            if (airBeltArrowRenderers[0] != null)
+            {
+                airBeltArrowRenderers[0].sharedMaterial = boxIdle;
+                airBeltArrowRenderers[0].enabled = false; // hide arrow indicator; use HUD text instead
+            }
+
+            // single gate between portal A and portal B
+            startGate = null;
+            bridgeGate = CreateBox("level2 gate", new Vector3(-1.5f, 0.66f, 0f), new Vector3(0.16f, 1.05f, 2.8f), amberGlow, levelRoot, Quaternion.identity, true);
+            // gate between air belt and goal (opens when airflow direction is set to RIGHT)
+            rotateGateStop = CreateBox("level2 gate2", new Vector3(3.0f, 0.66f, 0f), new Vector3(0.16f, 1.05f, 2.8f), amberGlow, levelRoot, Quaternion.identity, true);
+            goalGate = null;
+
+            // ball spawns at portal A
+            var ballObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            ballObject.name = "Golden Physics Ball";
+            ballObject.transform.SetParent(levelRoot, false);
+            ballObject.transform.position = portalAPosition + new Vector3(0f, 0.2f, 0f);
+            ballObject.transform.localScale = Vector3.one * 0.46f;
+            ballObject.GetComponent<Renderer>().sharedMaterial = ballMaterial;
+            var body = ballObject.AddComponent<Rigidbody>();
+            body.mass = 1.1f;
+            body.linearDamping = 0.02f;
+            body.angularDamping = 0.01f;
+            levelBall = ballObject.AddComponent<BallController>();
+            levelBallBody = body;
+
+            // goal at right side
+            var goal = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            goal.name = "Goal Trigger";
+            goal.transform.SetParent(levelRoot, false);
+            goal.transform.position = new Vector3(3.8f, 0.2f, 0f);
+            goal.transform.localScale = new Vector3(0.7f, 0.11f, 0.7f);
+            goal.GetComponent<Renderer>().sharedMaterial = tealGlow;
+            DestroyUnityObject(goal.GetComponent<Collider>());
+            levelBall.Configure(goal.transform);
+            CreateTorus("level2 goal ring", goal.transform.position + new Vector3(0f, 0.12f, 0f), 0.66f, 0.055f, tealGlow, levelRoot);
+        }
+
+        private void UpdateLevel2(GestureHandFrame hand)
+        {
+            if (portalKey == null || levelBall == null)
+            {
+                return;
+            }
+
+            var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
+            var target = MapPinchToRoad(hand.pinchX, hand.pinchY);
+            var isPinch = IsPinching(hand);
+
+            // key dragging + magnet snap + UI state
+            var grabRadius = isPinch ? PortalKeyGrabPinchRadius : PortalKeyGrabIdleRadius;
+            var close = DistanceXZ(target, portalKey.transform.position) < grabRadius;
+            portalKeyRenderer.sharedMaterial = boxIdle;
+
+            // update UI debug flags
+            lastKeyInRange = close;
+            lastPinchState = isPinch;
+            level2HintMessage = "";
+
+            // hover dwell hint
+            if (!keyHeld && close && !isPinch)
+            {
+                if (keyHoverStart < 0f) keyHoverStart = Time.time;
+                if (Time.time - keyHoverStart >= KeyDwellSeconds)
+                {
+                    portalKeyRenderer.sharedMaterial = boxHover;
+                    level2HintMessage = "Pinch to grab the key";
+                }
+            }
+            else
+            {
+                keyHoverStart = -1f;
+            }
+
+            // magnetic snap: if player pinches near the key, snap it to the pinch point and grab
+            var magnetRadius = 2.0f;
+            if (!keyHeld && isPinch && (close || DistanceXZ(target, portalKey.transform.position) < magnetRadius))
+            {
+                keyHeld = true;
+                var snapPos = target;
+                snapPos.y = 0.18f;
+                portalKeyBody.MovePosition(snapPos);
+                keyGrabOffset = portalKey.transform.position - target;
+                portalKeyBody.isKinematic = true;
+                Debug.Log("[Level2] Key grabbed by player.");
+            }
+
+            if (keyHeld && !isPinch)
+            {
+                keyHeld = false;
+            }
+            if (keyHeld)
+            {
+                portalKeyRenderer.sharedMaterial = boxHeldMaterial;
+                var pos = target + keyGrabOffset;
+                pos.y = 0.18f;
+                portalKeyBody.MovePosition(pos);
+                level2HintMessage = "Place the key onto the rune to activate teleport.";
+            }
+
+            // detect placement on rune (when not being held)
+            var keyPos = portalKey.transform.position;
+            if (!isPinch && !portalAActive && runeLeft != null)
+            {
+                if (DistanceXZ(keyPos, runeLeft.position) < 0.65f)
+                {
+                    portalAActive = true;
+                    Debug.Log("[Level2] Rune activated - teleport enabled");
+                    if (runeLeftRenderer != null) runeLeftRenderer.sharedMaterial = tealGlow;
+                    if (portalARenderer != null) portalARenderer.sharedMaterial = tealGlow;
+                    if (portalBRenderer != null) portalBRenderer.sharedMaterial = tealGlow;
+                    level2HintMessage = "Teleport activated! Ball will teleport to the right side.";
+                }
+            }
+
+            // when rune is activated, immediately teleport ball from A to B
+            if (level1Stage == Level1Stage.ClearBlock && portalAActive)
+            {
+                Debug.Log("[Level2] Teleport check: level1Stage=ClearBlock, portalAActive=true");
+                var bpos = levelBall.transform.position;
+                // Teleport ball immediately when rune is activated
+                if (Time.time - level2LastTeleport > 0.5f)
+                {
+                    Debug.Log("[Level2] Teleporting ball from A to B");
+                    // Diagnostic: ensure ball and rigidbody are valid and active
+                    if (levelBall == null)
+                    {
+                        Debug.LogWarning("[Level2] levelBall is null - cannot teleport.");
+                    }
+                    else
+                    {
+                        Debug.Log($"[Level2] levelBall.activeSelf={levelBall.gameObject.activeSelf}, levelBall.position={levelBall.transform.position}");
+                    }
+                    if (levelBallBody == null)
+                    {
+                        Debug.LogWarning("[Level2] levelBallBody is null - teleport via transform.");
+                        levelBall.transform.position = portalBPosition + new Vector3(0f, 0.2f, 0f);
+                    }
+                    else
+                    {
+                        Debug.Log($"[Level2] levelBallBody.isKinematic={levelBallBody.isKinematic}");
+                        // Ensure ball is active and non-kinematic so MovePosition has visible effect
+                        levelBall.gameObject.SetActive(true);
+                        levelBallBody.isKinematic = false;
+                        var targetPos = portalBPosition + new Vector3(0f, 0.2f, 0f);
+                        Debug.Log($"[Level2] Moving ball to {targetPos}");
+                        // Use MovePosition to cooperate with physics solver
+                        levelBallBody.MovePosition(targetPos);
+                        // As a fallback also set transform
+                        levelBall.transform.position = targetPos;
+                        levelBallBody.linearVelocity = Vector3.zero;
+                        levelBallBody.angularVelocity = Vector3.zero;
+                        levelBallBody.WakeUp();
+                    }
+                    level2LastTeleport = Time.time;
+
+                    // Open gate after teleport
+                    OpenGate(bridgeGate);
+                    AdvanceLevel1(Level1Stage.JoinBridge);
+                    level2HintMessage = "Use airflow gesture to set wind direction!";
+                }
+                else
+                {
+                    Debug.Log("[Level2] Teleport cooldown active");
+                }
+            }
+
+            // airflow gesture: change belt direction
+            if (TryGetAirflowHand(frame, out var ghand))
+            {
+                var handPoint = ScreenToWorldPlane(ghand.indexX, ghand.indexY, 0.12f);
+                var dirX = ghand.landmarks != null && ghand.landmarks.Length > 8 ? ghand.landmarks[8].x - ghand.landmarks[0].x : ghand.indexX - ghand.pinchX;
+                var newDir = dirX > 0f ? 1 : (dirX < 0f ? -1 : 0);
+                
+                airBeltDirection[0] = newDir;
+                if (airBeltRenderers[0] != null)
+                {
+                    airBeltRenderers[0].sharedMaterial = newDir == 1 ? tealGlow : (newDir == -1 ? amberGlow : boxIdle);
+                }
+                if (airBeltTriggers[0] != null)
+                {
+                    airBeltTriggers[0].direction = newDir;
+                }
+                if (airBeltArrowRenderers[0] != null)
+                {
+                    airBeltArrowRenderers[0].sharedMaterial = newDir == 1 ? tealGlow : (newDir == -1 ? amberGlow : boxIdle);
+                }
+                
+                if (newDir == 1)
+                {
+                    level2HintMessage = "Wind direction: RIGHT - Ball will move to goal!";
+                    // Open gate between belt and goal when direction is RIGHT
+                    if (rotateGateStop != null)
+                    {
+                        OpenGate(rotateGateStop);
+                        AdvanceLevel1(Level1Stage.RunToGoal);
+                    }
+                }
+                else if (newDir == -1)
+                {
+                    level2HintMessage = "Wind direction: LEFT - Change to RIGHT to reach goal!";
+                }
+            }
+        }
+
+        private static bool IsAirflowGesture(GestureHandFrame hand)
+        {
+            // index and middle together, thumb extended, ring and pinky retracted
+            if (hand.landmarks == null || hand.landmarks.Length < 21)
+            {
+                return false;
+            }
+            return IndexMiddleTogether(hand) && hand.thumbExtended && !hand.ringExtended && !hand.pinkyExtended;
+        }
+
+        private bool TryGetAirflowHand(GestureFrame frame, out GestureHandFrame hand)
+        {
+            hand = default;
+            if (frame.hands == null || frame.hands.Length == 0)
+            {
+                return false;
+            }
+            foreach (var h in frame.hands)
+            {
+                if (h.score >= 0.35f && IsAirflowGesture(h))
+                {
+                    hand = h; return true;
+                }
+            }
+            return false;
+        }
+
+        // -------------------- End Level2 methods --------------------
 
         private static bool HasLeftAndRightHands(GestureFrame frame)
         {

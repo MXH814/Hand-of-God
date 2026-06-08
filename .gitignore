@@ -33,3 +33,7 @@ __pycache__/
 *.pyc
 .venv/
 Preview/
+# 忽略所有批处理启动脚本
+*.bat
+# 忽略Visual Studio本地缓存
+.vs/
