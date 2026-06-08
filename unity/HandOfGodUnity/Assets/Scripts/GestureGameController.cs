@@ -301,8 +301,19 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
+            if (mode == GameMode.Level2)
+            {
+                UpdateLevel2Autonomous();
+            }
+
             if (!TryGetPrimaryHand(out var hand))
             {
+                if (mode == GameMode.Level2)
+                {
+                    ReleaseLevel2KeyIfTrackingLost();
+                    pendingAirDirection = 0;
+                    pendingAirDirectionStart = -1f;
+                }
                 return;
             }
 
@@ -1396,7 +1407,7 @@ namespace HandOfGod.Gameplay
             portalBPosition = new Vector3(0.5f, 0.15f, 0f);
 
             BuildLevel2DungeonArt();
-            var floorCollider = CreateBox("level2 gameplay floor collider", new Vector3(0f, 0.02f, 0f), new Vector3(8.5f, 0.045f, 2.25f), level2FloorMaterial, levelRoot, Quaternion.identity, true);
+            var floorCollider = CreateBox("level2 gameplay floor collider", new Vector3(0.55f, 0.02f, 0f), new Vector3(9.9f, 0.045f, 2.25f), level2FloorMaterial, levelRoot, Quaternion.identity, true);
             var floorRenderer = floorCollider.GetComponent<Renderer>();
             if (floorRenderer != null) floorRenderer.enabled = false;
 
@@ -1451,10 +1462,10 @@ namespace HandOfGod.Gameplay
             airBeltMistQuads = new Transform[4];
             airBeltMistRenderers = new Renderer[4];
             
-            var beltX = 0.8f; // To the right of portal B (0.5), ball feels wind after reaching B
+            var beltX = 1.25f; // Matches the full central wind gallery floor.
             var beltY = 0.18f;
             // Use keepCollider=true to preserve the collider, then set it as trigger
-            var belt = CreateBox("air belt trigger", new Vector3(beltX, beltY, 0f), new Vector3(2.3f, 0.36f, 1.65f), level2WindMaterial, levelRoot, Quaternion.identity, true);
+            var belt = CreateBox("air belt trigger", new Vector3(beltX, beltY, 0f), new Vector3(4.95f, 0.36f, 1.65f), level2WindMaterial, levelRoot, Quaternion.identity, true);
             airBelts[0] = belt.transform;
             airBeltRenderers[0] = belt.GetComponent<Renderer>();
             airBeltDirection[0] = 0; // Default: OFF (no wind)
@@ -1470,30 +1481,34 @@ namespace HandOfGod.Gameplay
             trigger.rampSeconds = 1.45f;
             airBeltTriggers[0] = trigger;
 
-            var arrow = CreateBox("air arrow glow", belt.transform.position + new Vector3(0f, 0.21f, -0.70f), new Vector3(0.34f, 0.018f, 0.055f), level2PortalCoreMaterial, belt.transform, Quaternion.identity, false);
+            var beltVisualRoot = new GameObject("air belt visual root");
+            beltVisualRoot.transform.SetParent(levelRoot, false);
+            beltVisualRoot.transform.position = belt.transform.position;
+
+            var arrow = CreateBox("air arrow glow", beltVisualRoot.transform.position + new Vector3(0f, 0.21f, -0.70f), new Vector3(0.34f, 0.018f, 0.055f), level2PortalCoreMaterial, beltVisualRoot.transform, Quaternion.identity, false);
             airBeltArrowRenderers[0] = arrow.GetComponent<Renderer>();
             airBeltArrowTransforms[0] = arrow.transform;
 
             for (var i = 0; i < airBeltMistQuads.Length; i++)
             {
-                var xOffset = Mathf.Lerp(-0.62f, 0.62f, i / (float)(airBeltMistQuads.Length - 1));
+                var xOffset = Mathf.Lerp(-1.68f, 1.68f, i / (float)(airBeltMistQuads.Length - 1));
                 var zOffset = i % 2 == 0 ? -0.28f : 0.28f;
-                var mist = CreateAirflowMist($"air flow mist sheet {i + 1}", belt.transform, new Vector3(xOffset, 0.285f, zOffset), 1.25f, 0.68f);
+                var mist = CreateAirflowMist($"air flow mist sheet {i + 1}", beltVisualRoot.transform, new Vector3(xOffset, 0.285f, zOffset), 2.0f, 0.68f);
                 airBeltMistQuads[i] = mist.transform;
                 airBeltMistRenderers[i] = mist.GetComponent<Renderer>();
             }
 
             for (var i = 0; i < airBeltStreaks.Length; i++)
             {
-                var xOffset = Mathf.Lerp(-0.88f, 0.88f, i / (float)(airBeltStreaks.Length - 1));
+                var xOffset = Mathf.Lerp(-2.05f, 2.05f, i / (float)(airBeltStreaks.Length - 1));
                 var zOffset = Mathf.Lerp(-0.58f, 0.58f, i / (float)(airBeltStreaks.Length - 1));
-                var streak = CreateAirflowRibbon($"air flow texture ribbon {i + 1}", belt.transform, new Vector3(xOffset, 0.33f, zOffset), 0.94f, 0.30f);
+                var streak = CreateAirflowRibbon($"air flow texture ribbon {i + 1}", beltVisualRoot.transform, new Vector3(xOffset, 0.33f, zOffset), 1.42f, 0.30f);
                 airBeltStreaks[i] = streak.transform;
                 airBeltStreakRenderers[i] = streak.GetComponent<Renderer>();
             }
             airBeltParticles = new[]
             {
-                CreateAirflowParticles("airflow cyan mist", belt.transform),
+                CreateAirflowParticles("airflow cyan mist", beltVisualRoot.transform),
             };
 
             if (airBeltRenderers[0] != null)
@@ -1510,7 +1525,7 @@ namespace HandOfGod.Gameplay
             startGate = null;
             bridgeGate = CreateLevel2Gate("level2 rune gate", new Vector3(-1.5f, 0.68f, 0f), 2.55f);
             // gate between air belt and goal (opens when airflow direction is set to RIGHT)
-            rotateGateStop = CreateLevel2Gate("level2 wind gate", new Vector3(3.0f, 0.68f, 0f), 2.55f);
+            rotateGateStop = CreateLevel2Gate("level2 wind gate", new Vector3(3.75f, 0.68f, 0f), 2.55f);
             goalGate = null;
 
             // ball spawns at portal A
@@ -1535,7 +1550,7 @@ namespace HandOfGod.Gameplay
             var goal = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             goal.name = "Goal Trigger";
             goal.transform.SetParent(levelRoot, false);
-            goal.transform.position = new Vector3(3.8f, 0.2f, 0f);
+            goal.transform.position = new Vector3(4.85f, 0.2f, 0f);
             goal.transform.localScale = new Vector3(0.7f, 0.11f, 0.7f);
             goal.GetComponent<Renderer>().sharedMaterial = level2PortalCoreMaterial;
             DestroyUnityObject(goal.GetComponent<Collider>());
@@ -1547,8 +1562,8 @@ namespace HandOfGod.Gameplay
         {
             if (mainCamera != null)
             {
-                mainCamera.orthographicSize = 3.75f;
-                mainCamera.transform.SetPositionAndRotation(new Vector3(0f, 7.1f, -5.8f), Quaternion.Euler(55f, 0f, 0f));
+                mainCamera.orthographicSize = 3.9f;
+                mainCamera.transform.SetPositionAndRotation(new Vector3(0.45f, 7.1f, -5.8f), Quaternion.Euler(55f, 0f, 0f));
                 mainCamera.backgroundColor = new Color(0.010f, 0.012f, 0.015f);
             }
 
@@ -1564,26 +1579,26 @@ namespace HandOfGod.Gameplay
 
         private void BuildLevel2DungeonArt()
         {
-            CreateBox("level2 void plinth", new Vector3(0f, -0.50f, 0f), new Vector3(10.2f, 0.42f, 5.0f), darkStone, levelRoot, Quaternion.identity, false);
+            CreateBox("level2 void plinth", new Vector3(0.45f, -0.50f, 0f), new Vector3(11.2f, 0.42f, 5.0f), darkStone, levelRoot, Quaternion.identity, false);
 
             CreateBox("level2 left portal chamber floor", new Vector3(-3.0f, -0.015f, 0f), new Vector3(2.55f, 0.13f, 2.48f), level2FloorMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 central wind gallery floor", new Vector3(0.75f, -0.015f, 0f), new Vector3(3.95f, 0.13f, 1.72f), level2FloorMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 right altar chamber floor", new Vector3(3.55f, -0.015f, 0f), new Vector3(1.65f, 0.13f, 2.15f), level2FloorMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox("level2 central wind gallery floor", new Vector3(1.25f, -0.015f, 0f), new Vector3(4.95f, 0.13f, 1.72f), level2FloorMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox("level2 right altar chamber floor", new Vector3(4.55f, -0.015f, 0f), new Vector3(1.65f, 0.13f, 2.15f), level2FloorMaterial, levelRoot, Quaternion.identity, false);
 
             CreateCleanChamberFrame(-3.0f, 2.55f, 2.48f);
-            CreateCleanChamberFrame(0.75f, 3.95f, 1.72f);
-            CreateCleanChamberFrame(3.55f, 1.65f, 2.15f);
+            CreateCleanChamberFrame(1.25f, 4.95f, 1.72f);
+            CreateCleanChamberFrame(4.55f, 1.65f, 2.15f);
 
             CreateBox("level2 rear wall left", new Vector3(-3.0f, 0.48f, 1.50f), new Vector3(2.55f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 rear wall wind", new Vector3(0.75f, 0.48f, 1.12f), new Vector3(3.95f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
-            CreateBox("level2 rear wall altar", new Vector3(3.55f, 0.48f, 1.34f), new Vector3(1.65f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox("level2 rear wall wind", new Vector3(1.25f, 0.48f, 1.12f), new Vector3(4.95f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox("level2 rear wall altar", new Vector3(4.55f, 0.48f, 1.34f), new Vector3(1.65f, 0.82f, 0.16f), level2WallMaterial, levelRoot, Quaternion.identity, false);
 
             CreateLevel2Pillar(new Vector3(-4.15f, 0.34f, 1.15f));
             CreateLevel2Pillar(new Vector3(-1.88f, 0.34f, 1.15f));
-            CreateLevel2Pillar(new Vector3(2.78f, 0.34f, 0.92f));
-            CreateLevel2Pillar(new Vector3(4.18f, 0.34f, 0.92f));
+            CreateLevel2Pillar(new Vector3(3.78f, 0.34f, 0.92f));
+            CreateLevel2Pillar(new Vector3(5.18f, 0.34f, 0.92f));
 
-            CreateBox("level2 wind channel low glow", new Vector3(0.8f, 0.055f, 0f), new Vector3(2.85f, 0.006f, 0.045f), level2WallMaterial, levelRoot, Quaternion.identity, false);
+            CreateBox("level2 wind channel low glow", new Vector3(1.25f, 0.055f, 0f), new Vector3(4.65f, 0.006f, 0.045f), level2WallMaterial, levelRoot, Quaternion.identity, false);
         }
 
         private void CreateCleanChamberFrame(float centerX, float width, float depth)
@@ -1819,12 +1834,6 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
-            UpdateAirBeltVisuals();
-            if (level2Teleporting)
-            {
-                UpdateLevel2Teleport();
-            }
-
             var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
             var target = MapPinchToRoad(hand.pinchX, hand.pinchY);
             var isPinch = IsPinching(hand);
@@ -1837,7 +1846,7 @@ namespace HandOfGod.Gameplay
             // update UI debug flags
             lastKeyInRange = close;
             lastPinchState = isPinch;
-            if (!level2Teleporting)
+            if (!level2Teleporting && level1Stage == Level1Stage.ClearBlock && !portalAActive)
             {
                 level2HintMessage = "";
             }
@@ -1873,6 +1882,7 @@ namespace HandOfGod.Gameplay
             if (keyHeld && !isPinch)
             {
                 keyHeld = false;
+                TryActivateLevel2RuneFromKeyPosition();
             }
             if (keyHeld)
             {
@@ -1883,28 +1893,9 @@ namespace HandOfGod.Gameplay
                 level2HintMessage = "Place the key onto the rune to activate teleport.";
             }
 
-            // detect placement on rune (when not being held)
-            var keyPos = portalKey.transform.position;
-            if (!isPinch && !portalAActive && runeLeft != null)
+            if (!keyHeld && !isPinch)
             {
-                if (DistanceXZ(keyPos, runeLeft.position) < 0.65f)
-                {
-                    portalAActive = true;
-                    Debug.Log("[Level2] Rune activated - teleport enabled");
-                    if (runeLeftRenderer != null) runeLeftRenderer.sharedMaterial = tealGlow;
-                    if (portalARenderer != null) portalARenderer.sharedMaterial = tealGlow;
-                    if (portalBRenderer != null) portalBRenderer.sharedMaterial = tealGlow;
-                    level2HintMessage = "Teleport activated. Watch the ball cross the gate.";
-                }
-            }
-
-            // when rune is activated, animate the ball from portal A to B
-            if (level1Stage == Level1Stage.ClearBlock && portalAActive && !level2Teleporting)
-            {
-                if (Time.time - level2LastTeleport > 0.5f)
-                {
-                    BeginLevel2Teleport();
-                }
+                TryActivateLevel2RuneFromKeyPosition();
             }
 
             // airflow gesture: change belt direction
@@ -1931,9 +1922,33 @@ namespace HandOfGod.Gameplay
                 pendingAirDirectionStart = -1f;
             }
 
+        }
+
+        private void UpdateLevel2Autonomous()
+        {
+            if (portalKey == null || levelBall == null)
+            {
+                return;
+            }
+
+            UpdateAirBeltVisuals();
+            if (level2Teleporting)
+            {
+                UpdateLevel2Teleport();
+            }
+
+            if (level1Stage == Level1Stage.ClearBlock && portalAActive && !level2Teleporting)
+            {
+                if (Time.time - level2LastTeleport > 0.5f)
+                {
+                    BeginLevel2Teleport();
+                }
+            }
+
             if (level1Stage == Level1Stage.JoinBridge || level1Stage == Level1Stage.RunToGoal)
             {
-                if (airBeltDirection != null && airBeltDirection.Length > 0 && airBeltDirection[0] == 1)
+                var direction = airBeltDirection != null && airBeltDirection.Length > 0 ? airBeltDirection[0] : 0;
+                if (direction == 1)
                 {
                     level2HintMessage = "Airflow: RIGHT. The wind will gradually carry the ball to the altar.";
                     if (rotateGateStop != null)
@@ -1942,11 +1957,47 @@ namespace HandOfGod.Gameplay
                         AdvanceLevel1(Level1Stage.RunToGoal);
                     }
                 }
-                else if (airBeltDirection != null && airBeltDirection.Length > 0 && airBeltDirection[0] == -1)
+                else if (direction == -1)
                 {
                     level2HintMessage = "Airflow: LEFT. Turn your gesture the other way to reach the goal.";
                 }
             }
+        }
+
+        private void ReleaseLevel2KeyIfTrackingLost()
+        {
+            if (!keyHeld)
+            {
+                return;
+            }
+
+            keyHeld = false;
+            RestorePortalKeyMaterial();
+            TryActivateLevel2RuneFromKeyPosition();
+            keyHoverStart = -1f;
+            lastPinchState = false;
+            lastKeyInRange = false;
+        }
+
+        private bool TryActivateLevel2RuneFromKeyPosition()
+        {
+            if (portalAActive || portalKey == null || runeLeft == null)
+            {
+                return false;
+            }
+
+            if (DistanceXZ(portalKey.transform.position, runeLeft.position) >= 0.65f)
+            {
+                return false;
+            }
+
+            portalAActive = true;
+            Debug.Log("[Level2] Rune activated - teleport enabled");
+            if (runeLeftRenderer != null) runeLeftRenderer.sharedMaterial = tealGlow;
+            if (portalARenderer != null) portalARenderer.sharedMaterial = tealGlow;
+            if (portalBRenderer != null) portalBRenderer.sharedMaterial = tealGlow;
+            level2HintMessage = "Teleport activated. Watch the ball cross the gate.";
+            return true;
         }
 
         private void CreatePortalKeyVisual(Transform keyTransform)
@@ -2226,9 +2277,9 @@ namespace HandOfGod.Gameplay
 
                     var baseZ = i % 2 == 0 ? -0.28f : 0.28f;
                     var cycle = Mathf.Repeat(Time.time * (active ? 0.30f : 0.08f) + i * 0.19f, 1f);
-                    var x = active ? Mathf.Lerp(-0.78f, 0.78f, direction > 0 ? cycle : 1f - cycle) : Mathf.Lerp(-0.62f, 0.62f, i / (float)Mathf.Max(airBeltMistQuads.Length - 1, 1));
+                    var x = active ? Mathf.Lerp(-1.92f, 1.92f, direction > 0 ? cycle : 1f - cycle) : Mathf.Lerp(-1.68f, 1.68f, i / (float)Mathf.Max(airBeltMistQuads.Length - 1, 1));
                     mist.localPosition = new Vector3(x, 0.285f, baseZ);
-                    mist.localScale = new Vector3(active ? 1.32f : 0.95f, active ? 0.74f : 0.44f, 1f);
+                    mist.localScale = new Vector3(active ? 2.0f : 1.32f, active ? 0.74f : 0.44f, 1f);
                     if (airBeltMistRenderers != null && i < airBeltMistRenderers.Length && airBeltMistRenderers[i] != null)
                     {
                         airBeltMistRenderers[i].enabled = active;
@@ -2247,9 +2298,9 @@ namespace HandOfGod.Gameplay
 
                 var baseZ = i % 2 == 0 ? -0.42f : 0.42f;
                 var cycle = Mathf.Repeat(Time.time * (active ? 0.72f : 0.18f) + i * 0.23f, 1f);
-                var x = active ? Mathf.Lerp(-0.86f, 0.86f, direction > 0 ? cycle : 1f - cycle) : Mathf.Lerp(-0.78f, 0.78f, i / (float)Mathf.Max(airBeltStreaks.Length - 1, 1));
+                var x = active ? Mathf.Lerp(-2.18f, 2.18f, direction > 0 ? cycle : 1f - cycle) : Mathf.Lerp(-2.02f, 2.02f, i / (float)Mathf.Max(airBeltStreaks.Length - 1, 1));
                 streak.localPosition = new Vector3(x, 0.31f, baseZ);
-                streak.localScale = new Vector3(active ? 0.96f : 0.54f, active ? 0.30f : 0.18f, 1f);
+                streak.localScale = new Vector3(active ? 1.42f : 0.86f, active ? 0.30f : 0.18f, 1f);
                 if (airBeltStreakRenderers != null && i < airBeltStreakRenderers.Length && airBeltStreakRenderers[i] != null)
                 {
                     airBeltStreakRenderers[i].enabled = active;
@@ -2982,6 +3033,7 @@ namespace HandOfGod.Gameplay
 
         private void ClearLevel()
         {
+            ResetLevel2RuntimeReferences();
             if (levelRoot != null)
             {
                 DestroyUnityObject(levelRoot.gameObject);
@@ -3016,6 +3068,78 @@ namespace HandOfGod.Gameplay
             level1SuccessUntil = -1f;
             level1BoxGrabOffset = Vector3.zero;
             twoHandStartDistance = 0f;
+        }
+
+        private void ResetLevel2RuntimeReferences()
+        {
+            if (airBeltTriggers != null)
+            {
+                foreach (var trigger in airBeltTriggers)
+                {
+                    if (trigger != null)
+                    {
+                        trigger.ResetWindState();
+                        trigger.direction = 0;
+                    }
+                }
+            }
+
+            if (airBeltParticles != null)
+            {
+                foreach (var particleSystem in airBeltParticles)
+                {
+                    if (particleSystem != null)
+                    {
+                        particleSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    }
+                }
+            }
+
+            portalKey = null;
+            portalKeyBody = null;
+            portalKeyRenderer = null;
+            portalKeyRenderers = null;
+            portalKeyIdleMaterials = null;
+            runeLeft = null;
+            runeRight = null;
+            runeLeftRenderer = null;
+            runeRightRenderer = null;
+            runeLeftArrow = null;
+            runeRightArrow = null;
+            portalAActive = false;
+            portalBActive = false;
+            portalARenderer = null;
+            portalBRenderer = null;
+            airBelts = null;
+            airBeltDirection = null;
+            airBeltRenderers = null;
+            airBeltTriggers = null;
+            airBeltArrowTransforms = null;
+            airBeltArrowRenderers = null;
+            airBeltStreaks = null;
+            airBeltStreakRenderers = null;
+            airBeltMistQuads = null;
+            airBeltMistRenderers = null;
+            airBeltParticles = null;
+            portalAParticles = null;
+            portalBParticles = null;
+            levelBallBody = null;
+            levelBallRenderer = null;
+            levelBallRuntimeMaterial = null;
+            levelBallBaseScale = Vector3.one;
+            keyHeld = false;
+            keyGrabOffset = Vector3.zero;
+            level2LastTeleport = -10f;
+            level2Teleporting = false;
+            level2TeleportStart = 0f;
+            level2TeleportStartPosition = Vector3.zero;
+            level2TeleportEndPosition = Vector3.zero;
+            pendingAirDirection = 0;
+            pendingAirDirectionStart = -1f;
+            level2HintMessage = "";
+            lastPinchState = false;
+            lastKeyInRange = false;
+            keyHoverStart = -1f;
         }
 
         private static void DestroyNamed(string objectName)

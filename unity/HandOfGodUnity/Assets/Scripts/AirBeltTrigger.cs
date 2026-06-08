@@ -25,7 +25,7 @@ public class AirBeltTrigger : MonoBehaviour
 
         if (lastDirection != direction)
         {
-            strength = 0.12f;
+            strength = Mathf.Min(strength, 0.18f);
             lastDirection = direction;
         }
 
@@ -34,10 +34,9 @@ public class AirBeltTrigger : MonoBehaviour
         rb.AddForce(new Vector3(direction * force * strength, 0f, 0f), ForceMode.Acceleration);
 
         var velocity = rb.linearVelocity;
-        var directionalSpeed = velocity.x * direction;
-        if (directionalSpeed > maxWindSpeed)
+        if (Mathf.Abs(velocity.x) > maxWindSpeed)
         {
-            velocity.x = direction * maxWindSpeed;
+            velocity.x = Mathf.Sign(velocity.x) * maxWindSpeed;
             rb.linearVelocity = velocity;
         }
     }
@@ -50,5 +49,16 @@ public class AirBeltTrigger : MonoBehaviour
     private void OnTriggerExit(Collider other)
     {
         if (other.attachedRigidbody != null) strength = 0f;
+    }
+
+    public void ResetWindState()
+    {
+        strength = 0f;
+        lastDirection = 0;
+    }
+
+    private void OnDisable()
+    {
+        ResetWindState();
     }
 }
