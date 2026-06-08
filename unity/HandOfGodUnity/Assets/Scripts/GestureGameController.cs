@@ -46,7 +46,7 @@ namespace HandOfGod.Gameplay
         private const float SafeDwellSeconds = 1f;
         private const float Level1RoadCenterY = 1f;
         private const float Level1RoadAngleDegrees = -8f;
-        private const float Level1RotatePlatformStartYaw = 55f;
+        private const float Level1RotateBridgeStartYaw = 90f;
         private static readonly int[] HandConnectionPairs =
         {
             0, 1, 1, 2, 2, 3, 3, 4,
@@ -684,7 +684,7 @@ namespace HandOfGod.Gameplay
             {
                 Level1Stage.ClearBlock => "Drag the glowing key onto the left rune to unlock the path.",
                 Level1Stage.JoinBridge => "Use the airflow gesture: thumb out, index+middle together, ring+pinky folded.",
-                Level1Stage.RotateGate => "Place the key on the right rune to activate the portal.",
+                Level1Stage.RotateGate => "Keep the airflow gesture active until the path is fully open.",
                 Level1Stage.RunToGoal => "The path is open. Guide the ball to the altar.",
                 _ => "",
             };
@@ -1451,10 +1451,11 @@ namespace HandOfGod.Gameplay
             CreateBox("trial void shadow plinth", new Vector3(0f, -0.62f, 0f), new Vector3(10.9f, 0.42f, 5.2f), darkStone, levelRoot, Quaternion.identity, false);
             CreateBox("trial dungeon base", new Vector3(0f, -0.28f, 0f), new Vector3(9.9f, 0.34f, 3.9f), level2WallMaterial, levelRoot, Quaternion.identity, false);
             CreateBox("road segment start", new Vector3(-3.25f, RoadY(-3.25f), 0f), new Vector3(2.45f, 0.28f, 1.55f), level2FloorMaterial, levelRoot, roadRotation, true);
-            CreateBox("road segment middle", new Vector3(0.38f, RoadY(0.38f), 0f), new Vector3(2.65f, 0.28f, 1.55f), level2FloorMaterial, levelRoot, roadRotation, true);
-            CreateBox("road segment finish", new Vector3(2.95f, RoadY(2.95f), 0f), new Vector3(2.45f, 0.28f, 1.55f), level2FloorMaterial, levelRoot, roadRotation, true);
+            CreateBox("road segment bridge approach", new Vector3(-0.33f, RoadY(-0.33f), 0f), new Vector3(1.56f, 0.28f, 1.55f), level2FloorMaterial, levelRoot, roadRotation, true);
+            CreateBox("road segment finish", new Vector3(3.25f, RoadY(3.25f), 0f), new Vector3(2.30f, 0.28f, 1.55f), level2FloorMaterial, levelRoot, roadRotation, true);
             CreateBox("road start brass centerline", new Vector3(-3.25f, RoadY(-3.25f) + 0.155f, 0f), new Vector3(2.16f, 0.018f, 0.055f), level2TrimMaterial, levelRoot, roadRotation, false);
-            CreateBox("road finish brass centerline", new Vector3(2.95f, RoadY(2.95f) + 0.155f, 0f), new Vector3(2.16f, 0.018f, 0.055f), level2TrimMaterial, levelRoot, roadRotation, false);
+            CreateBox("road approach brass centerline", new Vector3(-0.33f, RoadY(-0.33f) + 0.155f, 0f), new Vector3(1.25f, 0.018f, 0.055f), level2TrimMaterial, levelRoot, roadRotation, false);
+            CreateBox("road finish brass centerline", new Vector3(3.25f, RoadY(3.25f) + 0.155f, 0f), new Vector3(1.96f, 0.018f, 0.055f), level2TrimMaterial, levelRoot, roadRotation, false);
 
             obstacleBox = CreateBox("Pinch Movable Obstacle Box", new Vector3(-2.85f, RoadY(-2.85f) + 0.37f, 0f), new Vector3(0.72f, 0.72f, 0.98f), level2TrimMaterial, levelRoot, roadRotation, true).AddComponent<Rigidbody>();
             obstacleBox.isKinematic = true;
@@ -1466,7 +1467,7 @@ namespace HandOfGod.Gameplay
 
             startGate = CreateGate("start release gate", -3.55f);
             bridgeGate = CreateGate("bridge release gate", -2.05f);
-            rotateGateStop = CreateGate("rotating gate stop", 0.9f);
+            rotateGateStop = CreateGate("rotating bridge release gate", 0.35f);
             goalGate = CreateGate("goal seal gate", 2.55f);
 
             var leftBridge = CreateBox("left sliding bridge half", new Vector3(-1.4f, RoadY(-1.4f) + 0.02f, -0.92f), new Vector3(1.3f, 0.18f, 0.56f), level2TrimMaterial, levelRoot, roadRotation, true);
@@ -1476,10 +1477,10 @@ namespace HandOfGod.Gameplay
             bridgeLeftRenderer = leftBridge.GetComponent<Renderer>();
             bridgeRightRenderer = rightBridge.GetComponent<Renderer>();
 
-            var rotateGateObject = CreateBox("rotating low bridge platform", new Vector3(0.92f, RoadY(0.92f) + 0.18f, 0f), new Vector3(1.42f, 0.16f, 1.04f), level2TrimMaterial, levelRoot, roadRotation * Quaternion.Euler(0f, Level1RotatePlatformStartYaw, 0f), true);
+            var rotateGateObject = CreateBox("rotating floating bridge", new Vector3(1.20f, RoadY(1.20f) + 0.18f, 0f), new Vector3(2.05f, 0.16f, 0.52f), level2TrimMaterial, levelRoot, roadRotation * Quaternion.Euler(0f, Level1RotateBridgeStartYaw, 0f), true);
             rotateGate = rotateGateObject.transform;
             rotateGateRenderer = rotateGateObject.GetComponent<Renderer>();
-            var rotatePlatformDetail = InstantiateDungeonModel("template-floor-detail", rotateGate.position + new Vector3(0f, 0.095f, 0f), new Vector3(0.92f, 0.16f, 0.92f), rotateGate.rotation, level2FloorMaterial);
+            var rotatePlatformDetail = InstantiateDungeonModel("template-floor-detail", rotateGate.position + new Vector3(0f, 0.095f, 0f), new Vector3(1.18f, 0.16f, 0.46f), rotateGate.rotation, level2FloorMaterial);
             if (rotatePlatformDetail != null)
             {
                 rotatePlatformDetail.transform.SetParent(rotateGate, true);
@@ -1535,6 +1536,16 @@ namespace HandOfGod.Gameplay
 
         private void UpdateLevel1Block(Vector3 target, bool isPinch)
         {
+            if (level1Stage != Level1Stage.ClearBlock)
+            {
+                boxHeld = false;
+                if (obstacleRenderer != null)
+                {
+                    obstacleRenderer.sharedMaterial = boxHeldMaterial;
+                }
+                return;
+            }
+
             var close = DistanceXZ(target, obstacleBox.position) < (isPinch ? 1.65f : 0.90f);
             obstacleRenderer.sharedMaterial = level2TrimMaterial;
             if (!boxHeld && close)
@@ -1625,7 +1636,7 @@ namespace HandOfGod.Gameplay
                     level1RotateStartAngle = angle;
                 }
                 var deltaDegrees = Mathf.DeltaAngle(level1RotateStartAngle * Mathf.Rad2Deg, angle * Mathf.Rad2Deg);
-                var yaw = Mathf.Clamp(Level1RotatePlatformStartYaw - Mathf.Abs(deltaDegrees), 0f, Level1RotatePlatformStartYaw);
+                var yaw = Mathf.Clamp(Level1RotateBridgeStartYaw - Mathf.Abs(deltaDegrees), 0f, Level1RotateBridgeStartYaw);
                 rotateGate.rotation = Quaternion.Euler(0f, 0f, Level1RoadAngleDegrees) * Quaternion.Euler(0f, yaw, 0f);
                 rotateGateRenderer.sharedMaterial = boxHeldMaterial;
                 if (yaw <= 12f)
@@ -1729,7 +1740,7 @@ namespace HandOfGod.Gameplay
             {
                 Level1Stage.ClearBlock => "Move the block into the glowing side slot to release the ball.",
                 Level1Stage.JoinBridge => "Pinch both bridge halves and pull your hands together to join the bridge.",
-                Level1Stage.RotateGate => "Pinch with both hands and rotate the low platform until it aligns with the path.",
+                Level1Stage.RotateGate => "Pinch both sides of the floating bridge and rotate it 90 degrees to connect the floors.",
                 Level1Stage.ActivateSeal => "Open your palm over the glowing seal to unlock the final gate.",
                 Level1Stage.RunToGoal => "The path is open. Guide the ball safely to the altar.",
                 _ => "",
@@ -2238,65 +2249,69 @@ namespace HandOfGod.Gameplay
             var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
             var target = MapPinchToRoad(hand.pinchX, hand.pinchY);
             var isPinch = IsPinching(hand);
+            var canOperateKey = level1Stage == Level1Stage.ClearBlock && !portalAActive && !level2Teleporting;
 
-            // key dragging + magnet snap + UI state
-            var grabRadius = isPinch ? PortalKeyGrabPinchRadius : PortalKeyGrabIdleRadius;
-            var close = DistanceXZ(target, portalKey.transform.position) < grabRadius;
             RestorePortalKeyMaterial();
-
-            // update UI debug flags
-            lastKeyInRange = close;
-            lastPinchState = isPinch;
-            if (!level2Teleporting && level1Stage == Level1Stage.ClearBlock && !portalAActive)
-            {
-                level2HintMessage = "";
-            }
-
-            // hover dwell hint
-            if (!keyHeld && close && !isPinch)
-            {
-                if (keyHoverStart < 0f) keyHoverStart = Time.time;
-                if (Time.time - keyHoverStart >= KeyDwellSeconds)
-                {
-                    SetPortalKeyMaterial(boxHover);
-                    level2HintMessage = "Pinch to grab the key";
-                }
-            }
-            else
-            {
-                keyHoverStart = -1f;
-            }
-
-            // magnetic snap: if player pinches near the key, snap it to the pinch point and grab
-            var magnetRadius = 2.0f;
-            if (!keyHeld && isPinch && (close || DistanceXZ(target, portalKey.transform.position) < magnetRadius))
-            {
-                keyHeld = true;
-                var snapPos = target;
-                snapPos.y = 0.32f;
-                portalKeyBody.MovePosition(snapPos);
-                keyGrabOffset = portalKey.transform.position - target;
-                portalKeyBody.isKinematic = true;
-                Debug.Log("[Level2] Key grabbed by player.");
-            }
-
-            if (keyHeld && !isPinch)
+            if (!canOperateKey)
             {
                 keyHeld = false;
-                TryActivateLevel2RuneFromKeyPosition();
-            }
-            if (keyHeld)
-            {
-                SetPortalKeyMaterial(boxHeldMaterial);
-                var pos = target + keyGrabOffset;
-                pos.y = 0.32f;
-                portalKeyBody.MovePosition(pos);
-                level2HintMessage = "Place the key onto the rune to activate teleport.";
+                keyHoverStart = -1f;
+                lastPinchState = false;
+                lastKeyInRange = false;
             }
 
-            if (!keyHeld && !isPinch)
+            if (canOperateKey)
             {
-                TryActivateLevel2RuneFromKeyPosition();
+                var grabRadius = isPinch ? PortalKeyGrabPinchRadius : PortalKeyGrabIdleRadius;
+                var close = DistanceXZ(target, portalKey.transform.position) < grabRadius;
+                lastKeyInRange = close;
+                lastPinchState = isPinch;
+                level2HintMessage = "";
+
+                if (!keyHeld && close && !isPinch)
+                {
+                    if (keyHoverStart < 0f) keyHoverStart = Time.time;
+                    if (Time.time - keyHoverStart >= KeyDwellSeconds)
+                    {
+                        SetPortalKeyMaterial(boxHover);
+                        level2HintMessage = "Pinch to grab the key";
+                    }
+                }
+                else
+                {
+                    keyHoverStart = -1f;
+                }
+
+                var magnetRadius = 2.0f;
+                if (!keyHeld && isPinch && (close || DistanceXZ(target, portalKey.transform.position) < magnetRadius))
+                {
+                    keyHeld = true;
+                    var snapPos = target;
+                    snapPos.y = 0.32f;
+                    portalKeyBody.MovePosition(snapPos);
+                    keyGrabOffset = portalKey.transform.position - target;
+                    portalKeyBody.isKinematic = true;
+                    Debug.Log("[Level2] Key grabbed by player.");
+                }
+
+                if (keyHeld && !isPinch)
+                {
+                    keyHeld = false;
+                    TryActivateLevel2RuneFromKeyPosition();
+                }
+                if (keyHeld)
+                {
+                    SetPortalKeyMaterial(boxHeldMaterial);
+                    var pos = target + keyGrabOffset;
+                    pos.y = 0.32f;
+                    portalKeyBody.MovePosition(pos);
+                    level2HintMessage = "Place the key onto the rune to activate teleport.";
+                }
+
+                if (!keyHeld && !isPinch)
+                {
+                    TryActivateLevel2RuneFromKeyPosition();
+                }
             }
 
             // airflow gesture: change belt direction only after the portal transfer unlocks the wind gallery.
