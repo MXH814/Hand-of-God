@@ -169,7 +169,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 ### Level 2: Portals & Airflow
 
-第 2 关是传送门与气流机关关。它使用与第 1 关相同的主入口场景和物理小球系统，但关卡目标变为“激活传送门，再用手势设置风向，让气流把小球送到终点”。玩家可以从主菜单选择 `Level 2: Portals & Airflow`，也可以在第 1 关通关后的 `PASS` 界面悬停 `Next: Level 2` 进入。
+第 2 关是传送门与气流机关关。它使用独立的 `Level02.unity` 场景资源和 Kenney 模块化地牢素材搭建美术空间，关卡目标为“激活传送门，再用手势设置风向，让气流把小球送到终点”。玩家可以从主菜单选择 `Level 2: Portals & Airflow`，也可以在第 1 关通关后的 `PASS` 界面悬停 `Next: Level 2` 进入；在 Unity Editor 中直接打开 `Level02.unity` 时会自动进入第二关，便于单独调试美术和机关。
 
 关卡类型：传送门触发 + 方向控制 + 物理推动。
 
@@ -191,10 +191,18 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - `rune`：钥匙目标符文，位于平台左侧上方区域。
 - `portal A`：小球初始传送门，位于左侧。
 - `portal B`：传送后的落点，位于中右侧。
-- `air belt`：可见气流带，包含发光底带、方向箭头和流动光带；内部触发区负责对小球施加水平加速度。
-- `level2 gate`：传送门前挡门，传送成功后打开。
-- `level2 gate2`：气流带到终点之间的挡门，风向设置为右时打开。
+- `air belt`：不可见触发器 + 可见气流 VFX，包含发光轨道、方向光带和粒子流；内部触发区负责对小球施加水平加速度。
+- `level2 gate`：传送门前铁栅门，传送成功后打开。
+- `level2 gate2`：气流带到终点之间的铁栅门，风向设置为右时打开。
 - `Goal Trigger`：右侧终点祭坛。
+
+第二关美术：
+
+- 场景拆分为左侧传送厅、中央气流廊和右侧祭坛房，避免早期长条平台的原型感。
+- 地牢墙体、石板、墙角、地面细节使用 Kenney `Modular Dungeon Kit` 的 FBX 模型，放在 `Assets/Resources/KenneyDungeon/`，运行时通过 `Resources.Load` 加载。
+- Unity 程序化几何只保留用于物理 collider、符文法阵、传送门光圈、气流光带和必要机关结构。
+- 气流带关闭时不显示实体碰撞盒；激活时显示青色流动光带和粒子流。
+- `LevelSceneGenerator.CaptureLevel02Preview` 会生成第二关气流开启状态预览图，输出到 `unity/HandOfGodUnity/Preview/Level02Preview.png`。
 
 关卡结构：
 
@@ -214,7 +222,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - 气流手势由 `IndexMiddleTogether + thumbExtended + ring/pinky curled + !openPalm` 组成，并带有方向死区和短时间稳定确认，避免张掌或瞬时抖动误触发。
 - Unity 根据食指尖相对手腕的水平偏移判断风向：向右为通关方向，向左会显示提示要求改为向右。
 - 气流带使用 `AirBeltTrigger`，在小球停留于触发区时以渐进强度施加水平方向加速度，并限制最大水平推速，让玩家有时间修正方向。
-- 气流带在关闭时低亮度显示；激活后方向箭头和流动光带随风向滚动，HUD 同步显示 `Airflow: OFF / LEFT / RIGHT`。
+- 气流带在关闭时隐藏实体触发器；激活后粒子流和流动光带随风向滚动，HUD 同步显示 `Airflow: OFF / LEFT / RIGHT`。
 - 风向设置为右后，第二道挡门打开，HUD 显示右风提示；左风会显示纠正提示。
 
 ## 技术架构
@@ -324,7 +332,7 @@ Unity 端职责：
 - 将 normalized screen coordinates 映射到 Unity 世界平面。
 - 处理单手拖动、双手旋转、双手拉合、张掌悬停、地图旋转缩放、气流方向设置。
 - 管理 Python 桥接进程启动、失败提示和退出清理。
-- 生成 Level 0、Level 1 和 Level 2 的程序化几何体、材质和机关。
+- 生成 Level 0、Level 1 的程序化几何体、材质和机关；生成 Level 2 时额外加载 Kenney 地牢模型，组合为第二关独立美术场景。
 
 ## 算法实现
 
@@ -455,7 +463,7 @@ Unity 场景由编辑器工具生成：
 unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 ```
 
-`Level01.unity` 是完整游戏入口场景，启动后包含自动桥接、校准、第 0 关教学、第 1 关和第 2 关。仓库中也包含 `Level02.unity` 作为第二关相关的场景资源文件；实际 Windows 构建入口仍由 `Level01.unity` 和运行时 `GameMode.Level2` 负责。
+`Level01.unity` 是完整游戏入口场景，启动后包含自动桥接、校准、第 0 关教学、第 1 关和第 2 关。仓库中也包含 `Level02.unity` 作为第二关独立场景资源文件；在 Unity Editor 中直接打开 `Level02.unity` 会自动进入第二关，方便单独检查传送门、气流和地牢美术。Windows 构建包含 `Level01.unity` 和 `Level02.unity`，首个启动场景仍是 `Level01.unity`。
 
 ## 手动运行桥接
 
@@ -520,11 +528,12 @@ cd "unity\gesture_bridge"
 第 2 关：
 
 - 主菜单可直接进入 `Level 2: Portals & Airflow`。
+- Unity Editor 可直接打开 `Level02.unity` 进入第二关；`CaptureLevel02Preview` 可输出第二关截图。
 - 传送门钥匙是几何钥匙，可用单手捏合直接抓取和移动，抓取时整把钥匙高亮。
 - 钥匙放到符文上并释放后，符文和两个传送门变为激活高亮。
 - 小球从 Portal A 升起淡出，再从 Portal B 渐显落下，并打开第一道挡门。
 - 张掌不会触发气流；气流指向手势可被识别：拇指伸出、食指中指并拢、无名指和小指收起。
-- 气流带有可见发光底带、方向箭头和流动光带；HUD 显示当前气流方向。
+- 气流带有可见粒子流、方向光带和发光轨道；HUD 显示当前气流方向。
 - 向右指向后 HUD 显示右风提示，第二道挡门打开。
 - 小球进入气流带后逐渐加速并被持续推向终点。
 - 小球到达终点后显示 `PASS`。
@@ -568,6 +577,7 @@ cd "unity\gesture_bridge"
 - MediaPipe Hands：手部 21 点 landmarks、左右手识别和置信度。
 - OpenCV：摄像头采集、镜像、缩放和 JPEG 编码。
 - NumPy：手部距离、速度和平滑计算。
+- Kenney Modular Dungeon Kit：CC0 模块化地牢 3D 素材。第二关使用其中精选 FBX 模型搭建地牢墙体、地面模块和场景细节，许可证文件保存在 `Assets/Resources/KenneyDungeon/ModularDungeonKit-License.txt`。
 
 ## 开源项目与资料来源
 
@@ -582,6 +592,9 @@ cd "unity\gesture_bridge"
   - Documentation: `https://numpy.org/doc/`
 - One Euro Filter：实时交互场景中常用的低延迟平滑算法资料。本项目包含 Unity 侧 `OneEuroFilter` 实现，并在 Python 桥接中采用速度感知的轻量平滑策略来降低边缘抖动。
   - Project page: `https://gery.casiez.net/1euro/`
+- Kenney Modular Dungeon Kit：公共领域 CC0 游戏素材包。
+  - Source: `https://opengameart.org/content/modular-dungeon-kit`
+  - Creator: `https://www.kenney.nl/`
 
 ## Git 与提交约定
 

@@ -92,6 +92,12 @@ namespace HandOfGod.EditorTools
         {
             RebuildLevel02();
 
+            var controller = Object.FindAnyObjectByType<GestureGameController>();
+            if (controller != null)
+            {
+                controller.EditorPreviewLevel2Airflow();
+            }
+
             var camera = Camera.main;
             if (camera == null)
             {
