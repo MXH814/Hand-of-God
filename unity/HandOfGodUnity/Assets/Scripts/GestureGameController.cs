@@ -1477,14 +1477,9 @@ namespace HandOfGod.Gameplay
             bridgeLeftRenderer = leftBridge.GetComponent<Renderer>();
             bridgeRightRenderer = rightBridge.GetComponent<Renderer>();
 
-            var rotateGateObject = CreateBox("rotating floating bridge", new Vector3(1.20f, RoadY(1.20f) + 0.18f, 0f), new Vector3(2.05f, 0.16f, 0.52f), level2TrimMaterial, levelRoot, roadRotation * Quaternion.Euler(0f, Level1RotateBridgeStartYaw, 0f), true);
+            var rotateGateObject = CreateBox("simple rotating plank bridge", new Vector3(1.20f, RoadY(1.20f) + 0.095f, 0f), new Vector3(2.12f, 0.08f, 0.46f), level2TrimMaterial, levelRoot, roadRotation * Quaternion.Euler(0f, Level1RotateBridgeStartYaw, 0f), true);
             rotateGate = rotateGateObject.transform;
             rotateGateRenderer = rotateGateObject.GetComponent<Renderer>();
-            var rotatePlatformDetail = InstantiateDungeonModel("template-floor-detail", rotateGate.position + new Vector3(0f, 0.095f, 0f), new Vector3(1.18f, 0.16f, 0.46f), rotateGate.rotation, level2FloorMaterial);
-            if (rotatePlatformDetail != null)
-            {
-                rotatePlatformDetail.transform.SetParent(rotateGate, true);
-            }
 
             var seal = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             seal.name = "final palm seal";
