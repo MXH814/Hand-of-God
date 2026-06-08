@@ -706,19 +706,22 @@ namespace HandOfGod.Gameplay
             var pulse = (Mathf.Sin(Time.time * 5.4f) + 1f) * 0.5f;
             var glowRect = new Rect(rect.x - 12f, rect.y - 8f, rect.width + 24f, rect.height + 16f);
             var oldColor = GUI.color;
+            var oldMatrix = GUI.matrix;
+            GUI.matrix = Matrix4x4.identity;
             GUI.color = new Color(0.08f, 1f, 0.76f, 0.20f + pulse * 0.18f);
             GUI.DrawTexture(glowRect, Texture2D.whiteTexture);
 
             var style = new GUIStyle(GUI.skin.label)
             {
                 alignment = TextAnchor.MiddleCenter,
-                fontSize = Mathf.RoundToInt(30f + pulse * 6f),
+                fontSize = rect.height >= 64f ? 38 : 32,
                 fontStyle = FontStyle.Bold,
             };
             GUI.color = Color.black;
             GUI.Label(new Rect(rect.x + 3f, rect.y + 3f, rect.width, rect.height), text, style);
-            GUI.color = new Color(0.16f, 1f, 0.82f, 1f);
+            GUI.color = new Color(0.16f + pulse * 0.18f, 1f, 0.82f, 1f);
             GUI.Label(rect, text, style);
+            GUI.matrix = oldMatrix;
             GUI.color = oldColor;
         }
 
@@ -3162,10 +3165,11 @@ namespace HandOfGod.Gameplay
             var delta = end - start;
             var angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
             var oldColor = GUI.color;
+            var oldMatrix = GUI.matrix;
             GUI.color = color;
             GUIUtility.RotateAroundPivot(angle, start);
             GUI.DrawTexture(new Rect(start.x, start.y - width * 0.5f, delta.magnitude, width), lineTexture);
-            GUIUtility.RotateAroundPivot(-angle, start);
+            GUI.matrix = oldMatrix;
             GUI.color = oldColor;
         }
 

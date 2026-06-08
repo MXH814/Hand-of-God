@@ -131,7 +131,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - 可操作物体接近手势点时高亮。
 - 抓取、旋转、桥板合拢和神印激活时使用高亮材质。
 - 第 0 关左侧 `Tutorial Steps` 可随时选择任意教学步骤。
-- 成功提示使用更大的字号、暖色高亮和脉冲式视觉反馈。
+- 成功提示使用更大的固定字号、暖色高亮和脉冲式视觉反馈；`SUCCESS`、`TUTORIAL COMPLETE` 和 `PASS` 只做颜色/光晕闪烁，文字始终保持横向稳定显示。
 - `Continue` 和 `Next: Level 1` 按钮尺寸和字体都较大，位于成功提示下方，便于手势悬停选择。
 
 ### Level 1: Trial of the Moving Path
@@ -532,6 +532,7 @@ cd "unity\gesture_bridge"
 - 单手气流指向手势可在教学地板中央的第 2 关同款气流地板、雾带、流线和箭头上显示左风或右风反馈；手势停止后风效关闭。
 - 每步成功后显示醒目 `SUCCESS`，并等待玩家手动 `Continue`。
 - 最后一个教学步骤完成后不进入自由操作页，悬停 `Next: Level 1` 进入第 1 关。
+- `TUTORIAL COMPLETE` 始终横向显示，只做光晕闪烁，不出现横竖交替抖动。
 
 第 1 关：
 
