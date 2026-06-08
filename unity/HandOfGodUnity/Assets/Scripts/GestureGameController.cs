@@ -1599,6 +1599,32 @@ namespace HandOfGod.Gameplay
             CreateLevel2Pillar(new Vector3(5.18f, 0.34f, 0.92f));
 
             CreateBox("level2 wind channel low glow", new Vector3(1.25f, 0.055f, 0f), new Vector3(4.65f, 0.006f, 0.045f), level2WallMaterial, levelRoot, Quaternion.identity, false);
+            CreateLevel2WindFloorHints();
+        }
+
+        private void CreateLevel2WindFloorHints()
+        {
+            CreateLevel2WindGrille("level2 wind intake grille", new Vector3(-0.95f, 0.118f, 0f));
+            CreateLevel2WindGrille("level2 wind output grille", new Vector3(3.38f, 0.118f, 0f));
+            CreateLevel2WindChevron(new Vector3(0.12f, 0.142f, 0f), 0.50f);
+            CreateLevel2WindChevron(new Vector3(1.25f, 0.142f, 0f), 0.50f);
+            CreateLevel2WindChevron(new Vector3(2.38f, 0.142f, 0f), 0.50f);
+        }
+
+        private void CreateLevel2WindGrille(string name, Vector3 position)
+        {
+            CreateBox(name + " base", position, new Vector3(0.52f, 0.018f, 0.84f), darkStone, levelRoot, Quaternion.identity, false);
+            for (var i = 0; i < 5; i++)
+            {
+                var z = Mathf.Lerp(-0.32f, 0.32f, i / 4f);
+                CreateBox($"{name} cyan slit {i}", position + new Vector3(0f, 0.022f, z), new Vector3(0.42f, 0.012f, 0.030f), level2PortalCoreMaterial, levelRoot, Quaternion.identity, false);
+            }
+        }
+
+        private void CreateLevel2WindChevron(Vector3 position, float length)
+        {
+            CreateBox("level2 floor wind chevron upper", position + new Vector3(0f, 0f, 0.11f), new Vector3(length, 0.014f, 0.045f), level2PortalCoreMaterial, levelRoot, Quaternion.Euler(0f, 28f, 0f), false);
+            CreateBox("level2 floor wind chevron lower", position + new Vector3(0f, 0f, -0.11f), new Vector3(length, 0.014f, 0.045f), level2PortalCoreMaterial, levelRoot, Quaternion.Euler(0f, -28f, 0f), false);
         }
 
         private void CreateCleanChamberFrame(float centerX, float width, float depth)
@@ -1700,22 +1726,33 @@ namespace HandOfGod.Gameplay
 
         private Renderer CreateLevel2RuneArt(Vector3 position, Material material)
         {
-            var root = new GameObject("level2 rune art");
+            var root = new GameObject("level2 key socket art");
             root.transform.SetParent(levelRoot, false);
-            root.transform.position = position + new Vector3(0f, 0.055f, 0f);
-            var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            disc.name = "level2 rune disc";
-            disc.transform.SetParent(root.transform, false);
-            disc.transform.localScale = new Vector3(0.42f, 0.016f, 0.42f);
-            var renderer = disc.GetComponent<Renderer>();
+            root.transform.position = position;
+
+            var baseBlock = CreateBox("level2 key socket stone block", position + new Vector3(0f, 0.065f, 0f), new Vector3(0.92f, 0.18f, 0.66f), level2WallMaterial, root.transform, Quaternion.identity, false);
+            baseBlock.transform.localPosition = new Vector3(0f, 0.065f, 0f);
+
+            var topPlate = CreateBox("level2 key socket brass plate", position + new Vector3(0f, 0.168f, 0f), new Vector3(0.82f, 0.026f, 0.48f), level2TrimMaterial, root.transform, Quaternion.identity, false);
+            topPlate.transform.localPosition = new Vector3(0f, 0.168f, 0f);
+
+            var slotRotation = Quaternion.Euler(0f, 24f, 0f);
+            var slot = CreateBox("level2 key socket dark slot", position + new Vector3(0.12f, 0.188f, 0f), new Vector3(0.76f, 0.024f, 0.105f), darkStone, root.transform, slotRotation, false);
+            slot.transform.localPosition = new Vector3(0.12f, 0.188f, 0f);
+
+            var leftRail = CreateBox("level2 key socket left brass rail", position + new Vector3(0.12f, 0.215f, 0.095f), new Vector3(0.72f, 0.045f, 0.035f), level2TrimMaterial, root.transform, slotRotation, false);
+            leftRail.transform.localPosition = new Vector3(0.12f, 0.215f, 0.095f);
+            var rightRail = CreateBox("level2 key socket right brass rail", position + new Vector3(0.12f, 0.215f, -0.095f), new Vector3(0.72f, 0.045f, 0.035f), level2TrimMaterial, root.transform, slotRotation, false);
+            rightRail.transform.localPosition = new Vector3(0.12f, 0.215f, -0.095f);
+
+            var lockCore = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            lockCore.name = "level2 key socket glow core";
+            lockCore.transform.SetParent(root.transform, false);
+            lockCore.transform.localPosition = new Vector3(-0.26f, 0.225f, 0f);
+            lockCore.transform.localScale = new Vector3(0.16f, 0.018f, 0.16f);
+            var renderer = lockCore.GetComponent<Renderer>();
             renderer.sharedMaterial = material;
-            DestroyUnityObject(disc.GetComponent<Collider>());
-            var outer = CreateTorus("level2 rune outer circle", root.transform.position + new Vector3(0f, 0.035f, 0f), 0.49f, 0.025f, level2RuneMaterial, root.transform);
-            outer.transform.localPosition = new Vector3(0f, 0.035f, 0f);
-            var crossA = CreateBox("level2 rune line a", root.transform.position + new Vector3(0f, 0.045f, 0f), new Vector3(0.78f, 0.018f, 0.035f), level2TrimMaterial, root.transform, Quaternion.Euler(0f, 28f, 0f), false);
-            var crossB = CreateBox("level2 rune line b", root.transform.position + new Vector3(0f, 0.05f, 0f), new Vector3(0.78f, 0.018f, 0.035f), level2TrimMaterial, root.transform, Quaternion.Euler(0f, -28f, 0f), false);
-            crossA.transform.localPosition = new Vector3(0f, 0.045f, 0f);
-            crossB.transform.localPosition = new Vector3(0f, 0.05f, 0f);
+            DestroyUnityObject(lockCore.GetComponent<Collider>());
             return renderer;
         }
 
@@ -1898,8 +1935,9 @@ namespace HandOfGod.Gameplay
                 TryActivateLevel2RuneFromKeyPosition();
             }
 
-            // airflow gesture: change belt direction
-            if (TryGetAirflowHand(frame, out var ghand))
+            // airflow gesture: change belt direction only after the portal transfer unlocks the wind gallery.
+            var airflowUnlocked = level1Stage == Level1Stage.JoinBridge || level1Stage == Level1Stage.RunToGoal;
+            if (airflowUnlocked && TryGetAirflowHand(frame, out var ghand))
             {
                 var dirX = ghand.landmarks != null && ghand.landmarks.Length > 8 ? ghand.landmarks[8].x - ghand.landmarks[0].x : ghand.indexX - ghand.pinchX;
                 var candidateDir = Mathf.Abs(dirX) < AirflowDirectionDeadZone ? 0 : (dirX > 0f ? 1 : -1);
@@ -1993,11 +2031,35 @@ namespace HandOfGod.Gameplay
 
             portalAActive = true;
             Debug.Log("[Level2] Rune activated - teleport enabled");
+            LockPortalKeyIntoSocket();
             if (runeLeftRenderer != null) runeLeftRenderer.sharedMaterial = tealGlow;
             if (portalARenderer != null) portalARenderer.sharedMaterial = tealGlow;
             if (portalBRenderer != null) portalBRenderer.sharedMaterial = tealGlow;
             level2HintMessage = "Teleport activated. Watch the ball cross the gate.";
             return true;
+        }
+
+        private void LockPortalKeyIntoSocket()
+        {
+            if (portalKey == null || runeLeft == null)
+            {
+                return;
+            }
+
+            keyHeld = false;
+            keyGrabOffset = Vector3.zero;
+            var lockedPosition = runeLeft.position + new Vector3(0.12f, 0.265f, 0f);
+            var lockedRotation = Quaternion.Euler(0f, 24f, 0f);
+            if (portalKeyBody != null)
+            {
+                portalKeyBody.isKinematic = true;
+                portalKeyBody.linearVelocity = Vector3.zero;
+                portalKeyBody.angularVelocity = Vector3.zero;
+                portalKeyBody.MovePosition(lockedPosition);
+                portalKeyBody.MoveRotation(lockedRotation);
+            }
+            portalKey.transform.SetPositionAndRotation(lockedPosition, lockedRotation);
+            RestorePortalKeyMaterial();
         }
 
         private void CreatePortalKeyVisual(Transform keyTransform)

@@ -175,7 +175,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 胜利条件：
 
-- 将传送门钥匙放到发光符文上。
+- 将传送门钥匙放到发光锁座插槽上。
 - 激活传送门，使小球从左侧 Portal A 传送到右侧 Portal B。
 - 使用气流指向手势把气流方向设为向右。
 - 气流带推动小球穿过最后挡门并进入终点。
@@ -188,7 +188,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 核心物体：
 
 - `Portal Key`：可单手捏合拖动的低模钥匙，使用 OpenGameArt CC0 FBX 模型导入，初始位于左上侧。
-- `rune`：钥匙目标符文，位于平台左侧上方区域。
+- `key socket`：钥匙目标机关，位于平台左侧上方区域；由石质锁座、暗色插槽、黄铜护边和发光锁芯组成。
 - `portal A`：小球初始传送门，位于左侧。
 - `portal B`：传送后的落点，位于中右侧。
 - `air belt`：与加长中央气流走廊地面等长的不可见触发器 + 可见气流 VFX，使用 Kenney Particle Pack 的透明粒子贴图制作青色雾带、细流线和方向反馈；内部触发区负责对小球施加水平加速度。
@@ -202,8 +202,9 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - 地牢墙体、石板、墙角、地面细节使用 Kenney `Modular Dungeon Kit` 的 FBX 模型，放在 `Assets/Resources/KenneyDungeon/`，运行时通过 `Resources.Load` 加载。
 - 传送门钥匙使用 OpenGameArt `Key - low poly` FBX 模型，放在 `Assets/Resources/OpenGameArt/LowPolyKey/`；Unity 只负责归一化尺寸、材质高亮和交互 collider。
 - 气流与传送门漩涡使用 Kenney `Particle Pack` 透明 PNG 贴图，放在 `Assets/Resources/KenneyParticles/`；Unity 通过透明材质、quad 和 particle renderer 组合成动态 VFX。
-- Unity 程序化几何只保留用于物理 collider、符文法阵、传送门光圈和必要机关结构。
+- Unity 程序化几何只保留用于物理 collider、钥匙插座、传送门光圈、地面风向标记和必要机关结构。
 - 中央气流走廊地面、气流触发区和气流 VFX 使用同一长度，保证玩家看到的风区和真实物理受力范围一致。
+- 气流走廊地面包含通风格栅与青色箭头纹，提示玩家这里是风机关区域。
 - 气流带关闭时不显示实体碰撞盒；激活时显示覆盖整段气流走廊的青色雾带、流线和方向提示。
 - `LevelSceneGenerator.CaptureLevel02Preview` 会生成第二关气流开启状态预览图，输出到 `unity/HandOfGodUnity/Preview/Level02Preview.png`。
 
@@ -211,8 +212,8 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 | 分段 | 名称 | 机关 | 使用手势 | 目标 |
 | --- | --- | --- | --- | --- |
-| Segment 1 | 钥匙激活区 | Portal Key、符文、Portal A/B | 单手捏合拖动 | 捏住钥匙并放到符文上，激活传送门 |
-| Segment 2 | 传送区 | Portal A、Portal B、第一道挡门 | 符文触发 | 激活后小球从 Portal A 升起淡出，再从 Portal B 渐显落下，并打开第一道挡门 |
+| Segment 1 | 钥匙激活区 | Portal Key、key socket、Portal A/B | 单手捏合拖动 | 捏住钥匙并放到锁座插槽上，激活传送门 |
+| Segment 2 | 传送区 | Portal A、Portal B、第一道挡门 | 锁座触发 | 激活后小球从 Portal A 升起淡出，再从 Portal B 渐显落下，并打开第一道挡门 |
 | Segment 3 | 气流控制区 | Air Belt、第二道挡门 | 气流指向手势 | 拇指伸出、食指中指并拢、无名指小指收起，向右指向以开启右风 |
 | Segment 4 | 终点区 | 气流带、终点祭坛 | 物理推动 | 气流推动小球进入终点，显示 `PASS` |
 
@@ -220,10 +221,11 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 - 钥匙靠近手势点时会整把钥匙显示 hover 高亮；玩家捏合靠近钥匙时会进入抓取。
 - 钥匙有较大的磁吸抓取半径：玩家只要在钥匙附近捏合，钥匙会先吸附到捏合点，再进入拖动状态。
-- 放开钥匙且钥匙位于符文附近时，符文、Portal A 和 Portal B 都变为激活高亮。
+- 放开钥匙且钥匙位于锁座附近时，钥匙会吸附到插槽上方，锁芯、Portal A 和 Portal B 都变为激活高亮。
 - 传送门激活后，小球会冻结物理，先在 Portal A 上升、缩小并淡出，再在 Portal B 上方渐显、落下；动画结束后恢复 Rigidbody 并清空速度。该传送流程由 Unity 自主更新驱动，不依赖手继续留在屏幕中。
-- 玩家捏着钥匙时如果手部追踪丢失，Unity 会按释放处理，并立即检查钥匙是否已经位于符文范围内。
+- 玩家捏着钥匙时如果手部追踪丢失，Unity 会按释放处理，并立即检查钥匙是否已经位于锁座范围内。
 - 气流手势由 `IndexMiddleTogether + thumbExtended + ring/pinky curled + !openPalm` 组成，并带有方向死区和短时间稳定确认，避免张掌或瞬时抖动误触发。
+- 气流方向只能在传送完成、进入气流阶段后设置；钥匙尚未开锁时，风向手势不会改变风带状态。
 - Unity 根据食指尖相对手腕的水平偏移判断风向：向右为通关方向，向左会显示提示要求改为向右。
 - 气流带使用 `AirBeltTrigger`，在小球停留于触发区时以渐进强度施加水平方向加速度，并限制最大水平推速，让玩家有时间修正方向；风向反转时不会瞬移或清零速度，而是通过反向加速度让小球自然减速、掉头。
 - 气流带在关闭时隐藏实体触发器；激活后 Kenney 粒子贴图雾带和流线随风向滚动，HUD 同步显示 `Airflow: OFF / LEFT / RIGHT`。
@@ -534,14 +536,15 @@ cd "unity\gesture_bridge"
 - 主菜单可直接进入 `Level 2: Portals & Airflow`。
 - Unity Editor 可直接打开 `Level02.unity` 进入第二关；`CaptureLevel02Preview` 可输出第二关截图。
 - 传送门钥匙是导入的低模钥匙模型，可用单手捏合直接抓取和移动，抓取时整把钥匙高亮。
-- 钥匙放到符文上并释放后，符文和两个传送门变为激活高亮。
+- 钥匙放到锁座插槽上并释放后，钥匙吸附固定，锁芯和两个传送门变为激活高亮。
 - 小球从 Portal A 升起淡出，再从 Portal B 渐显落下，并打开第一道挡门；手离开屏幕时传送仍会自动完成。
-- 张掌不会触发气流；气流指向手势可被识别：拇指伸出、食指中指并拢、无名指和小指收起。
+- 传送完成前不能设置风向；传送完成后，气流指向手势可被识别：拇指伸出、食指中指并拢、无名指和小指收起。
 - 中央气流走廊地图段更长，气流带、青色雾带、细流线和方向提示与该段地面等长；HUD 显示当前气流方向。
+- 地面通风格栅和青色箭头会提示玩家这里可以产生气流。
 - 向右指向后 HUD 显示右风提示，第二道挡门打开。
 - 小球进入气流带后逐渐加速；风向反转时小球会先被反向加速度减速，再掉头。
 - 小球到达终点后显示 `PASS`。
-- 小球掉落后 Level 2 全局重置，钥匙、符文、传送门、气流方向、气流 VFX、挡门和小球回到初始状态。
+- 小球掉落后 Level 2 全局重置，钥匙、锁座、传送门、气流方向、气流 VFX、挡门和小球回到初始状态。
 
 ## 目录结构
 
