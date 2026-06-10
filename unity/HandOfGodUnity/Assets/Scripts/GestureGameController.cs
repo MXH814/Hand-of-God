@@ -17,6 +17,7 @@ namespace HandOfGod.Gameplay
             Level0,
             Level1,
             Level2,
+            Level3,
             Pass,
         }
 
@@ -29,7 +30,25 @@ namespace HandOfGod.Gameplay
             PalmActivate,
             MapControl,
             AirflowDirection,
+            DrawCreate,
+            DrawErase,
             Complete,
+        }
+
+        private enum TutorialDrawState
+        {
+            WaitingStart,
+            StartConfirm,
+            Drawing,
+            FinishConfirm,
+            CancelConfirm,
+        }
+
+        private enum TutorialDrawShape
+        {
+            Circle,
+            Rectangle,
+            Triangle,
         }
 
         private enum Level1Stage
@@ -41,12 +60,54 @@ namespace HandOfGod.Gameplay
             RunToGoal,
         }
 
+        private enum Level3Stage
+        {
+            CreateBridgeObject,
+            PlaceCreatedObject,
+            EraseSpringBlock,
+            RunToGoal,
+        }
+
+        private struct TutorialDrawShapeResult
+        {
+            public TutorialDrawShape Shape;
+            public Vector3 Center;
+            public Vector3 Scale;
+            public Quaternion Rotation;
+            public float Radius;
+            public float Height;
+            public Vector2 TriangleA;
+            public Vector2 TriangleB;
+            public Vector2 TriangleC;
+        }
+
+        private struct TutorialDrawShapeScores
+        {
+            public float Circle;
+            public float Rectangle;
+            public float Triangle;
+            public TutorialDrawShape BestShape;
+            public float BestScore;
+            public float SecondScore;
+        }
+
+        private sealed class TutorialDrawnShapeMarker : MonoBehaviour
+        {
+            public TutorialDrawShape Shape;
+        }
+
         private const float CalibrationHoldSeconds = 1f;
         private const float MenuDwellSeconds = 0.85f;
         private const float SafeDwellSeconds = 1f;
         private const float Level1RoadCenterY = 1f;
         private const float Level1RoadAngleDegrees = -8f;
         private const float Level1RotateBridgeStartYaw = 90f;
+        private const float TutorialDrawConfirmSeconds = 2f;
+        private const float Level3RoadAngleDegrees = -4.2f;
+        private const float Level3RoadBaseY = 0.28f;
+        private const float Level3RoadSlope = -0.0735f;
+        private const float Level3RoadThickness = 0.22f;
+        private const float Level3SpringPlatformThickness = 0.18f;
         private static readonly int[] HandConnectionPairs =
         {
             0, 1, 1, 2, 2, 3, 3, 4,
@@ -107,8 +168,30 @@ namespace HandOfGod.Gameplay
         private bool tutorialPalmActivated;
         private bool tutorialMapAdjusted;
         private bool tutorialAirflowDirected;
+        private bool tutorialDrawCreated;
+        private bool tutorialDrawErased;
+        private bool tutorialDrawInvalid;
         private int tutorialAirflowPreviewDirection;
         private Vector3 tutorialDragStart;
+        private TutorialDrawState tutorialDrawState = TutorialDrawState.WaitingStart;
+        private float tutorialDrawHoldStart = -1f;
+        private bool tutorialDrawSawFingerSeparation;
+        private string tutorialDrawMessage = "";
+        private float tutorialDrawMessageUntil = -1f;
+        private Transform tutorialDrawnRoot;
+        private System.Collections.Generic.List<GameObject> tutorialDrawnObjects = new System.Collections.Generic.List<GameObject>();
+        private System.Collections.Generic.List<Vector2> tutorialDrawScreenPoints = new System.Collections.Generic.List<Vector2>();
+        private System.Collections.Generic.List<Vector3> tutorialDrawWorldPoints = new System.Collections.Generic.List<Vector3>();
+        private GameObject tutorialDrawHeldObject;
+        private Vector3 tutorialDrawGrabOffset;
+        private bool tutorialDrawObjectHeld;
+        private GameObject tutorialDrawRotatingObject;
+        private float tutorialDrawRotateStartDistance;
+        private float tutorialDrawRotateStartAngle;
+        private Quaternion tutorialDrawRotateStartRotation;
+        private GameObject tutorialEraseTarget;
+        private Renderer tutorialEraseRenderer;
+        private Material tutorialEraseIdleMaterial;
         private Transform tutorialBridgeLeft;
         private Transform tutorialBridgeRight;
         private Transform tutorialBridgeRoot;
@@ -159,6 +242,7 @@ namespace HandOfGod.Gameplay
         private Process bridgeProcess;
         private bool launchedBridge;
         private bool usesExternalBridge;
+        private bool stoppingBridge;
         private string bridgeStatus = "Starting camera...";
 
         // Level2: Portal + Airflow mechanics
@@ -221,6 +305,27 @@ namespace HandOfGod.Gameplay
         private float keyHoverStart = -1f;
         private const float KeyDwellSeconds = 0.6f;
 
+        private Level3Stage level3Stage;
+        private Transform level3CubePlate;
+        private Transform level3SpherePlate;
+        private Renderer level3CubePlateRenderer;
+        private Renderer level3SpherePlateRenderer;
+        private GameObject level3BridgePatch;
+        private Renderer level3BridgePatchRenderer;
+        private GameObject level3SpringBlock;
+        private GameObject level3SpringBlockHalo;
+        private Renderer level3SpringBlockRenderer;
+        private Transform level3SpringPlatform;
+        private Renderer level3SpringPlatformRenderer;
+        private Transform level3SpringCore;
+        private float level3SpringReleaseStart = -1f;
+        private bool level3CubePlaced;
+        private bool level3SpherePlaced;
+        private bool level3BridgePlaced;
+        private bool level3SpringReleased;
+        private bool level3EraseRequiresGestureReset;
+        private string level3HintMessage = "";
+
         public void Configure(GestureUdpReceiver gestureReceiver, CameraFrameReceiver frameReceiver)
         {
             receiver = gestureReceiver;
@@ -230,10 +335,11 @@ namespace HandOfGod.Gameplay
         // Editor helper: allow editor scripts to start a specific GameMode by index
         public void EditorStartLevel(int levelIndex)
         {
-            // levelIndex mapping: 0=CalibrationOpen,1=CalibrationPinch,2=Menu,3=Level0,4=Level1,5=Level2,6=Pass
+            // levelIndex mapping: 0=CalibrationOpen,1=CalibrationPinch,2=Menu,3=Level0,4=Level1,5=Level2,6=Level3,7=Pass
             if (levelIndex == 3) StartLevel(GameMode.Level0);
             else if (levelIndex == 4) StartLevel(GameMode.Level1);
             else if (levelIndex == 5) StartLevel(GameMode.Level2);
+            else if (levelIndex == 6) StartLevel(GameMode.Level3);
             else if (levelIndex == 2) { mode = GameMode.Menu; SetLobbyVisible(true); }
         }
 
@@ -275,6 +381,10 @@ namespace HandOfGod.Gameplay
             DestroyNamed("Key Light");
             DestroyNamed("Temple Fill Light");
             DestroyNamed("Menu Temple Lobby");
+            DestroyNamed("Level00 Gesture Lab");
+            DestroyNamed("Level01 First Path");
+            DestroyNamed("Level02 Portal Airflow");
+            DestroyNamed("Level03 Creation Spring");
             BuildMaterials();
             BuildCameraAndLights();
             BuildLobbyShell();
@@ -282,6 +392,10 @@ namespace HandOfGod.Gameplay
             if (string.Equals(activeScene.name, "Level02", System.StringComparison.OrdinalIgnoreCase))
             {
                 StartLevel(GameMode.Level2);
+            }
+            else if (string.Equals(activeScene.name, "Level03", System.StringComparison.OrdinalIgnoreCase))
+            {
+                StartLevel(GameMode.Level3);
             }
             else
             {
@@ -314,6 +428,10 @@ namespace HandOfGod.Gameplay
             {
                 UpdateLevel2Autonomous();
             }
+            if (mode == GameMode.Level3)
+            {
+                UpdateLevel3SpringAnimation();
+            }
 
             if (!TryGetPrimaryHand(out var hand))
             {
@@ -344,6 +462,9 @@ namespace HandOfGod.Gameplay
                 case GameMode.Level2:
                     UpdateLevel2(hand);
                     break;
+                case GameMode.Level3:
+                    UpdateLevel3(hand);
+                    break;
             }
 
             HandleLevel1BallState();
@@ -351,7 +472,7 @@ namespace HandOfGod.Gameplay
 
         private bool HandleLevel1BallState()
         {
-            if ((mode != GameMode.Level1 && mode != GameMode.Level2) || levelBall == null)
+            if ((mode != GameMode.Level1 && mode != GameMode.Level2 && mode != GameMode.Level3) || levelBall == null)
             {
                 return false;
             }
@@ -360,7 +481,7 @@ namespace HandOfGod.Gameplay
             {
                 // restart current level
                 Debug.Log("[LevelState] Ball failed — restarting level");
-                StartLevel(mode == GameMode.Level1 ? GameMode.Level1 : GameMode.Level2);
+                StartLevel(mode);
                 return true;
             }
 
@@ -368,7 +489,7 @@ namespace HandOfGod.Gameplay
             if (levelBall.ReachedGoal)
             {
                 Debug.Log($"[LevelState] ReachedGoal detected. mode={mode} level1Stage={level1Stage} ballPos={levelBall.transform.position} timeSinceStart={Time.time - levelStartTime}");
-                if (mode == GameMode.Level1 || (mode == GameMode.Level2 && level1Stage == Level1Stage.RunToGoal))
+                if (mode == GameMode.Level1 || (mode == GameMode.Level2 && level1Stage == Level1Stage.RunToGoal) || (mode == GameMode.Level3 && level3Stage == Level3Stage.RunToGoal))
                 {
                     Debug.Log("[LevelState] Level pass condition satisfied — switching to Pass mode");
                     mode = GameMode.Pass;
@@ -428,6 +549,9 @@ namespace HandOfGod.Gameplay
                     break;
                 case GameMode.Level2:
                     DrawLevel2Hud();
+                    break;
+                case GameMode.Level3:
+                    DrawLevel3Hud();
                     break;
                 case GameMode.Pass:
                     DrawPassHud();
@@ -532,7 +656,7 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
-            var panel = new Rect(48f, 104f, 228f, 190f);
+            var panel = new Rect(48f, 104f, 228f, 234f);
             DrawPanel(panel);
             var titleStyle = new GUIStyle(GUI.skin.label)
             {
@@ -545,6 +669,7 @@ namespace HandOfGod.Gameplay
             DrawLevelSelectButton("select-level0", "Level 0: Tutorial", GameMode.Level0, new Rect(panel.x + 18f, panel.y + 48f, panel.width - 36f, 34f));
             DrawLevelSelectButton("select-level1", "Level 1: Moving Path", GameMode.Level1, new Rect(panel.x + 18f, panel.y + 92f, panel.width - 36f, 34f));
             DrawLevelSelectButton("select-level2", "Level 2: Portals", GameMode.Level2, new Rect(panel.x + 18f, panel.y + 136f, panel.width - 36f, 34f));
+            DrawLevelSelectButton("select-level3", "Level 3: Spring", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 180f, panel.width - 36f, 34f));
         }
 
         private void DrawLevelSelectButton(string key, string label, GameMode targetMode, Rect rect)
@@ -555,14 +680,15 @@ namespace HandOfGod.Gameplay
 
         private void DrawMenu()
         {
-            DrawPanel(new Rect(40, 40, 390, 300));
+            DrawPanel(new Rect(40, 40, 390, 404));
             GUI.Label(new Rect(70, 62, 300, 30), "Hand of God");
             GUI.Label(new Rect(70, 92, 320, 24), "Hover your index finger over an option.");
             DrawHoverButton("start", "Start Game", new Rect(70, 120, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             DrawHoverButton("level0", "Level 0: Tutorial", new Rect(70, 172, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
             DrawHoverButton("level1", "Level 1: First Path", new Rect(70, 224, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             DrawHoverButton("level2", "Level 2: Portals & Airflow", new Rect(70, 276, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level2));
-            DrawHoverButton("recalibrate", "Recalibrate", new Rect(70, 328, 260, 42), MenuDwellSeconds, ResetToCalibration);
+            DrawHoverButton("level3", "Level 3: Creation Spring", new Rect(70, 328, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level3));
+            DrawHoverButton("recalibrate", "Recalibrate", new Rect(70, 380, 260, 42), MenuDwellSeconds, ResetToCalibration);
         }
 
         private void DrawLevel0Hud()
@@ -591,6 +717,10 @@ namespace HandOfGod.Gameplay
             }
 
             DrawTutorialStageMenu();
+            if (tutorialStage == TutorialStage.DrawCreate || tutorialStage == TutorialStage.DrawErase)
+            {
+                DrawTutorialDrawingHud();
+            }
             if (TutorialUsesLabObject())
             {
                 var shapePanel = new Rect(48f, 590f, 260f, 124f);
@@ -604,7 +734,7 @@ namespace HandOfGod.Gameplay
 
         private void DrawTutorialStageMenu()
         {
-            var panel = new Rect(48f, 310f, 260f, 268f);
+            var panel = new Rect(48f, 310f, 260f, 328f);
             DrawPanel(panel);
             var titleStyle = new GUIStyle(GUI.skin.label)
             {
@@ -621,12 +751,50 @@ namespace HandOfGod.Gameplay
             DrawTutorialStageButton("tutorial-jump-palm", "5  Palm seal", TutorialStage.PalmActivate, new Rect(panel.x + 18f, y + 120f, panel.width - 36f, 26f));
             DrawTutorialStageButton("tutorial-jump-map", "6  Map control", TutorialStage.MapControl, new Rect(panel.x + 18f, y + 150f, panel.width - 36f, 26f));
             DrawTutorialStageButton("tutorial-jump-air", "7  Airflow", TutorialStage.AirflowDirection, new Rect(panel.x + 18f, y + 180f, panel.width - 36f, 26f));
+            DrawTutorialStageButton("tutorial-jump-draw", "8  Draw object", TutorialStage.DrawCreate, new Rect(panel.x + 18f, y + 210f, panel.width - 36f, 26f));
+            DrawTutorialStageButton("tutorial-jump-erase", "9  Erase object", TutorialStage.DrawErase, new Rect(panel.x + 18f, y + 240f, panel.width - 36f, 26f));
         }
 
         private void DrawTutorialStageButton(string key, string label, TutorialStage targetStage, Rect rect)
         {
             var active = tutorialStage == targetStage;
             DrawHoverButton(key, active ? $"> {label}" : label, rect, MenuDwellSeconds, () => SelectTutorialStage(targetStage), 12);
+        }
+
+        private void DrawTutorialDrawingHud()
+        {
+            if (tutorialDrawScreenPoints.Count > 1)
+            {
+                var lineColor = tutorialDrawState == TutorialDrawState.CancelConfirm
+                    ? new Color(1f, 0.36f, 0.12f, 0.92f)
+                    : new Color(0.16f, 1f, 0.82f, 0.95f);
+                for (var i = 1; i < tutorialDrawScreenPoints.Count; i++)
+                {
+                    DrawLine(tutorialDrawScreenPoints[i - 1], tutorialDrawScreenPoints[i], lineColor, 5f);
+                }
+            }
+
+            var panel = new Rect(Screen.width * 0.5f - 250f, 230f, 500f, 90f);
+            DrawPanel(panel);
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 15,
+                wordWrap = true,
+            };
+            GUI.Label(new Rect(panel.x + 20f, panel.y + 10f, panel.width - 40f, 28f), TutorialDrawStatusText(), style);
+
+            var progress = TutorialDrawHoldProgress();
+            if (progress > 0f)
+            {
+                DrawProgressBar(progress, new Rect(panel.x + 50f, panel.y + 54f, panel.width - 100f, 18f));
+            }
+            else if (!string.IsNullOrEmpty(tutorialDrawMessage) && Time.time < tutorialDrawMessageUntil)
+            {
+                GUI.color = tutorialDrawInvalid ? new Color(1f, 0.48f, 0.24f, 1f) : new Color(0.18f, 1f, 0.78f, 1f);
+                GUI.Label(new Rect(panel.x + 20f, panel.y + 52f, panel.width - 40f, 26f), tutorialDrawMessage, style);
+                GUI.color = Color.white;
+            }
         }
 
         private void DrawLevel1Hud()
@@ -660,15 +828,45 @@ namespace HandOfGod.Gameplay
             GUI.Label(new Rect(panelX + 48, 166, 364, 30), "The ball reached the altar.", messageStyle);
             GUI.color = Color.white;
             DrawHoverButton("pass-restart", "Restart", new Rect(Screen.width / 2f - 230f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(lastLevel), 20);
-            // 当上一关是 Level1 时，显示进入 Level2 的按钮
             if (lastLevel == GameMode.Level1)
             {
                 DrawHoverButton("pass-next", "Next: Level 2", new Rect(Screen.width / 2f - 50f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level2), 20);
                 DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 130f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level0), 20);
             }
+            else if (lastLevel == GameMode.Level2)
+            {
+                DrawHoverButton("pass-next", "Next: Level 3", new Rect(Screen.width / 2f - 50f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level3), 20);
+                DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 130f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level0), 20);
+            }
             else
             {
                 DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 20f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level0), 20);
+            }
+        }
+
+        private void DrawLevel3Hud()
+        {
+            var panelWidth = Mathf.Min(Screen.width - 180f, 840f);
+            var panel = new Rect(Screen.width * 0.5f - panelWidth * 0.5f, 42f, panelWidth, 154f);
+            DrawPanel(panel);
+            var titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
+            var objectiveStyle = new GUIStyle(GUI.skin.label) { fontSize = 17, wordWrap = true };
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 3: Creation Spring", titleStyle);
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 52f, panel.width - 56f, 48f), Level3ObjectiveText(), objectiveStyle);
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 104f, panel.width - 56f, 24f), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}" : "Ball speed: 0.00");
+            if (!string.IsNullOrEmpty(level3HintMessage))
+            {
+                GUI.Label(new Rect(panel.x + 28f, panel.y + 128f, panel.width - 56f, 24f), level3HintMessage);
+            }
+
+            if (CanDrawCreateObject() || CanLevel3EraseDrawnObject())
+            {
+                DrawTutorialDrawingHud();
+            }
+
+            if (Time.time < level1SuccessUntil)
+            {
+                DrawSuccessBanner(new Rect(Screen.width * 0.5f - 135f, panel.yMax + 12f, 270f, 50f), "SUCCESS");
             }
         }
 
@@ -742,6 +940,10 @@ namespace HandOfGod.Gameplay
             {
                 BuildLevel2();
             }
+            else if (level == GameMode.Level3)
+            {
+                BuildLevel3();
+            }
             mode = level;
             levelStartTime = Time.time;
             hoverKey = "";
@@ -763,8 +965,28 @@ namespace HandOfGod.Gameplay
             tutorialPalmActivated = false;
             tutorialMapAdjusted = false;
             tutorialAirflowDirected = false;
+            tutorialDrawCreated = false;
+            tutorialDrawErased = false;
+            tutorialDrawInvalid = false;
             tutorialAirflowPreviewDirection = 0;
             tutorialPalmStart = -1f;
+            tutorialDrawState = TutorialDrawState.WaitingStart;
+            tutorialDrawHoldStart = -1f;
+            tutorialDrawSawFingerSeparation = false;
+            tutorialDrawMessage = "";
+            tutorialDrawMessageUntil = -1f;
+            tutorialDrawnRoot = new GameObject("tutorial drawn objects").transform;
+            tutorialDrawnRoot.SetParent(levelRoot, false);
+            tutorialDrawnObjects.Clear();
+            tutorialDrawScreenPoints.Clear();
+            tutorialDrawWorldPoints.Clear();
+            tutorialDrawHeldObject = null;
+            tutorialDrawGrabOffset = Vector3.zero;
+            tutorialDrawObjectHeld = false;
+            tutorialDrawRotatingObject = null;
+            tutorialDrawRotateStartDistance = 0f;
+            tutorialDrawRotateStartAngle = 0f;
+            tutorialDrawRotateStartRotation = Quaternion.identity;
             BuildTutorialMechanisms();
             twoFingerMapStartDistance = 0f;
             ApplyTutorialStageVisibility();
@@ -982,6 +1204,14 @@ namespace HandOfGod.Gameplay
             {
                 labRenderer.sharedMaterial = boxIdle;
             }
+            if (CanDrawCreateObject() || CanEraseDrawnObject())
+            {
+                UpdateTutorialDrawing(frame);
+            }
+            if (CanManipulateDrawnObjects())
+            {
+                UpdateTutorialDrawnObjectManipulation(hand, target, isPinch, twoHandsPinching, a, b);
+            }
             if (!labHeld && isPinch && close && !twoHandsPinching && CanDragLabObject())
             {
                 labHeld = true;
@@ -1111,6 +1341,111 @@ namespace HandOfGod.Gameplay
             return tutorialStage == TutorialStage.AirflowDirection;
         }
 
+        private bool CanDrawCreateObject()
+        {
+            return (mode == GameMode.Level0 && tutorialStage == TutorialStage.DrawCreate)
+                || (mode == GameMode.Level3 && (level3Stage == Level3Stage.CreateBridgeObject || level3Stage == Level3Stage.PlaceCreatedObject));
+        }
+
+        private bool CanEraseDrawnObject()
+        {
+            return mode == GameMode.Level0 && tutorialStage == TutorialStage.DrawErase;
+        }
+
+        private bool CanLevel3EraseDrawnObject()
+        {
+            return mode == GameMode.Level3;
+        }
+
+        private bool CanEraseLevel3SpringBlock()
+        {
+            return mode == GameMode.Level3
+                && (level3Stage == Level3Stage.EraseSpringBlock || level3Stage == Level3Stage.RunToGoal);
+        }
+
+        private bool CanManipulateDrawnObjects()
+        {
+            if (TutorialDrawInputActive())
+            {
+                return false;
+            }
+
+            return (mode == GameMode.Level0 && (tutorialStage == TutorialStage.DrawCreate || tutorialStage == TutorialStage.DrawErase))
+                || mode == GameMode.Level3;
+        }
+
+        private bool TutorialDrawInputActive()
+        {
+            return tutorialDrawState == TutorialDrawState.StartConfirm
+                || tutorialDrawState == TutorialDrawState.Drawing
+                || tutorialDrawState == TutorialDrawState.FinishConfirm
+                || tutorialDrawState == TutorialDrawState.CancelConfirm;
+        }
+
+        private void UpdateTutorialDrawnObjectManipulation(GestureHandFrame hand, Vector3 target, bool isPinch, bool twoHandsPinching, GestureHandFrame a, GestureHandFrame b)
+        {
+            if (tutorialEraseTarget != null && (!tutorialDrawnObjects.Contains(tutorialEraseTarget) || !CanSelectTutorialDrawnObjectForErase(tutorialEraseTarget)))
+            {
+                ClearTutorialEraseSelection(true);
+            }
+
+            ResetTutorialDrawnObjectMaterials();
+            var interactionTarget = target;
+            if (twoHandsPinching)
+            {
+                interactionTarget = ScreenToWorldPlane((a.pinchX + b.pinchX) * 0.5f, (a.pinchY + b.pinchY) * 0.5f, 0.7f);
+            }
+            var hoverObject = FindNearestTutorialDrawnObject(interactionTarget, twoHandsPinching ? 1.55f : 0.78f);
+            var hoverCanMove = hoverObject != null && hoverObject != level3SpringBlock;
+            if (tutorialDrawObjectHeld && (!isPinch || twoHandsPinching))
+            {
+                tutorialDrawObjectHeld = false;
+                tutorialDrawHeldObject = null;
+            }
+
+            if (!tutorialDrawObjectHeld && isPinch && !twoHandsPinching && hoverCanMove && hoverObject != tutorialEraseTarget)
+            {
+                tutorialDrawObjectHeld = true;
+                tutorialDrawHeldObject = hoverObject;
+                tutorialDrawGrabOffset = tutorialDrawHeldObject.transform.position - target;
+            }
+
+            if (tutorialDrawObjectHeld && tutorialDrawHeldObject != null)
+            {
+                var position = target + tutorialDrawGrabOffset;
+                position.x = Mathf.Clamp(position.x, -2.45f, 2.45f);
+                position.z = Mathf.Clamp(position.z, -1.35f, 1.35f);
+                position.y = tutorialDrawHeldObject.transform.position.y;
+                tutorialDrawHeldObject.transform.position = position;
+                SetTutorialDrawnObjectMaterial(tutorialDrawHeldObject, boxHeldMaterial);
+            }
+            else if (hoverCanMove && hoverObject != tutorialEraseTarget)
+            {
+                SetTutorialDrawnObjectMaterial(hoverObject, boxHover);
+            }
+
+            if (twoHandsPinching && hoverCanMove && hoverObject != tutorialEraseTarget)
+            {
+                SetTutorialDrawnObjectMaterial(hoverObject, boxHeldMaterial);
+                var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX);
+                if (tutorialDrawRotateStartDistance <= 0f || tutorialDrawRotatingObject != hoverObject)
+                {
+                    var distance = Vector2.Distance(new Vector2(a.pinchX, a.pinchY), new Vector2(b.pinchX, b.pinchY));
+                    tutorialDrawRotateStartDistance = Mathf.Max(distance, 0.001f);
+                    tutorialDrawRotateStartAngle = angle;
+                    tutorialDrawRotateStartRotation = YawOnly(hoverObject.transform.rotation);
+                    tutorialDrawRotatingObject = hoverObject;
+                }
+                var deltaDegrees = Mathf.DeltaAngle(tutorialDrawRotateStartAngle * Mathf.Rad2Deg, angle * Mathf.Rad2Deg);
+                hoverObject.transform.rotation = tutorialDrawRotateStartRotation * Quaternion.Euler(0f, deltaDegrees, 0f);
+            }
+            else
+            {
+                tutorialDrawRotateStartDistance = 0f;
+                tutorialDrawRotatingObject = null;
+            }
+        }
+
         private bool TutorialUsesLabObject()
         {
             return tutorialStage == TutorialStage.OneHandDrag || tutorialStage == TutorialStage.TwoHandRotate;
@@ -1118,7 +1453,7 @@ namespace HandOfGod.Gameplay
 
         private bool IsFinalTutorialStage()
         {
-            return tutorialStage == TutorialStage.AirflowDirection || tutorialStage == TutorialStage.Complete;
+            return tutorialStage == TutorialStage.DrawErase || tutorialStage == TutorialStage.Complete;
         }
 
         private void SelectTutorialStage(TutorialStage stage)
@@ -1137,12 +1472,30 @@ namespace HandOfGod.Gameplay
             tutorialPalmActivated = false;
             tutorialMapAdjusted = false;
             tutorialAirflowDirected = false;
+            tutorialDrawInvalid = false;
             tutorialAirflowPreviewDirection = 0;
             labHeld = false;
             tutorialPalmStart = -1f;
             tutorialBridgeStartDistance = 0f;
             twoHandStartDistance = 0f;
             twoFingerMapStartDistance = 0f;
+            tutorialDrawObjectHeld = false;
+            tutorialDrawHeldObject = null;
+            tutorialDrawGrabOffset = Vector3.zero;
+            tutorialDrawRotatingObject = null;
+            tutorialDrawRotateStartDistance = 0f;
+            ResetTutorialDrawingState(tutorialStage != TutorialStage.DrawCreate);
+            if (tutorialStage == TutorialStage.DrawCreate)
+            {
+                tutorialDrawCreated = false;
+                ClearTutorialDrawnObjects();
+            }
+            if (tutorialStage == TutorialStage.DrawErase)
+            {
+                tutorialDrawErased = false;
+                ClearTutorialDrawnObjects();
+                EnsureTutorialErasePracticeObject();
+            }
             if (levelRoot != null)
             {
                 levelRoot.localScale = Vector3.one;
@@ -1181,6 +1534,10 @@ namespace HandOfGod.Gameplay
             if (labObject != null)
             {
                 labObject.SetActive(TutorialUsesLabObject());
+            }
+            if (tutorialDrawnRoot != null)
+            {
+                tutorialDrawnRoot.gameObject.SetActive(tutorialStage == TutorialStage.DrawCreate || tutorialStage == TutorialStage.DrawErase);
             }
             if (tutorialBridgeRoot != null)
             {
@@ -1246,6 +1603,1376 @@ namespace HandOfGod.Gameplay
             }
 
             SetTutorialAirflowDirection(direction);
+        }
+
+        private void UpdateTutorialDrawing(GestureFrame frame)
+        {
+            var hasRight = TryGetHandBySide(frame, "Right", out var rightHand);
+            var hasLeft = TryGetHandBySide(frame, "Left", out var leftHand);
+            var fingertipsTogether = hasLeft && hasRight && IndexTipsTogether(leftHand, rightHand);
+            var rightFist = hasRight && IsFist(rightHand);
+
+            if (CanEraseDrawnObject())
+            {
+                UpdateTutorialDrawErase(frame);
+                return;
+            }
+            if (!CanDrawCreateObject())
+            {
+                return;
+            }
+
+            switch (tutorialDrawState)
+            {
+                case TutorialDrawState.WaitingStart:
+                    if (fingertipsTogether)
+                    {
+                        tutorialDrawState = TutorialDrawState.StartConfirm;
+                        StartTutorialDrawHold();
+                    }
+                    else
+                    {
+                        ResetTutorialDrawHold();
+                    }
+                    break;
+
+                case TutorialDrawState.StartConfirm:
+                    if (!fingertipsTogether)
+                    {
+                        tutorialDrawState = TutorialDrawState.WaitingStart;
+                        ResetTutorialDrawHold();
+                    }
+                    else if (TutorialDrawHoldProgress() >= 1f)
+                    {
+                        BeginTutorialDrawing(rightHand);
+                    }
+                    break;
+
+                case TutorialDrawState.Drawing:
+                    if (!hasRight)
+                    {
+                        return;
+                    }
+
+                    AddTutorialDrawPoint(rightHand);
+                    if (!fingertipsTogether)
+                    {
+                        tutorialDrawSawFingerSeparation = true;
+                    }
+                    if (rightFist)
+                    {
+                        tutorialDrawState = TutorialDrawState.CancelConfirm;
+                        StartTutorialDrawHold();
+                    }
+                    else if (tutorialDrawSawFingerSeparation && fingertipsTogether && tutorialDrawWorldPoints.Count >= 5)
+                    {
+                        tutorialDrawState = TutorialDrawState.FinishConfirm;
+                        StartTutorialDrawHold();
+                    }
+                    break;
+
+                case TutorialDrawState.FinishConfirm:
+                    if (rightFist)
+                    {
+                        tutorialDrawState = TutorialDrawState.CancelConfirm;
+                        StartTutorialDrawHold();
+                    }
+                    else if (!fingertipsTogether)
+                    {
+                        tutorialDrawState = TutorialDrawState.Drawing;
+                        ResetTutorialDrawHold();
+                    }
+                    else if (TutorialDrawHoldProgress() >= 1f)
+                    {
+                        FinishTutorialDrawing();
+                    }
+                    break;
+
+                case TutorialDrawState.CancelConfirm:
+                    if (!rightFist)
+                    {
+                        tutorialDrawState = TutorialDrawState.Drawing;
+                        ResetTutorialDrawHold();
+                    }
+                    else if (TutorialDrawHoldProgress() >= 1f)
+                    {
+                        ResetTutorialDrawingState(false);
+                        tutorialDrawMessage = "Drawing canceled.";
+                        tutorialDrawMessageUntil = Time.time + 1.6f;
+                    }
+                    break;
+            }
+        }
+
+        private void BeginTutorialDrawing(GestureHandFrame rightHand)
+        {
+            tutorialDrawState = TutorialDrawState.Drawing;
+            tutorialDrawInvalid = false;
+            tutorialDrawMessage = "";
+            tutorialDrawSawFingerSeparation = false;
+            tutorialDrawScreenPoints.Clear();
+            tutorialDrawWorldPoints.Clear();
+            ResetTutorialDrawHold();
+            AddTutorialDrawPoint(rightHand, true);
+        }
+
+        private void AddTutorialDrawPoint(GestureHandFrame hand, bool force = false)
+        {
+            var screen = new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height);
+            var world = ScreenToWorldPlane(hand.indexX, hand.indexY, 0.64f);
+            world.x = Mathf.Clamp(world.x, -2.55f, 2.55f);
+            world.z = Mathf.Clamp(world.z, -1.42f, 1.42f);
+            world.y = 0.64f;
+            var minPointDistance = 0.055f;
+            if (!force && tutorialDrawWorldPoints.Count > 0 && Vector3.Distance(tutorialDrawWorldPoints[tutorialDrawWorldPoints.Count - 1], world) < minPointDistance)
+            {
+                return;
+            }
+
+            tutorialDrawScreenPoints.Add(screen);
+            tutorialDrawWorldPoints.Add(world);
+        }
+
+        private void FinishTutorialDrawing()
+        {
+            if (!TryClassifyTutorialShape(out var result))
+            {
+                tutorialDrawInvalid = true;
+                tutorialDrawMessage = "Invalid drawing. Draw a circle, rectangle, or triangle.";
+                tutorialDrawMessageUntil = Time.time + 2.2f;
+                ResetTutorialDrawingState(false);
+                return;
+            }
+
+            CreateTutorialDrawnObject(result);
+            tutorialDrawCreated = true;
+            if (mode == GameMode.Level0)
+            {
+                tutorialStageSucceeded = true;
+            }
+            else if (mode == GameMode.Level3 && level3Stage == Level3Stage.CreateBridgeObject)
+            {
+                AdvanceLevel3(Level3Stage.PlaceCreatedObject);
+            }
+            if (mode == GameMode.Level3)
+            {
+                level3EraseRequiresGestureReset = true;
+            }
+            tutorialDrawInvalid = false;
+            tutorialDrawMessage = mode == GameMode.Level3 ? "Object created. Move or rotate it onto the glowing plate." : "Object created. You can draw another one or continue.";
+            tutorialDrawMessageUntil = Time.time + 2.2f;
+            ResetTutorialDrawingState(false);
+        }
+
+        private GameObject CreateTutorialDrawnObject(TutorialDrawShapeResult result)
+        {
+            if (tutorialDrawnRoot == null)
+            {
+                tutorialDrawnRoot = new GameObject("tutorial drawn objects").transform;
+                tutorialDrawnRoot.SetParent(levelRoot, false);
+            }
+
+            GameObject drawn;
+            switch (result.Shape)
+            {
+                case TutorialDrawShape.Circle:
+                    drawn = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    drawn.name = "Tutorial Drawn Sphere";
+                    break;
+                case TutorialDrawShape.Rectangle:
+                    drawn = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    drawn.name = "Tutorial Drawn Box";
+                    break;
+                case TutorialDrawShape.Triangle:
+                    drawn = CreateTutorialTriangularPyramid("Tutorial Drawn Triangular Pyramid", result);
+                    break;
+                default:
+                    return null;
+            }
+
+            drawn.transform.SetParent(tutorialDrawnRoot, false);
+            drawn.transform.SetPositionAndRotation(result.Center, result.Rotation);
+            drawn.transform.localScale = result.Scale;
+            drawn.GetComponent<Renderer>().sharedMaterial = boxIdle;
+            drawn.AddComponent<TutorialDrawnShapeMarker>().Shape = result.Shape;
+            tutorialDrawnObjects.Add(drawn);
+            return drawn;
+        }
+
+        private GameObject CreateTutorialDrawnObject(PrimitiveType primitive, Vector3 center, Vector3 scale)
+        {
+            if (tutorialDrawnRoot == null)
+            {
+                tutorialDrawnRoot = new GameObject("tutorial drawn objects").transform;
+                tutorialDrawnRoot.SetParent(levelRoot, false);
+            }
+
+            var drawn = GameObject.CreatePrimitive(primitive);
+            drawn.name = $"Tutorial Drawn {primitive}";
+            drawn.transform.SetParent(tutorialDrawnRoot, false);
+            drawn.transform.position = center;
+            drawn.transform.localScale = scale;
+            drawn.GetComponent<Renderer>().sharedMaterial = boxIdle;
+            var shape = primitive == PrimitiveType.Sphere ? TutorialDrawShape.Circle : TutorialDrawShape.Rectangle;
+            drawn.AddComponent<TutorialDrawnShapeMarker>().Shape = shape;
+            tutorialDrawnObjects.Add(drawn);
+            return drawn;
+        }
+
+        private bool TryClassifyTutorialShape(out TutorialDrawShapeResult result)
+        {
+            result = new TutorialDrawShapeResult
+            {
+                Shape = TutorialDrawShape.Rectangle,
+                Center = new Vector3(0f, 0.7f, 0f),
+                Scale = Vector3.one * 0.75f,
+                Rotation = Quaternion.identity,
+                Radius = 0.36f,
+                Height = 0.7f,
+            };
+
+            if (tutorialDrawWorldPoints.Count < 8)
+            {
+                return false;
+            }
+
+            var points = BuildTutorialDraw2DPoints();
+            if (points.Count < 8)
+            {
+                return false;
+            }
+
+            var minX = float.PositiveInfinity;
+            var maxX = float.NegativeInfinity;
+            var minZ = float.PositiveInfinity;
+            var maxZ = float.NegativeInfinity;
+            var pathLength = 0f;
+            for (var i = 0; i < points.Count; i++)
+            {
+                var point = points[i];
+                minX = Mathf.Min(minX, point.x);
+                maxX = Mathf.Max(maxX, point.x);
+                minZ = Mathf.Min(minZ, point.y);
+                maxZ = Mathf.Max(maxZ, point.y);
+                if (i > 0)
+                {
+                    pathLength += Vector2.Distance(points[i - 1], point);
+                }
+            }
+
+            var width = maxX - minX;
+            var depth = maxZ - minZ;
+            var diagonal = Mathf.Sqrt(width * width + depth * depth);
+            if (pathLength < 0.55f || diagonal < 0.24f)
+            {
+                return false;
+            }
+
+            var center2 = new Vector2((minX + maxX) * 0.5f, (minZ + maxZ) * 0.5f);
+            var directDistance = Vector2.Distance(points[0], points[points.Count - 1]);
+            var closed = directDistance < Mathf.Max(0.24f, diagonal * 0.34f);
+            if (!closed)
+            {
+                return false;
+            }
+
+            var larger = Mathf.Max(width, depth);
+            var smaller = Mathf.Min(width, depth);
+            var aspect = smaller / Mathf.Max(larger, 0.001f);
+            var templateScores = ScoreTutorialDrawTemplates(points);
+            var confidentTemplate = templateScores.BestScore < 0.24f
+                && templateScores.SecondScore - templateScores.BestScore > 0.018f;
+
+            if (TryFindTutorialDrawPolygon(points, diagonal, 3, out var triangle) && IsTriangleLike(triangle, diagonal))
+            {
+                var trianglePerimeter = PolygonPerimeter(triangle);
+                var triangleFit = PolygonFitError(points, triangle);
+                var triangleMaxFit = PolygonMaxFitError(points, triangle);
+                var triangleFineVertices = SimplifyTutorialDrawPolygon(points, diagonal * 0.055f).Count;
+                var trianglePathRatio = pathLength / Mathf.Max(trianglePerimeter, 0.001f);
+                var triangleTemplateMargin = Mathf.Min(templateScores.Circle, templateScores.Rectangle) - templateScores.Triangle;
+                var triangleTemplateValid = templateScores.Triangle < 0.25f
+                    && triangleTemplateMargin > 0.016f
+                    && (!confidentTemplate || templateScores.BestShape == TutorialDrawShape.Triangle);
+                if (triangleFit < diagonal * 0.085f
+                    && triangleMaxFit < diagonal * 0.23f
+                    && trianglePathRatio < 1.42f
+                    && triangleFineVertices <= 5
+                    && triangleTemplateValid)
+                {
+                    var dimensions = TriangleBaseAndHeight(triangle);
+                    var radius = Mathf.Clamp(dimensions.x * 0.5f, 0.22f, 0.9f);
+                    var height = Mathf.Clamp(dimensions.y, 0.42f, 1.25f);
+                    result.Shape = TutorialDrawShape.Triangle;
+                    result.Center = new Vector3(center2.x, 0.7f, center2.y);
+                    result.Scale = Vector3.one;
+                    result.Rotation = Quaternion.identity;
+                    result.Radius = radius;
+                    result.Height = height;
+                    result.TriangleA = triangle[0] - center2;
+                    result.TriangleB = triangle[1] - center2;
+                    result.TriangleC = triangle[2] - center2;
+                    return true;
+                }
+            }
+
+            var hasRectangle = TryFindTutorialDrawPolygon(points, diagonal, 4, out var rectangle);
+            var rectangleFit = hasRectangle ? PolygonFitError(points, rectangle) : float.PositiveInfinity;
+            var rectangleMaxFit = hasRectangle ? PolygonMaxFitError(points, rectangle) : float.PositiveInfinity;
+            var rectanglePerimeter = hasRectangle ? PolygonPerimeter(rectangle) : 0f;
+            var rectanglePathRatio = pathLength / Mathf.Max(rectanglePerimeter, 0.001f);
+            var rectangleCornerError = hasRectangle ? RectangleCornerError(rectangle) : float.PositiveInfinity;
+            var rectangleValid = hasRectangle
+                && IsRectangleLike(rectangle, diagonal)
+                && rectangleFit < diagonal * 0.14f
+                && rectangleMaxFit < diagonal * 0.32f
+                && rectanglePathRatio < 1.34f
+                && rectangleCornerError < 0.36f
+                && templateScores.Rectangle < 0.25f
+                && templateScores.Rectangle <= templateScores.Triangle + 0.012f
+                && (!confidentTemplate || templateScores.BestShape == TutorialDrawShape.Rectangle || templateScores.BestShape == TutorialDrawShape.Circle);
+
+            var averageRadius = 0f;
+            var radiusDeviation = 0f;
+            for (var i = 0; i < points.Count; i++)
+            {
+                averageRadius += Vector2.Distance(points[i], center2);
+            }
+            averageRadius /= Mathf.Max(points.Count, 1);
+            for (var i = 0; i < points.Count; i++)
+            {
+                radiusDeviation += Mathf.Abs(Vector2.Distance(points[i], center2) - averageRadius);
+            }
+            radiusDeviation /= Mathf.Max(points.Count, 1);
+            var radialError = radiusDeviation / Mathf.Max(averageRadius, 0.001f);
+            var circlePolygon = SimplifyTutorialDrawPolygon(points, diagonal * 0.035f);
+            var circlePathRatio = pathLength / Mathf.Max(2f * Mathf.PI * averageRadius, 0.001f);
+            var circleValid = aspect > 0.58f
+                && radialError < 0.25f
+                && circlePathRatio > 0.74f
+                && circlePathRatio < 1.30f
+                && circlePolygon.Count >= 5
+                && circlePolygon.Count != 3
+                && templateScores.Circle < 0.24f
+                && templateScores.Circle <= templateScores.Triangle + 0.010f
+                && (!confidentTemplate || templateScores.BestShape == TutorialDrawShape.Circle || templateScores.BestShape == TutorialDrawShape.Rectangle);
+
+            if (rectangleValid && circleValid)
+            {
+                var rectangleScore = rectangleFit / diagonal * 1.35f
+                    + rectangleMaxFit / diagonal * 0.35f
+                    + Mathf.Abs(rectanglePathRatio - 1f) * 0.55f
+                    + rectangleCornerError * 0.75f
+                    + templateScores.Rectangle * 0.85f;
+                var circleScore = radialError * 1.75f
+                    + Mathf.Abs(circlePathRatio - 1f) * 0.70f
+                    + (1f - aspect) * 0.55f
+                    + (circlePolygon.Count <= 5 ? 0.05f : 0f)
+                    + templateScores.Circle * 0.85f;
+                if (Mathf.Abs(rectangleScore - circleScore) < 0.025f)
+                {
+                    return false;
+                }
+                if (rectangleScore < circleScore)
+                {
+                    return ApplyTutorialRectangleResult(rectangle, points, center2, out result);
+                }
+                return ApplyTutorialCircleResult(averageRadius, center2, out result);
+            }
+
+            if (rectangleValid)
+            {
+                return ApplyTutorialRectangleResult(rectangle, points, center2, out result);
+            }
+
+            if (circleValid)
+            {
+                return ApplyTutorialCircleResult(averageRadius, center2, out result);
+            }
+
+            return false;
+        }
+
+        private static TutorialDrawShapeScores ScoreTutorialDrawTemplates(System.Collections.Generic.List<Vector2> points)
+        {
+            const int sampleCount = 64;
+            var resampled = NormalizeTutorialTemplatePoints(ResampleTutorialDrawPoints(points, sampleCount));
+            var scores = new TutorialDrawShapeScores
+            {
+                Circle = float.PositiveInfinity,
+                Rectangle = float.PositiveInfinity,
+                Triangle = float.PositiveInfinity,
+                BestShape = TutorialDrawShape.Rectangle,
+                BestScore = float.PositiveInfinity,
+                SecondScore = float.PositiveInfinity,
+            };
+
+            for (var i = 0; i < 2; i++)
+            {
+                var reverse = i == 1;
+                scores.Circle = Mathf.Min(scores.Circle, MatchTutorialTemplateFamily(resampled, TutorialDrawShape.Circle, reverse, sampleCount));
+                scores.Rectangle = Mathf.Min(scores.Rectangle, MatchTutorialTemplateFamily(resampled, TutorialDrawShape.Rectangle, reverse, sampleCount));
+                scores.Triangle = Mathf.Min(scores.Triangle, MatchTutorialTemplateFamily(resampled, TutorialDrawShape.Triangle, reverse, sampleCount));
+            }
+
+            ApplyTutorialTemplateBest(TutorialDrawShape.Circle, scores.Circle, ref scores);
+            ApplyTutorialTemplateBest(TutorialDrawShape.Rectangle, scores.Rectangle, ref scores);
+            ApplyTutorialTemplateBest(TutorialDrawShape.Triangle, scores.Triangle, ref scores);
+            return scores;
+        }
+
+        private static void ApplyTutorialTemplateBest(TutorialDrawShape shape, float score, ref TutorialDrawShapeScores scores)
+        {
+            if (score < scores.BestScore)
+            {
+                scores.SecondScore = scores.BestScore;
+                scores.BestScore = score;
+                scores.BestShape = shape;
+            }
+            else if (score < scores.SecondScore)
+            {
+                scores.SecondScore = score;
+            }
+        }
+
+        private static float MatchTutorialTemplateFamily(System.Collections.Generic.List<Vector2> points, TutorialDrawShape shape, bool reverse, int sampleCount)
+        {
+            var best = float.PositiveInfinity;
+            switch (shape)
+            {
+                case TutorialDrawShape.Circle:
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialEllipseTemplate(1f, 1f, reverse, sampleCount)));
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialEllipseTemplate(1f, 0.78f, reverse, sampleCount)));
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialEllipseTemplate(0.78f, 1f, reverse, sampleCount)));
+                    break;
+                case TutorialDrawShape.Rectangle:
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialRectangleTemplate(1f, 1f, reverse, sampleCount)));
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialRectangleTemplate(1f, 0.64f, reverse, sampleCount)));
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialRectangleTemplate(0.64f, 1f, reverse, sampleCount)));
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialRectangleTemplate(1f, 0.42f, reverse, sampleCount)));
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialRectangleTemplate(0.42f, 1f, reverse, sampleCount)));
+                    break;
+                case TutorialDrawShape.Triangle:
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialTriangleTemplate(new Vector2(0f, 0.62f), new Vector2(-0.58f, -0.48f), new Vector2(0.58f, -0.48f), reverse, sampleCount)));
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialTriangleTemplate(new Vector2(0f, 0.72f), new Vector2(-0.34f, -0.48f), new Vector2(0.34f, -0.48f), reverse, sampleCount)));
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialTriangleTemplate(new Vector2(0f, 0.42f), new Vector2(-0.68f, -0.42f), new Vector2(0.68f, -0.42f), reverse, sampleCount)));
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialTriangleTemplate(new Vector2(-0.56f, 0.52f), new Vector2(-0.56f, -0.50f), new Vector2(0.62f, -0.50f), reverse, sampleCount)));
+                    best = Mathf.Min(best, MatchTutorialTemplate(points, CreateTutorialTriangleTemplate(new Vector2(0.56f, 0.52f), new Vector2(-0.62f, -0.50f), new Vector2(0.56f, -0.50f), reverse, sampleCount)));
+                    break;
+            }
+            return best;
+        }
+
+        private static float MatchTutorialTemplate(System.Collections.Generic.List<Vector2> points, System.Collections.Generic.List<Vector2> template)
+        {
+            var best = float.PositiveInfinity;
+            for (var angle = 0; angle < 180; angle += 15)
+            {
+                var rotated = RotateTutorialTemplatePoints(points, angle * Mathf.Deg2Rad);
+                for (var shift = 0; shift < rotated.Count; shift += 4)
+                {
+                    var total = 0f;
+                    for (var i = 0; i < rotated.Count; i++)
+                    {
+                        total += Vector2.Distance(rotated[(i + shift) % rotated.Count], template[i]);
+                    }
+                    best = Mathf.Min(best, total / rotated.Count);
+                }
+            }
+            return best;
+        }
+
+        private static System.Collections.Generic.List<Vector2> CreateTutorialEllipseTemplate(float width, float height, bool reverse, int sampleCount)
+        {
+            var points = new System.Collections.Generic.List<Vector2>(sampleCount);
+            for (var i = 0; i < sampleCount; i++)
+            {
+                var t = (float)i / sampleCount;
+                if (reverse)
+                {
+                    t = 1f - t;
+                }
+                var angle = t * Mathf.PI * 2f;
+                points.Add(new Vector2(Mathf.Cos(angle) * width * 0.5f, Mathf.Sin(angle) * height * 0.5f));
+            }
+            return NormalizeTutorialTemplatePoints(points);
+        }
+
+        private static System.Collections.Generic.List<Vector2> CreateTutorialRectangleTemplate(float width, float height, bool reverse, int sampleCount)
+        {
+            var halfW = width * 0.5f;
+            var halfH = height * 0.5f;
+            var corners = new System.Collections.Generic.List<Vector2>
+            {
+                new Vector2(-halfW, halfH),
+                new Vector2(halfW, halfH),
+                new Vector2(halfW, -halfH),
+                new Vector2(-halfW, -halfH),
+                new Vector2(-halfW, halfH),
+            };
+            if (reverse)
+            {
+                corners.Reverse();
+            }
+            return NormalizeTutorialTemplatePoints(ResampleTutorialDrawPoints(corners, sampleCount));
+        }
+
+        private static System.Collections.Generic.List<Vector2> CreateTutorialTriangleTemplate(Vector2 a, Vector2 b, Vector2 c, bool reverse, int sampleCount)
+        {
+            var corners = new System.Collections.Generic.List<Vector2> { a, b, c, a };
+            if (reverse)
+            {
+                corners = new System.Collections.Generic.List<Vector2> { a, c, b, a };
+            }
+            return NormalizeTutorialTemplatePoints(ResampleTutorialDrawPoints(corners, sampleCount));
+        }
+
+        private static System.Collections.Generic.List<Vector2> ResampleTutorialDrawPoints(System.Collections.Generic.List<Vector2> source, int sampleCount)
+        {
+            var result = new System.Collections.Generic.List<Vector2>(sampleCount);
+            if (source == null || source.Count == 0)
+            {
+                return result;
+            }
+            if (source.Count == 1)
+            {
+                for (var i = 0; i < sampleCount; i++)
+                {
+                    result.Add(source[0]);
+                }
+                return result;
+            }
+
+            var totalLength = 0f;
+            for (var i = 1; i < source.Count; i++)
+            {
+                totalLength += Vector2.Distance(source[i - 1], source[i]);
+            }
+            if (totalLength < 0.0001f)
+            {
+                for (var i = 0; i < sampleCount; i++)
+                {
+                    result.Add(source[0]);
+                }
+                return result;
+            }
+
+            var interval = totalLength / sampleCount;
+            var segmentIndex = 1;
+            var distanceBeforeSegment = 0f;
+            var nextDistance = 0f;
+            for (var sample = 0; sample < sampleCount; sample++)
+            {
+                while (segmentIndex < source.Count)
+                {
+                    var segmentLength = Vector2.Distance(source[segmentIndex - 1], source[segmentIndex]);
+                    if (distanceBeforeSegment + segmentLength >= nextDistance)
+                    {
+                        var t = segmentLength < 0.0001f ? 0f : (nextDistance - distanceBeforeSegment) / segmentLength;
+                        result.Add(Vector2.Lerp(source[segmentIndex - 1], source[segmentIndex], Mathf.Clamp01(t)));
+                        break;
+                    }
+                    distanceBeforeSegment += segmentLength;
+                    segmentIndex++;
+                }
+                if (result.Count <= sample)
+                {
+                    result.Add(source[source.Count - 1]);
+                }
+                nextDistance += interval;
+            }
+            return result;
+        }
+
+        private static System.Collections.Generic.List<Vector2> NormalizeTutorialTemplatePoints(System.Collections.Generic.List<Vector2> source)
+        {
+            var result = new System.Collections.Generic.List<Vector2>(source.Count);
+            if (source.Count == 0)
+            {
+                return result;
+            }
+
+            var minX = float.PositiveInfinity;
+            var maxX = float.NegativeInfinity;
+            var minY = float.PositiveInfinity;
+            var maxY = float.NegativeInfinity;
+            for (var i = 0; i < source.Count; i++)
+            {
+                minX = Mathf.Min(minX, source[i].x);
+                maxX = Mathf.Max(maxX, source[i].x);
+                minY = Mathf.Min(minY, source[i].y);
+                maxY = Mathf.Max(maxY, source[i].y);
+            }
+
+            var center = new Vector2((minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
+            var scale = Mathf.Max(maxX - minX, maxY - minY, 0.001f);
+            for (var i = 0; i < source.Count; i++)
+            {
+                result.Add((source[i] - center) / scale);
+            }
+            return result;
+        }
+
+        private static System.Collections.Generic.List<Vector2> RotateTutorialTemplatePoints(System.Collections.Generic.List<Vector2> source, float radians)
+        {
+            var result = new System.Collections.Generic.List<Vector2>(source.Count);
+            var cos = Mathf.Cos(radians);
+            var sin = Mathf.Sin(radians);
+            for (var i = 0; i < source.Count; i++)
+            {
+                var point = source[i];
+                result.Add(new Vector2(point.x * cos - point.y * sin, point.x * sin + point.y * cos));
+            }
+            return result;
+        }
+
+        private static bool ApplyTutorialRectangleResult(System.Collections.Generic.List<Vector2> rectangle, System.Collections.Generic.List<Vector2> points, Vector2 center2, out TutorialDrawShapeResult result)
+        {
+            var axis = LongestPolygonEdgeDirection(rectangle);
+            var projection = ProjectTutorialDrawBounds(points, axis, center2);
+            var yaw = Mathf.Atan2(-axis.y, axis.x) * Mathf.Rad2Deg;
+            result = new TutorialDrawShapeResult
+            {
+                Shape = TutorialDrawShape.Rectangle,
+                Center = new Vector3(center2.x, 0.7f, center2.y),
+                Scale = new Vector3(Mathf.Clamp(projection.x, 0.42f, 1.55f), 0.48f, Mathf.Clamp(projection.y, 0.32f, 1.25f)),
+                Rotation = Quaternion.Euler(0f, yaw, 0f),
+                Radius = 0.36f,
+                Height = 0.7f,
+            };
+            return true;
+        }
+
+        private static bool ApplyTutorialCircleResult(float averageRadius, Vector2 center2, out TutorialDrawShapeResult result)
+        {
+            var diameter = Mathf.Clamp(averageRadius * 2f, 0.45f, 1.45f);
+            result = new TutorialDrawShapeResult
+            {
+                Shape = TutorialDrawShape.Circle,
+                Center = new Vector3(center2.x, 0.7f, center2.y),
+                Scale = Vector3.one * diameter,
+                Rotation = Quaternion.identity,
+                Radius = diameter * 0.5f,
+                Height = 0.7f,
+            };
+            return true;
+        }
+
+        private System.Collections.Generic.List<Vector2> BuildTutorialDraw2DPoints()
+        {
+            var points = new System.Collections.Generic.List<Vector2>();
+            for (var i = 0; i < tutorialDrawWorldPoints.Count; i++)
+            {
+                var world = tutorialDrawWorldPoints[i];
+                var point = new Vector2(world.x, world.z);
+                if (points.Count == 0 || Vector2.Distance(points[points.Count - 1], point) >= 0.045f)
+                {
+                    points.Add(point);
+                }
+            }
+            return points;
+        }
+
+        private static bool TryFindTutorialDrawPolygon(System.Collections.Generic.List<Vector2> points, float diagonal, int desiredVertices, out System.Collections.Generic.List<Vector2> polygon)
+        {
+            polygon = null;
+            var factors = new[] { 0.20f, 0.16f, 0.12f, 0.09f, 0.07f };
+            for (var i = 0; i < factors.Length; i++)
+            {
+                var candidate = SimplifyTutorialDrawPolygon(points, diagonal * factors[i]);
+                if (candidate.Count == desiredVertices)
+                {
+                    polygon = candidate;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static System.Collections.Generic.List<Vector2> SimplifyTutorialDrawPolygon(System.Collections.Generic.List<Vector2> points, float epsilon)
+        {
+            var open = new System.Collections.Generic.List<Vector2>(points);
+            if (open.Count > 2 && Vector2.Distance(open[0], open[open.Count - 1]) < epsilon * 2.5f)
+            {
+                open.RemoveAt(open.Count - 1);
+            }
+
+            var simplified = RdpSimplify(open, epsilon);
+            RemoveWeakPolygonVertices(simplified, epsilon * 1.65f);
+            return simplified;
+        }
+
+        private static System.Collections.Generic.List<Vector2> RdpSimplify(System.Collections.Generic.List<Vector2> points, float epsilon)
+        {
+            if (points.Count <= 2)
+            {
+                return new System.Collections.Generic.List<Vector2>(points);
+            }
+
+            var index = 0;
+            var maxDistance = 0f;
+            for (var i = 1; i < points.Count - 1; i++)
+            {
+                var distance = DistancePointToLine(points[i], points[0], points[points.Count - 1]);
+                if (distance > maxDistance)
+                {
+                    index = i;
+                    maxDistance = distance;
+                }
+            }
+
+            if (maxDistance <= epsilon)
+            {
+                return new System.Collections.Generic.List<Vector2> { points[0], points[points.Count - 1] };
+            }
+
+            var left = RdpSimplify(points.GetRange(0, index + 1), epsilon);
+            var right = RdpSimplify(points.GetRange(index, points.Count - index), epsilon);
+            left.RemoveAt(left.Count - 1);
+            left.AddRange(right);
+            return left;
+        }
+
+        private static void RemoveWeakPolygonVertices(System.Collections.Generic.List<Vector2> polygon, float minEdge)
+        {
+            for (var guard = 0; guard < 8 && polygon.Count > 3; guard++)
+            {
+                var removed = false;
+                for (var i = polygon.Count - 1; i >= 0; i--)
+                {
+                    var previous = polygon[(i - 1 + polygon.Count) % polygon.Count];
+                    var current = polygon[i];
+                    var next = polygon[(i + 1) % polygon.Count];
+                    var shortEdge = Vector2.Distance(previous, current) < minEdge || Vector2.Distance(current, next) < minEdge;
+                    var angle = Vector2.Angle((previous - current).normalized, (next - current).normalized);
+                    if (shortEdge || angle > 158f)
+                    {
+                        polygon.RemoveAt(i);
+                        removed = true;
+                    }
+                }
+                if (!removed)
+                {
+                    break;
+                }
+            }
+        }
+
+        private static bool IsTriangleLike(System.Collections.Generic.List<Vector2> polygon, float diagonal)
+        {
+            if (polygon.Count != 3)
+            {
+                return false;
+            }
+
+            var area = Mathf.Abs(Cross2D(polygon[1] - polygon[0], polygon[2] - polygon[0])) * 0.5f;
+            if (area < diagonal * diagonal * 0.055f)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < 3; i++)
+            {
+                if (Vector2.Distance(polygon[i], polygon[(i + 1) % 3]) < diagonal * 0.18f)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static Vector2 TriangleBaseAndHeight(System.Collections.Generic.List<Vector2> triangle)
+        {
+            var baseLength = 0f;
+            var altitude = 0f;
+            for (var i = 0; i < 3; i++)
+            {
+                var a = triangle[i];
+                var b = triangle[(i + 1) % 3];
+                var c = triangle[(i + 2) % 3];
+                var edge = Vector2.Distance(a, b);
+                if (edge > baseLength)
+                {
+                    baseLength = edge;
+                    altitude = DistancePointToLine(c, a, b);
+                }
+            }
+            return new Vector2(baseLength, altitude);
+        }
+
+        private static bool IsRectangleLike(System.Collections.Generic.List<Vector2> polygon, float diagonal)
+        {
+            if (polygon.Count != 4)
+            {
+                return false;
+            }
+
+            var edges = new float[4];
+            for (var i = 0; i < 4; i++)
+            {
+                edges[i] = Vector2.Distance(polygon[i], polygon[(i + 1) % 4]);
+                if (edges[i] < diagonal * 0.13f)
+                {
+                    return false;
+                }
+            }
+
+            for (var i = 0; i < 4; i++)
+            {
+                var previous = (polygon[(i - 1 + 4) % 4] - polygon[i]).normalized;
+                var next = (polygon[(i + 1) % 4] - polygon[i]).normalized;
+                var angle = Vector2.Angle(previous, next);
+                if (angle < 48f || angle > 132f)
+                {
+                    return false;
+                }
+            }
+
+            var oppositeA = Mathf.Min(edges[0], edges[2]) / Mathf.Max(edges[0], edges[2]);
+            var oppositeB = Mathf.Min(edges[1], edges[3]) / Mathf.Max(edges[1], edges[3]);
+            return oppositeA > 0.42f && oppositeB > 0.42f;
+        }
+
+        private static float RectangleCornerError(System.Collections.Generic.List<Vector2> polygon)
+        {
+            if (polygon == null || polygon.Count != 4)
+            {
+                return float.PositiveInfinity;
+            }
+
+            var total = 0f;
+            for (var i = 0; i < 4; i++)
+            {
+                var previous = (polygon[(i - 1 + 4) % 4] - polygon[i]).normalized;
+                var next = (polygon[(i + 1) % 4] - polygon[i]).normalized;
+                var angle = Vector2.Angle(previous, next);
+                total += Mathf.Abs(angle - 90f) / 90f;
+            }
+            return total / 4f;
+        }
+
+        private static float PolygonFitError(System.Collections.Generic.List<Vector2> points, System.Collections.Generic.List<Vector2> polygon)
+        {
+            if (polygon == null || polygon.Count < 3 || points.Count == 0)
+            {
+                return float.PositiveInfinity;
+            }
+
+            var total = 0f;
+            for (var i = 0; i < points.Count; i++)
+            {
+                var best = float.PositiveInfinity;
+                for (var j = 0; j < polygon.Count; j++)
+                {
+                    var a = polygon[j];
+                    var b = polygon[(j + 1) % polygon.Count];
+                    best = Mathf.Min(best, DistancePointToLine(points[i], a, b));
+                }
+                total += best;
+            }
+            return total / points.Count;
+        }
+
+        private static float PolygonMaxFitError(System.Collections.Generic.List<Vector2> points, System.Collections.Generic.List<Vector2> polygon)
+        {
+            if (polygon == null || polygon.Count < 3 || points.Count == 0)
+            {
+                return float.PositiveInfinity;
+            }
+
+            var max = 0f;
+            for (var i = 0; i < points.Count; i++)
+            {
+                var best = float.PositiveInfinity;
+                for (var j = 0; j < polygon.Count; j++)
+                {
+                    var a = polygon[j];
+                    var b = polygon[(j + 1) % polygon.Count];
+                    best = Mathf.Min(best, DistancePointToLine(points[i], a, b));
+                }
+                max = Mathf.Max(max, best);
+            }
+            return max;
+        }
+
+        private static float PolygonPerimeter(System.Collections.Generic.List<Vector2> polygon)
+        {
+            if (polygon == null || polygon.Count < 2)
+            {
+                return 0f;
+            }
+
+            var perimeter = 0f;
+            for (var i = 0; i < polygon.Count; i++)
+            {
+                perimeter += Vector2.Distance(polygon[i], polygon[(i + 1) % polygon.Count]);
+            }
+            return perimeter;
+        }
+
+        private static Vector2 LongestPolygonEdgeDirection(System.Collections.Generic.List<Vector2> polygon)
+        {
+            var best = Vector2.right;
+            var bestLength = 0f;
+            for (var i = 0; i < polygon.Count; i++)
+            {
+                var edge = polygon[(i + 1) % polygon.Count] - polygon[i];
+                if (edge.sqrMagnitude > bestLength)
+                {
+                    bestLength = edge.sqrMagnitude;
+                    best = edge.normalized;
+                }
+            }
+            return best.sqrMagnitude < 0.01f ? Vector2.right : best;
+        }
+
+        private static Vector2 ProjectTutorialDrawBounds(System.Collections.Generic.List<Vector2> points, Vector2 axis, Vector2 center)
+        {
+            var side = new Vector2(-axis.y, axis.x);
+            var minA = float.PositiveInfinity;
+            var maxA = float.NegativeInfinity;
+            var minB = float.PositiveInfinity;
+            var maxB = float.NegativeInfinity;
+            for (var i = 0; i < points.Count; i++)
+            {
+                var offset = points[i] - center;
+                var a = Vector2.Dot(offset, axis);
+                var b = Vector2.Dot(offset, side);
+                minA = Mathf.Min(minA, a);
+                maxA = Mathf.Max(maxA, a);
+                minB = Mathf.Min(minB, b);
+                maxB = Mathf.Max(maxB, b);
+            }
+            return new Vector2(maxA - minA, maxB - minB);
+        }
+
+        private static float DistancePointToLine(Vector2 point, Vector2 a, Vector2 b)
+        {
+            var ab = b - a;
+            if (ab.sqrMagnitude < 0.0001f)
+            {
+                return Vector2.Distance(point, a);
+            }
+
+            var t = Mathf.Clamp01(Vector2.Dot(point - a, ab) / ab.sqrMagnitude);
+            return Vector2.Distance(point, a + ab * t);
+        }
+
+        private static Quaternion YawOnly(Quaternion rotation)
+        {
+            return Quaternion.Euler(0f, rotation.eulerAngles.y, 0f);
+        }
+
+        private GameObject CreateTutorialTriangularPyramid(string name, TutorialDrawShapeResult result)
+        {
+            var mesh = new Mesh { name = name + " mesh" };
+            var baseCenter = (result.TriangleA + result.TriangleB + result.TriangleC) / 3f;
+            var height = Mathf.Clamp(result.Height, 0.35f, 1.35f);
+            var top = new Vector3(baseCenter.x, height * 0.5f, baseCenter.y);
+            var a = new Vector3(result.TriangleA.x, -height * 0.5f, result.TriangleA.y);
+            var b = new Vector3(result.TriangleB.x, -height * 0.5f, result.TriangleB.y);
+            var c = new Vector3(result.TriangleC.x, -height * 0.5f, result.TriangleC.y);
+            var meshCenter = new Vector3(baseCenter.x, 0f, baseCenter.y);
+            var vertices = new System.Collections.Generic.List<Vector3>();
+            var triangles = new System.Collections.Generic.List<int>();
+            AddHardFace(vertices, triangles, top, a, b, ((top + a + b) / 3f) - meshCenter);
+            AddHardFace(vertices, triangles, top, b, c, ((top + b + c) / 3f) - meshCenter);
+            AddHardFace(vertices, triangles, top, c, a, ((top + c + a) / 3f) - meshCenter);
+            AddHardFace(vertices, triangles, a, c, b, Vector3.down);
+            mesh.SetVertices(vertices);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            var pyramid = new GameObject(name);
+            pyramid.AddComponent<MeshFilter>().sharedMesh = mesh;
+            pyramid.AddComponent<MeshRenderer>();
+            var collider = pyramid.AddComponent<MeshCollider>();
+            collider.sharedMesh = mesh;
+            collider.convex = true;
+            return pyramid;
+        }
+
+        private static void AddHardFace(System.Collections.Generic.List<Vector3> vertices, System.Collections.Generic.List<int> triangles, Vector3 a, Vector3 b, Vector3 c, Vector3 outward)
+        {
+            var start = vertices.Count;
+            var normal = Vector3.Cross(b - a, c - a);
+            if (Vector3.Dot(normal, outward) < 0f)
+            {
+                vertices.Add(a);
+                vertices.Add(c);
+                vertices.Add(b);
+            }
+            else
+            {
+                vertices.Add(a);
+                vertices.Add(b);
+                vertices.Add(c);
+            }
+            triangles.Add(start);
+            triangles.Add(start + 1);
+            triangles.Add(start + 2);
+        }
+
+        private void UpdateTutorialDrawErase(GestureFrame frame)
+        {
+            if (!tutorialDrawErased)
+            {
+                EnsureTutorialErasePracticeObject();
+            }
+            var selected = IsIndexCrossEraseGesture(frame, out var crossPoint);
+            var target = selected
+                ? FindNearestTutorialDrawnObjectByScreenPoint(crossPoint, mode == GameMode.Level3 ? 0.16f : 0.13f, mode == GameMode.Level0 || mode == GameMode.Level3 ? 1.45f : 1.05f)
+                : null;
+            if (target != null)
+            {
+                if (tutorialEraseTarget != target)
+                {
+                    ClearTutorialEraseSelection(true);
+                    tutorialEraseTarget = target;
+                    tutorialEraseRenderer = tutorialEraseTarget.GetComponent<Renderer>();
+                    tutorialEraseIdleMaterial = boxIdle;
+                    StartTutorialDrawHold();
+                }
+                if (tutorialEraseRenderer != null)
+                {
+                    tutorialEraseRenderer.sharedMaterial = boxHeldMaterial;
+                }
+                if (TutorialDrawHoldProgress() >= 1f)
+                {
+                    var erasedObject = tutorialEraseTarget;
+                    var erasedSpringBlock = mode == GameMode.Level3 && erasedObject == level3SpringBlock;
+                    tutorialDrawnObjects.Remove(tutorialEraseTarget);
+                    DestroyUnityObject(tutorialEraseTarget);
+                    ClearTutorialEraseSelection(false);
+                    tutorialDrawErased = true;
+                    if (mode == GameMode.Level0)
+                    {
+                        tutorialStageSucceeded = true;
+                    }
+                    else if (erasedSpringBlock)
+                    {
+                        TriggerLevel3SpringRelease();
+                    }
+                    if (mode == GameMode.Level3)
+                    {
+                        tutorialDrawErased = false;
+                        level3EraseRequiresGestureReset = true;
+                    }
+                    tutorialDrawMessage = erasedSpringBlock ? "Spring block erased. The spring released." : "Object erased.";
+                    tutorialDrawMessageUntil = Time.time + 1.8f;
+                    ResetTutorialDrawHold();
+                }
+            }
+            else
+            {
+                ClearTutorialEraseSelection(true);
+            }
+        }
+
+        private GameObject FindNearestTutorialDrawnObject(Vector3 point)
+        {
+            return FindNearestTutorialDrawnObject(point, 1.05f);
+        }
+
+        private GameObject FindNearestTutorialDrawnObject(Vector3 point, float maxDistance)
+        {
+            GameObject nearest = null;
+            var nearestDistance = maxDistance;
+            for (var i = tutorialDrawnObjects.Count - 1; i >= 0; i--)
+            {
+                var candidate = tutorialDrawnObjects[i];
+                if (candidate == null)
+                {
+                    tutorialDrawnObjects.RemoveAt(i);
+                    continue;
+                }
+                if (!CanSelectTutorialDrawnObjectForErase(candidate))
+                {
+                    continue;
+                }
+
+                var distance = TutorialDrawnObjectSelectionDistance(point, candidate);
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearest = candidate;
+                }
+            }
+            return nearest;
+        }
+
+        private GameObject FindNearestTutorialDrawnObjectByScreenPoint(Vector2 normalizedPoint, float maxScreenDistance, float maxWorldDistance)
+        {
+            if (mainCamera == null)
+            {
+                return FindNearestTutorialDrawnObject(ScreenToWorldPlane(normalizedPoint.x, normalizedPoint.y, 0.7f), maxWorldDistance);
+            }
+
+            GameObject nearest = null;
+            var nearestScreenDistance = maxScreenDistance;
+            for (var i = tutorialDrawnObjects.Count - 1; i >= 0; i--)
+            {
+                var candidate = tutorialDrawnObjects[i];
+                if (candidate == null)
+                {
+                    tutorialDrawnObjects.RemoveAt(i);
+                    continue;
+                }
+                if (!CanSelectTutorialDrawnObjectForErase(candidate))
+                {
+                    continue;
+                }
+                if (!TryGetTutorialDrawnObjectBounds(candidate, out var bounds))
+                {
+                    continue;
+                }
+
+                var screenDistance = TutorialDrawnObjectScreenDistance(normalizedPoint, bounds);
+                if (screenDistance > nearestScreenDistance)
+                {
+                    continue;
+                }
+
+                var worldProbe = ScreenToWorldPlane(normalizedPoint.x, normalizedPoint.y, bounds.center.y);
+                var worldDistance = TutorialDrawnObjectSelectionDistance(worldProbe, candidate);
+                if (worldDistance > maxWorldDistance)
+                {
+                    continue;
+                }
+
+                nearestScreenDistance = screenDistance;
+                nearest = candidate;
+            }
+            return nearest;
+        }
+
+        private bool CanSelectTutorialDrawnObjectForErase(GameObject candidate)
+        {
+            return candidate != null && (candidate != level3SpringBlock || CanEraseLevel3SpringBlock());
+        }
+
+        private bool TryGetTutorialDrawnObjectBounds(GameObject candidate, out Bounds bounds)
+        {
+            var collider = candidate.GetComponent<Collider>();
+            if (collider != null)
+            {
+                bounds = collider.bounds;
+                return true;
+            }
+
+            var renderer = candidate.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                bounds = renderer.bounds;
+                return true;
+            }
+
+            bounds = new Bounds(candidate.transform.position, Vector3.one * 0.35f);
+            return candidate != null;
+        }
+
+        private float TutorialDrawnObjectScreenDistance(Vector2 normalizedPoint, Bounds bounds)
+        {
+            var best = float.PositiveInfinity;
+            var center = bounds.center;
+            best = Mathf.Min(best, ViewportDistance(normalizedPoint, center));
+            best = Mathf.Min(best, ViewportDistance(normalizedPoint, new Vector3(center.x, bounds.min.y, center.z)));
+            best = Mathf.Min(best, ViewportDistance(normalizedPoint, new Vector3(center.x, bounds.max.y, center.z)));
+
+            for (var x = 0; x < 2; x++)
+            {
+                for (var y = 0; y < 2; y++)
+                {
+                    for (var z = 0; z < 2; z++)
+                    {
+                        var corner = new Vector3(x == 0 ? bounds.min.x : bounds.max.x, y == 0 ? bounds.min.y : bounds.max.y, z == 0 ? bounds.min.z : bounds.max.z);
+                        best = Mathf.Min(best, ViewportDistance(normalizedPoint, corner));
+                    }
+                }
+            }
+
+            return best;
+        }
+
+        private float ViewportDistance(Vector2 normalizedPoint, Vector3 worldPoint)
+        {
+            var viewport = mainCamera.WorldToViewportPoint(worldPoint);
+            if (viewport.z <= 0f)
+            {
+                return float.PositiveInfinity;
+            }
+            return Vector2.Distance(normalizedPoint, new Vector2(viewport.x, viewport.y));
+        }
+
+        private static float TutorialDrawnObjectSelectionDistance(Vector3 point, GameObject candidate)
+        {
+            var collider = candidate.GetComponent<Collider>();
+            if (collider != null)
+            {
+                return BoundsSelectionDistance(point, collider.bounds, collider);
+            }
+
+            var renderer = candidate.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                return BoundsSelectionDistance(point, renderer.bounds, null);
+            }
+
+            return DistanceXZ(point, candidate.transform.position);
+        }
+
+        private static float BoundsSelectionDistance(Vector3 point, Bounds bounds, Collider collider)
+        {
+            var best = float.PositiveInfinity;
+            var heights = new[] { bounds.min.y, bounds.center.y, bounds.max.y };
+            for (var i = 0; i < heights.Length; i++)
+            {
+                var probe = new Vector3(point.x, heights[i], point.z);
+                var closest = collider != null ? collider.ClosestPoint(probe) : bounds.ClosestPoint(probe);
+                best = Mathf.Min(best, Vector3.Distance(probe, closest));
+            }
+            var xzInside = point.x >= bounds.min.x && point.x <= bounds.max.x && point.z >= bounds.min.z && point.z <= bounds.max.z;
+            return xzInside ? 0f : best;
+        }
+
+        private void ResetTutorialDrawnObjectMaterials()
+        {
+            for (var i = tutorialDrawnObjects.Count - 1; i >= 0; i--)
+            {
+                var obj = tutorialDrawnObjects[i];
+                if (obj == null)
+                {
+                    tutorialDrawnObjects.RemoveAt(i);
+                    continue;
+                }
+                if (obj == tutorialEraseTarget || (obj == tutorialDrawHeldObject && tutorialDrawObjectHeld) || obj == tutorialDrawRotatingObject)
+                {
+                    continue;
+                }
+                SetTutorialDrawnObjectMaterial(obj, boxIdle);
+            }
+        }
+
+        private static void SetTutorialDrawnObjectMaterial(GameObject obj, Material material)
+        {
+            if (obj == null || material == null)
+            {
+                return;
+            }
+
+            var renderer = obj.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = material;
+            }
+        }
+
+        private void EnsureTutorialErasePracticeObject()
+        {
+            tutorialDrawnObjects.RemoveAll(obj => obj == null);
+            if (tutorialDrawnObjects.Count > 0)
+            {
+                return;
+            }
+            if (mode == GameMode.Level3)
+            {
+                return;
+            }
+
+            CreateTutorialDrawnObject(PrimitiveType.Cube, new Vector3(0f, 0.7f, 0f), Vector3.one * 0.75f);
+        }
+
+        private void ClearTutorialDrawnObjects()
+        {
+            ClearTutorialEraseSelection(true);
+            for (var i = tutorialDrawnObjects.Count - 1; i >= 0; i--)
+            {
+                if (tutorialDrawnObjects[i] != null)
+                {
+                    DestroyUnityObject(tutorialDrawnObjects[i]);
+                }
+            }
+            tutorialDrawnObjects.Clear();
+            tutorialDrawHeldObject = null;
+            tutorialDrawObjectHeld = false;
+            tutorialDrawRotatingObject = null;
+        }
+
+        private void ResetTutorialDrawingState(bool clearMessage)
+        {
+            tutorialDrawState = TutorialDrawState.WaitingStart;
+            tutorialDrawHoldStart = -1f;
+            tutorialDrawSawFingerSeparation = false;
+            tutorialDrawScreenPoints.Clear();
+            tutorialDrawWorldPoints.Clear();
+            ClearTutorialEraseSelection(true);
+            if (clearMessage)
+            {
+                tutorialDrawMessage = "";
+                tutorialDrawMessageUntil = -1f;
+            }
+        }
+
+        private void StartTutorialDrawHold()
+        {
+            tutorialDrawHoldStart = Time.time;
+        }
+
+        private void ResetTutorialDrawHold()
+        {
+            tutorialDrawHoldStart = -1f;
+        }
+
+        private float TutorialDrawHoldProgress()
+        {
+            return tutorialDrawHoldStart < 0f ? 0f : Mathf.Clamp01((Time.time - tutorialDrawHoldStart) / TutorialDrawConfirmSeconds);
+        }
+
+        private string TutorialDrawStatusText()
+        {
+            var showingErasePrompt = mode == GameMode.Level0 && tutorialStage == TutorialStage.DrawErase;
+            showingErasePrompt |= mode == GameMode.Level3 && (!CanDrawCreateObject() || tutorialEraseTarget != null);
+            if (showingErasePrompt)
+            {
+                return tutorialEraseTarget != null
+                    ? "Keep both index fingers crossed over the highlighted object to erase it."
+                    : "Cross both index fingers over a drawn object to select it.";
+            }
+
+            return tutorialDrawState switch
+            {
+                TutorialDrawState.WaitingStart => "Touch both index fingertips together to prepare drawing.",
+                TutorialDrawState.StartConfirm => "Keep fingertips together to start drawing.",
+                TutorialDrawState.Drawing => "Draw with the right index fingertip. Left hand movement will not finish the drawing.",
+                TutorialDrawState.FinishConfirm => "Keep fingertips together to finish and create the object.",
+                TutorialDrawState.CancelConfirm => "Keep the right fist to cancel this drawing.",
+                _ => "",
+            };
+        }
+
+        private void RestoreTutorialEraseTargetMaterial()
+        {
+            ClearTutorialEraseSelection(true);
+        }
+
+        private void ClearTutorialEraseSelection(bool restoreMaterial)
+        {
+            var hadEraseSelection = tutorialEraseTarget != null || tutorialEraseRenderer != null || tutorialEraseIdleMaterial != null;
+            if (tutorialEraseRenderer != null)
+            {
+                if (restoreMaterial)
+                {
+                    tutorialEraseRenderer.sharedMaterial = tutorialEraseIdleMaterial != null ? tutorialEraseIdleMaterial : boxIdle;
+                }
+            }
+            tutorialEraseTarget = null;
+            tutorialEraseRenderer = null;
+            tutorialEraseIdleMaterial = null;
+            if (hadEraseSelection || tutorialDrawState == TutorialDrawState.WaitingStart)
+            {
+                ResetTutorialDrawHold();
+            }
         }
 
         private void UpdateTutorialBridgePull(GestureHandFrame a, GestureHandFrame b)
@@ -1335,6 +3062,12 @@ namespace HandOfGod.Gameplay
                 case TutorialStage.AirflowDirection:
                     tutorialStageSucceeded |= tutorialAirflowDirected;
                     break;
+                case TutorialStage.DrawCreate:
+                    tutorialStageSucceeded |= tutorialDrawCreated;
+                    break;
+                case TutorialStage.DrawErase:
+                    tutorialStageSucceeded |= tutorialDrawErased;
+                    break;
                 case TutorialStage.Complete:
                     labCompleted = true;
                     tutorialStageSucceeded = true;
@@ -1371,6 +3104,12 @@ namespace HandOfGod.Gameplay
                     nextStage = TutorialStage.AirflowDirection;
                     break;
                 case TutorialStage.AirflowDirection:
+                    nextStage = TutorialStage.DrawCreate;
+                    break;
+                case TutorialStage.DrawCreate:
+                    nextStage = TutorialStage.DrawErase;
+                    break;
+                case TutorialStage.DrawErase:
                     StartLevel(GameMode.Level1);
                     return;
             }
@@ -1397,13 +3136,15 @@ namespace HandOfGod.Gameplay
         {
             return tutorialStage switch
             {
-                TutorialStage.FindHands => "1/7 Move your hands freely.",
-                TutorialStage.OneHandDrag => "2/7 Pinch an object with one hand and drag it.",
-                TutorialStage.TwoHandRotate => "3/7 Pinch both sides and rotate the object.",
-                TutorialStage.BridgePull => "4/7 Join a bridge with both hands.",
-                TutorialStage.PalmActivate => "5/7 Open your palm over the glowing seal.",
-                TutorialStage.MapControl => "6/7 Join index+middle on both hands.",
-                TutorialStage.AirflowDirection => "7/7 Point the airflow with one hand.",
+                TutorialStage.FindHands => "1/9 Move your hands freely.",
+                TutorialStage.OneHandDrag => "2/9 Pinch an object with one hand and drag it.",
+                TutorialStage.TwoHandRotate => "3/9 Pinch both sides and rotate the object.",
+                TutorialStage.BridgePull => "4/9 Join a bridge with both hands.",
+                TutorialStage.PalmActivate => "5/9 Open your palm over the glowing seal.",
+                TutorialStage.MapControl => "6/9 Join index+middle on both hands.",
+                TutorialStage.AirflowDirection => "7/9 Point the airflow with one hand.",
+                TutorialStage.DrawCreate => "8/9 Draw a new object.",
+                TutorialStage.DrawErase => "9/9 Erase a drawn object.",
                 TutorialStage.Complete => "Tutorial complete.",
                 _ => "",
             };
@@ -1420,6 +3161,8 @@ namespace HandOfGod.Gameplay
                 TutorialStage.PalmActivate => "Open one hand and hold it over the glowing seal until it lights up.",
                 TutorialStage.MapControl => "On each hand, keep index and middle fingertips close, with ring and pinky folded, then move both hands to adjust the map.",
                 TutorialStage.AirflowDirection => "Use one hand: extend your thumb, keep index and middle together, fold ring and pinky, then point left or right.",
+                TutorialStage.DrawCreate => "Touch both index fingertips for 2 seconds to start. Draw a circle, rectangle, or triangle with the right index fingertip, then touch both index fingertips again for 2 seconds to create.",
+                TutorialStage.DrawErase => "Cross both index fingers over a drawn object, keep it highlighted, and hold for 2 seconds to erase it.",
                 TutorialStage.Complete => "Hold over Next: Level 1 when ready.",
                 _ => "",
             };
@@ -1766,6 +3509,319 @@ namespace HandOfGod.Gameplay
         private bool IsPinching(GestureHandFrame hand)
         {
             return hand.score >= 0.35f && hand.pinchDistance < pinchThreshold;
+        }
+
+        // -------------------- Level3: Creation Spring --------------------
+        private void BuildLevel3()
+        {
+            levelRoot = new GameObject("Level03 Creation Spring").transform;
+            level3Stage = Level3Stage.CreateBridgeObject;
+            level3CubePlaced = false;
+            level3SpherePlaced = false;
+            level3BridgePlaced = false;
+            level3SpringReleased = false;
+            level3EraseRequiresGestureReset = false;
+            level3SpringReleaseStart = -1f;
+            level3HintMessage = "Create one cube and one sphere, then place each on the matching platform.";
+            level1SuccessUntil = -1f;
+            tutorialDrawCreated = false;
+            tutorialDrawErased = false;
+            tutorialDrawInvalid = false;
+            ResetTutorialDrawingState(true);
+            tutorialDrawnObjects.Clear();
+            tutorialDrawnRoot = new GameObject("level3 created objects").transform;
+            tutorialDrawnRoot.SetParent(levelRoot, false);
+            ConfigureLevel2CameraAndLights();
+
+            var roadRotation = Level3RoadRotation();
+            CreateBox("level3 void shadow plinth", new Vector3(0f, -0.72f, 0f), new Vector3(11.4f, 0.42f, 5.1f), darkStone, levelRoot, Quaternion.identity, false);
+            CreateLevel3RoadBox("level3 start floor", -3.86f, 0f, new Vector3(2.25f, 0.22f, 1.78f), level2FloorMaterial, true);
+            CreateLevel3RoadBox("level3 middle floor", -0.42f, 0f, new Vector3(2.05f, 0.22f, 1.78f), level2FloorMaterial, true);
+            CreateLevel3RoadBox("level3 finish floor", 3.25f, 0f, new Vector3(3.15f, 0.22f, 1.78f), level2FloorMaterial, true);
+            CreateLevel3RoadBox("level3 start centerline", -3.86f, 0f, new Vector3(1.75f, 0.018f, 0.055f), level2TrimMaterial, false, 0.13f);
+            CreateLevel3RoadBox("level3 middle centerline", -0.42f, 0f, new Vector3(1.15f, 0.018f, 0.055f), level2TrimMaterial, false, 0.13f);
+            CreateLevel3RoadBox("level3 finish centerline", 3.25f, 0f, new Vector3(2.45f, 0.018f, 0.055f), level2TrimMaterial, false, 0.13f);
+
+            level3BridgePatch = CreateLevel3RoadBox("level3 creation bridge patch", -2.12f, 0f, new Vector3(1.92f, 0.16f, 1.62f), level2TrimMaterial, true, 0.02f);
+            level3BridgePatchRenderer = level3BridgePatch.GetComponent<Renderer>();
+            level3BridgePatch.SetActive(false);
+
+            var cubePlate = CreateLevel3RoadBox("level3 cube platform", -2.12f, 1.30f, new Vector3(1.32f, 0.06f, 0.98f), level2RuneMaterial, false, 0.18f);
+            level3CubePlate = cubePlate.transform;
+            level3CubePlateRenderer = cubePlate.GetComponent<Renderer>();
+            CreateBox("level3 cube platform icon", level3CubePlate.position + new Vector3(0f, 0.13f, 0f), new Vector3(0.24f, 0.24f, 0.24f), level2TrimMaterial, levelRoot, roadRotation, false);
+
+            var spherePlate = CreateLevel3RoadBox("level3 sphere platform", -2.12f, -1.30f, new Vector3(1.32f, 0.06f, 0.98f), level2RuneMaterial, false, 0.18f);
+            level3SpherePlate = spherePlate.transform;
+            level3SpherePlateRenderer = spherePlate.GetComponent<Renderer>();
+            var sphereIcon = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            sphereIcon.name = "level3 sphere platform icon";
+            sphereIcon.transform.SetParent(levelRoot, false);
+            sphereIcon.transform.SetPositionAndRotation(level3SpherePlate.position + new Vector3(0f, 0.15f, 0f), roadRotation);
+            sphereIcon.transform.localScale = Vector3.one * 0.28f;
+            sphereIcon.GetComponent<Renderer>().sharedMaterial = level2TrimMaterial;
+            DestroyUnityObject(sphereIcon.GetComponent<Collider>());
+
+            startGate = CreateLevel2Gate("level3 creation gate", new Vector3(-2.82f, Level3RoadY(-2.82f) + 0.68f, 0f), 1.74f);
+            bridgeGate = CreateLevel2Gate("level3 spring gate", new Vector3(0.78f, Level3RoadY(0.78f) + 0.68f, 0f), 1.74f);
+            BuildLevel3SpringDevice(1.10f);
+
+            var ballObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            ballObject.name = "Level3 Golden Physics Ball";
+            ballObject.transform.SetParent(levelRoot, false);
+            ballObject.transform.position = new Vector3(-4.56f, Level3RoadY(-4.56f) + 0.48f, 0f);
+            ballObject.transform.localScale = Vector3.one * 0.46f;
+            ballObject.GetComponent<Renderer>().sharedMaterial = ballMaterial;
+            var body = ballObject.AddComponent<Rigidbody>();
+            body.mass = 1.1f;
+            body.linearDamping = 0.08f;
+            body.angularDamping = 0.03f;
+            levelBallBody = body;
+            levelBallRenderer = ballObject.GetComponent<Renderer>();
+            levelBall = ballObject.AddComponent<BallController>();
+
+            var goal = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            goal.name = "Level3 Goal Trigger - Sacred Altar";
+            goal.transform.SetParent(levelRoot, false);
+            goal.transform.SetPositionAndRotation(new Vector3(4.45f, Level3RoadY(4.45f) + 0.22f, 0f), roadRotation);
+            goal.transform.localScale = new Vector3(0.7f, 0.11f, 0.7f);
+            goal.GetComponent<Renderer>().sharedMaterial = level2PortalCoreMaterial;
+            DestroyUnityObject(goal.GetComponent<Collider>());
+            levelBall.Configure(goal.transform);
+            CreateLevel2GoalArt(goal.transform.position);
+        }
+
+        private void BuildLevel3SpringDevice(float x)
+        {
+            var roadY = Level3RoadY(x);
+            var highY = Level3SpringPlatformCenterY(x);
+            var lowY = highY - 0.62f;
+            var position = new Vector3(x, lowY, 0f);
+            CreateBox("level3 spring base", new Vector3(x, roadY - 0.74f, 0f), new Vector3(0.86f, 0.18f, 0.86f), level2WallMaterial, levelRoot, Quaternion.identity, false);
+            CreateTorus("level3 spring lower coil", new Vector3(x, roadY - 0.58f, 0f), 0.34f, 0.035f, tealGlow, levelRoot);
+            CreateTorus("level3 spring upper coil", new Vector3(x, roadY - 0.36f, 0f), 0.34f, 0.035f, tealGlow, levelRoot);
+            var core = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            core.name = "level3 spring core";
+            core.transform.SetParent(levelRoot, false);
+            core.transform.position = new Vector3(x, roadY - 0.47f, 0f);
+            core.transform.localScale = new Vector3(0.16f, 0.34f, 0.16f);
+            core.GetComponent<Renderer>().sharedMaterial = level2TrimMaterial;
+            DestroyUnityObject(core.GetComponent<Collider>());
+            level3SpringCore = core.transform;
+
+            var platform = CreateBox("level3 depressed spring platform", position, new Vector3(2.15f, Level3SpringPlatformThickness, 1.78f), level2TrimMaterial, levelRoot, Level3RoadRotation(), true);
+            level3SpringPlatform = platform.transform;
+            level3SpringPlatformRenderer = platform.GetComponent<Renderer>();
+
+            level3SpringBlock = CreateBox("level3 spring heavy erase block", position + new Vector3(0f, Level3SpringPlatformThickness * 0.5f + 0.36f, 0f), new Vector3(0.96f, 0.72f, 0.96f), boxIdle, levelRoot, Level3RoadRotation(), true);
+            level3SpringBlockRenderer = level3SpringBlock.GetComponent<Renderer>();
+            level3SpringBlockHalo = CreateTorus("level3 spring block erase halo", level3SpringBlock.transform.position + new Vector3(0f, 0.43f, 0f), 0.62f, 0.035f, amberGlow, levelRoot);
+            tutorialDrawnObjects.Add(level3SpringBlock);
+        }
+
+        private GameObject CreateLevel3RoadBox(string name, float x, float z, Vector3 scale, Material material, bool keepCollider, float yOffset = 0f)
+        {
+            return CreateBox(name, new Vector3(x, Level3RoadY(x) + yOffset, z), scale, material, levelRoot, Level3RoadRotation(), keepCollider);
+        }
+
+        private static float Level3RoadY(float x)
+        {
+            return Level3RoadBaseY + (x + 4.5f) * Level3RoadSlope;
+        }
+
+        private static Quaternion Level3RoadRotation()
+        {
+            return Quaternion.Euler(0f, 0f, Level3RoadAngleDegrees);
+        }
+
+        private static float Level3SpringPlatformCenterY(float x)
+        {
+            return Level3RoadY(x) + (Level3RoadThickness - Level3SpringPlatformThickness) * 0.5f * Mathf.Cos(Level3RoadAngleDegrees * Mathf.Deg2Rad);
+        }
+
+        private void UpdateLevel3(GestureHandFrame hand)
+        {
+            if (levelBall == null)
+            {
+                return;
+            }
+
+            var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
+            var target = ScreenToWorldPlane(hand.pinchX, hand.pinchY, 0.7f);
+            var isPinch = IsPinching(hand);
+            var twoHandsPinching = TryGetTwoPinchingHands(out var a, out var b);
+            var level3EraseGesture = IsIndexCrossEraseGesture(frame, out _);
+
+            if (!level3EraseGesture)
+            {
+                level3EraseRequiresGestureReset = false;
+                ClearTutorialEraseSelection(true);
+            }
+            if (!TutorialDrawInputActive() && CanLevel3EraseDrawnObject() && !level3EraseRequiresGestureReset && level3EraseGesture)
+            {
+                UpdateTutorialDrawErase(frame);
+                if (tutorialEraseTarget != null || level3EraseRequiresGestureReset)
+                {
+                    return;
+                }
+            }
+
+            if (CanDrawCreateObject())
+            {
+                UpdateTutorialDrawing(frame);
+            }
+            if (TutorialDrawInputActive())
+            {
+                return;
+            }
+            if (CanManipulateDrawnObjects())
+            {
+                UpdateTutorialDrawnObjectManipulation(hand, target, isPinch, twoHandsPinching, a, b);
+            }
+
+            UpdateLevel3BridgePlacement();
+        }
+
+        private void UpdateLevel3BridgePlacement()
+        {
+            if (level3BridgePlaced || level3CubePlate == null || level3SpherePlate == null)
+            {
+                return;
+            }
+
+            level3CubePlaced = false;
+            level3SpherePlaced = false;
+            for (var i = tutorialDrawnObjects.Count - 1; i >= 0; i--)
+            {
+                var obj = tutorialDrawnObjects[i];
+                if (obj == null)
+                {
+                    tutorialDrawnObjects.RemoveAt(i);
+                    continue;
+                }
+                if (obj == level3SpringBlock)
+                {
+                    continue;
+                }
+
+                var marker = obj.GetComponent<TutorialDrawnShapeMarker>();
+                if (marker == null)
+                {
+                    continue;
+                }
+
+                if (marker.Shape == TutorialDrawShape.Rectangle && DistanceXZ(obj.transform.position, level3CubePlate.position) < 0.86f)
+                {
+                    level3CubePlaced = true;
+                }
+                if (marker.Shape == TutorialDrawShape.Circle && DistanceXZ(obj.transform.position, level3SpherePlate.position) < 0.86f)
+                {
+                    level3SpherePlaced = true;
+                }
+            }
+
+            if (level3CubePlateRenderer != null)
+            {
+                level3CubePlateRenderer.sharedMaterial = level3CubePlaced ? tealGlow : level2RuneMaterial;
+            }
+            if (level3SpherePlateRenderer != null)
+            {
+                level3SpherePlateRenderer.sharedMaterial = level3SpherePlaced ? tealGlow : level2RuneMaterial;
+            }
+
+            if (level3CubePlaced && level3SpherePlaced)
+            {
+                level3BridgePlaced = true;
+                if (level3BridgePatch != null)
+                {
+                    level3BridgePatch.SetActive(true);
+                }
+                if (level3BridgePatchRenderer != null)
+                {
+                    level3BridgePatchRenderer.sharedMaterial = tealGlow;
+                }
+                OpenGate(startGate);
+                AdvanceLevel3(Level3Stage.EraseSpringBlock);
+                level3HintMessage = "Bridge is open. Erase the heavy block to release the spring platform.";
+            }
+        }
+
+        private void TriggerLevel3SpringRelease()
+        {
+            if (level3SpringReleased)
+            {
+                return;
+            }
+
+            level3SpringReleased = true;
+            level3SpringBlock = null;
+            level3SpringBlockRenderer = null;
+            if (level3SpringBlockHalo != null)
+            {
+                DestroyUnityObject(level3SpringBlockHalo);
+                level3SpringBlockHalo = null;
+            }
+            level3SpringReleaseStart = Time.time;
+            if (level3SpringCore != null)
+            {
+                level3SpringCore.GetComponent<Renderer>().sharedMaterial = tealGlow;
+            }
+            if (level3SpringPlatformRenderer != null)
+            {
+                level3SpringPlatformRenderer.sharedMaterial = tealGlow;
+            }
+            OpenGate(bridgeGate);
+            level3HintMessage = "The spring platform is rising into the road.";
+        }
+
+        private void UpdateLevel3SpringAnimation()
+        {
+            if (!level3SpringReleased || level3SpringReleaseStart < 0f)
+            {
+                return;
+            }
+
+            var t = Mathf.Clamp01((Time.time - level3SpringReleaseStart) / 0.85f);
+            var smooth = Mathf.SmoothStep(0f, 1f, t);
+            if (level3SpringPlatform != null)
+            {
+                var highY = Level3SpringPlatformCenterY(level3SpringPlatform.position.x);
+                var lowY = highY - 0.62f;
+                level3SpringPlatform.position = new Vector3(level3SpringPlatform.position.x, Mathf.Lerp(lowY, highY, smooth), level3SpringPlatform.position.z);
+            }
+            if (level3SpringCore != null)
+            {
+                var coreY = Level3RoadY(level3SpringCore.position.x) - Mathf.Lerp(0.47f, 0.16f, smooth);
+                level3SpringCore.position = new Vector3(level3SpringCore.position.x, coreY, level3SpringCore.position.z);
+            }
+            if (t >= 1f && level3Stage != Level3Stage.RunToGoal)
+            {
+                AdvanceLevel3(Level3Stage.RunToGoal);
+                level3HintMessage = "The road is complete. The ball can roll to the altar.";
+            }
+        }
+
+        private void AdvanceLevel3(Level3Stage nextStage)
+        {
+            if (level3Stage == nextStage)
+            {
+                return;
+            }
+
+            level3Stage = nextStage;
+            level1SuccessUntil = Time.time + 1.2f;
+        }
+
+        private string Level3ObjectiveText()
+        {
+            return level3Stage switch
+            {
+                Level3Stage.CreateBridgeObject => "Create a cube and a sphere. Put each one on the matching marked platform.",
+                Level3Stage.PlaceCreatedObject => "Move or rotate the cube to the cube mark and the sphere to the sphere mark.",
+                Level3Stage.EraseSpringBlock => "Cross both index fingers over the heavy block and hold for 2 seconds.",
+                Level3Stage.RunToGoal => "The spring platform completed the road. Let the ball roll to the altar.",
+                _ => "",
+            };
         }
 
         // -------------------- Level2: Portals & Airflow --------------------
@@ -2893,6 +4949,124 @@ namespace HandOfGod.Gameplay
             return false;
         }
 
+        private static bool TryGetHandBySide(GestureFrame frame, string handedness, out GestureHandFrame hand)
+        {
+            hand = default;
+            if (frame.hands == null)
+            {
+                return false;
+            }
+
+            foreach (var candidate in frame.hands)
+            {
+                if (candidate.score >= 0.35f && string.Equals(candidate.handedness, handedness, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    hand = candidate;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool IndexTipsTogether(GestureHandFrame left, GestureHandFrame right)
+        {
+            if (left.landmarks == null || right.landmarks == null || left.landmarks.Length < 9 || right.landmarks.Length < 9)
+            {
+                return false;
+            }
+
+            var averageSpan = Mathf.Max((left.palmSpan + right.palmSpan) * 0.5f, 0.0001f);
+            var distance = LandmarkDistance(left.landmarks[8], right.landmarks[8]) / averageSpan;
+            return distance < 0.58f;
+        }
+
+        private static bool IsFist(GestureHandFrame hand)
+        {
+            if (hand.score < 0.35f || hand.openPalm || hand.landmarks == null || hand.landmarks.Length < 21)
+            {
+                return false;
+            }
+
+            var folded = 0;
+            if (!hand.indexExtended || FingerCurled(hand, 8, 6, 5)) folded++;
+            if (!hand.middleExtended || FingerCurled(hand, 12, 10, 9)) folded++;
+            if (!hand.ringExtended || FingerCurled(hand, 16, 14, 13)) folded++;
+            if (!hand.pinkyExtended || FingerCurled(hand, 20, 18, 17)) folded++;
+            return folded >= 4 && !hand.indexExtended && !hand.middleExtended;
+        }
+
+        private static bool IsIndexCrossEraseGesture(GestureFrame frame, out Vector2 crossPoint)
+        {
+            crossPoint = Vector2.zero;
+            if (!TryGetHandBySide(frame, "Left", out var left) || !TryGetHandBySide(frame, "Right", out var right))
+            {
+                return false;
+            }
+
+            if (left.landmarks == null || right.landmarks == null || left.landmarks.Length < 9 || right.landmarks.Length < 9)
+            {
+                return false;
+            }
+
+            if (!left.indexExtended || !right.indexExtended || left.openPalm || right.openPalm)
+            {
+                return false;
+            }
+
+            var leftMcp = new Vector2(left.landmarks[5].x, left.landmarks[5].y);
+            var leftTip = new Vector2(left.landmarks[8].x, left.landmarks[8].y);
+            var rightMcp = new Vector2(right.landmarks[5].x, right.landmarks[5].y);
+            var rightTip = new Vector2(right.landmarks[8].x, right.landmarks[8].y);
+            var angle = Vector2.Angle(leftTip - leftMcp, rightTip - rightMcp);
+            if (angle < 35f || angle > 145f)
+            {
+                return false;
+            }
+
+            var tipsClose = Vector2.Distance(leftTip, rightTip) < 0.16f;
+            var segmentsCross = TryGetSegmentsIntersection(leftMcp, leftTip, rightMcp, rightTip, out var intersection);
+            if (!tipsClose && !segmentsCross)
+            {
+                return false;
+            }
+
+            crossPoint = segmentsCross ? intersection : (leftTip + rightTip) * 0.5f;
+            return true;
+        }
+
+        private static bool SegmentsIntersect(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
+        {
+            return TryGetSegmentsIntersection(a, b, c, d, out _);
+        }
+
+        private static bool TryGetSegmentsIntersection(Vector2 a, Vector2 b, Vector2 c, Vector2 d, out Vector2 intersection)
+        {
+            var r = b - a;
+            var s = d - c;
+            var denominator = Cross2D(r, s);
+            if (Mathf.Abs(denominator) < 0.0001f)
+            {
+                intersection = Vector2.zero;
+                return false;
+            }
+
+            var u = Cross2D(c - a, r) / denominator;
+            var t = Cross2D(c - a, s) / denominator;
+            if (t < 0f || t > 1f || u < 0f || u > 1f)
+            {
+                intersection = Vector2.zero;
+                return false;
+            }
+
+            intersection = a + r * t;
+            return true;
+        }
+
+        private static float Cross2D(Vector2 a, Vector2 b)
+        {
+            return a.x * b.y - a.y * b.x;
+        }
+
         private bool TryGetTwoFingerMapHands(GestureFrame frame, out GestureHandFrame a, out GestureHandFrame b)
         {
             a = default;
@@ -3161,6 +5335,11 @@ namespace HandOfGod.Gameplay
 
         private void DrawLine(Vector2 start, Vector2 end, Color color, float width)
         {
+            if (Event.current != null && Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+
             lineTexture ??= Texture2D.whiteTexture;
             var delta = end - start;
             var angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
@@ -3406,6 +5585,9 @@ namespace HandOfGod.Gameplay
             if (Application.isEditor)
             {
                 Debug.Log("Quit requested.");
+#if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+#endif
                 return;
             }
             Application.Quit();
@@ -3437,6 +5619,14 @@ namespace HandOfGod.Gameplay
             {
                 if (!bridgeProcess.HasExited)
                 {
+                    if (Application.isEditor)
+                    {
+                        StopBridgeProcessAsync(bridgeProcess);
+                        bridgeProcess = null;
+                        launchedBridge = false;
+                        usesExternalBridge = false;
+                        return;
+                    }
                     KillProcessTree(bridgeProcess.Id);
                     if (!bridgeProcess.WaitForExit(1200))
                     {
@@ -3455,6 +5645,36 @@ namespace HandOfGod.Gameplay
                 bridgeProcess = null;
                 launchedBridge = false;
             }
+        }
+
+        private void StopBridgeProcessAsync(Process process)
+        {
+            if (process == null || stoppingBridge)
+            {
+                return;
+            }
+
+            stoppingBridge = true;
+            var processId = process.Id;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        KillProcessTree(processId);
+                    }
+                    process.Dispose();
+                }
+                catch (System.Exception)
+                {
+                    // Editor shutdown should never be blocked by camera bridge cleanup.
+                }
+                finally
+                {
+                    stoppingBridge = false;
+                }
+            });
         }
 
         private static void KillProcessTree(int processId)
@@ -3519,7 +5739,29 @@ namespace HandOfGod.Gameplay
             tutorialPalmActivated = false;
             tutorialMapAdjusted = false;
             tutorialAirflowDirected = false;
+            tutorialDrawCreated = false;
+            tutorialDrawErased = false;
+            tutorialDrawInvalid = false;
             tutorialAirflowPreviewDirection = 0;
+            tutorialDrawState = TutorialDrawState.WaitingStart;
+            tutorialDrawHoldStart = -1f;
+            tutorialDrawSawFingerSeparation = false;
+            tutorialDrawMessage = "";
+            tutorialDrawMessageUntil = -1f;
+            tutorialDrawScreenPoints.Clear();
+            tutorialDrawWorldPoints.Clear();
+            tutorialDrawnObjects.Clear();
+            tutorialDrawHeldObject = null;
+            tutorialDrawGrabOffset = Vector3.zero;
+            tutorialDrawObjectHeld = false;
+            tutorialDrawRotatingObject = null;
+            tutorialDrawRotateStartDistance = 0f;
+            tutorialDrawRotateStartAngle = 0f;
+            tutorialDrawRotateStartRotation = Quaternion.identity;
+            tutorialDrawnRoot = null;
+            tutorialEraseTarget = null;
+            tutorialEraseRenderer = null;
+            tutorialEraseIdleMaterial = null;
             obstacleBox = null;
             obstacleRenderer = null;
             blockSlotRenderer = null;
@@ -3546,6 +5788,26 @@ namespace HandOfGod.Gameplay
             level1SuccessUntil = -1f;
             level1BoxGrabOffset = Vector3.zero;
             twoHandStartDistance = 0f;
+            level3Stage = Level3Stage.CreateBridgeObject;
+            level3CubePlate = null;
+            level3SpherePlate = null;
+            level3CubePlateRenderer = null;
+            level3SpherePlateRenderer = null;
+            level3BridgePatch = null;
+            level3BridgePatchRenderer = null;
+            level3SpringBlock = null;
+            level3SpringBlockHalo = null;
+            level3SpringBlockRenderer = null;
+            level3SpringPlatform = null;
+            level3SpringPlatformRenderer = null;
+            level3SpringCore = null;
+            level3SpringReleaseStart = -1f;
+            level3CubePlaced = false;
+            level3SpherePlaced = false;
+            level3BridgePlaced = false;
+            level3SpringReleased = false;
+            level3EraseRequiresGestureReset = false;
+            level3HintMessage = "";
         }
 
         private void ResetLevel2RuntimeReferences()

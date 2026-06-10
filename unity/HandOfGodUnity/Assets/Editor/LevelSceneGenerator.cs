@@ -11,6 +11,7 @@ namespace HandOfGod.EditorTools
     {
         private const string ScenePath = "Assets/Scenes/Level01.unity";
         private const string ScenePath02 = "Assets/Scenes/Level02.unity";
+        private const string ScenePath03 = "Assets/Scenes/Level03.unity";
 
         [MenuItem("Hand of God/Rebuild Level 01 Scene")]
         public static void RebuildLevel01()
@@ -25,6 +26,8 @@ namespace HandOfGod.EditorTools
             EditorBuildSettings.scenes = new[]
             {
                 new EditorBuildSettingsScene(ScenePath, true),
+                new EditorBuildSettingsScene(ScenePath02, true),
+                new EditorBuildSettingsScene(ScenePath03, true),
             };
             AssetDatabase.SaveAssets();
             Debug.Log("Hand of God Level01 scene rebuilt.");
@@ -45,9 +48,30 @@ namespace HandOfGod.EditorTools
             {
                 new EditorBuildSettingsScene(ScenePath, true),
                 new EditorBuildSettingsScene(ScenePath02, true),
+                new EditorBuildSettingsScene(ScenePath03, true),
             };
             AssetDatabase.SaveAssets();
             Debug.Log("Hand of God Level02 scene rebuilt.");
+        }
+
+        [MenuItem("Hand of God/Rebuild Level 03 Scene")]
+        public static void RebuildLevel03()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            scene.name = "Level03";
+
+            var bootstrap = new GameObject("Game Bootstrap");
+            bootstrap.AddComponent<GameBootstrap>().BuildGameWorld();
+
+            EditorSceneManager.SaveScene(scene, ScenePath03);
+            EditorBuildSettings.scenes = new[]
+            {
+                new EditorBuildSettingsScene(ScenePath, true),
+                new EditorBuildSettingsScene(ScenePath02, true),
+                new EditorBuildSettingsScene(ScenePath03, true),
+            };
+            AssetDatabase.SaveAssets();
+            Debug.Log("Hand of God Level03 scene rebuilt.");
         }
 
         [MenuItem("Hand of God/Capture Level 01 Preview")]
@@ -140,6 +164,10 @@ namespace HandOfGod.EditorTools
             if (!System.IO.File.Exists(ScenePath02))
             {
                 RebuildLevel02();
+            }
+            if (!System.IO.File.Exists(ScenePath03))
+            {
+                RebuildLevel03();
             }
         }
     }
