@@ -744,7 +744,7 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
-            var panel = new Rect(48f, 104f, 228f, 278f);
+            var panel = new Rect(48f, 104f, 260f, 238f);
             DrawPanel(panel);
             var titleStyle = new GUIStyle(GUI.skin.label)
             {
@@ -754,11 +754,11 @@ namespace HandOfGod.Gameplay
             };
             GUI.Label(new Rect(panel.x + 12f, panel.y + 12f, panel.width - 24f, 26f), "Level Select", titleStyle);
 
-            DrawLevelSelectButton("select-level0", "Level 0: Tutorial", GameMode.Level0, new Rect(panel.x + 18f, panel.y + 48f, panel.width - 36f, 34f));
-            DrawLevelSelectButton("select-level1", "Level 1: Moving Path", GameMode.Level1, new Rect(panel.x + 18f, panel.y + 92f, panel.width - 36f, 34f));
-            DrawLevelSelectButton("select-level2", "Level 2: Portals", GameMode.Level2, new Rect(panel.x + 18f, panel.y + 136f, panel.width - 36f, 34f));
-            DrawLevelSelectButton("select-level3", "Level 3: Spring", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 180f, panel.width - 36f, 34f));
-            DrawLevelSelectButton("select-level4", "Level 4: Reflection", GameMode.Level4, new Rect(panel.x + 18f, panel.y + 224f, panel.width - 36f, 34f));
+            DrawLevelSelectButton("select-level0", "Level 0: Tutorial", GameMode.Level0, new Rect(panel.x + 18f, panel.y + 44f, panel.width - 36f, 30f));
+            DrawLevelSelectButton("select-level1", "Level 1: Moving Path", GameMode.Level1, new Rect(panel.x + 18f, panel.y + 80f, panel.width - 36f, 30f));
+            DrawLevelSelectButton("select-level2", "Level 2: Portals", GameMode.Level2, new Rect(panel.x + 18f, panel.y + 116f, panel.width - 36f, 30f));
+            DrawLevelSelectButton("select-level3", "Level 3: Spring", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 152f, panel.width - 36f, 30f));
+            DrawLevelSelectButton("select-level4", "Level 4: Reflection", GameMode.Level4, new Rect(panel.x + 18f, panel.y + 188f, panel.width - 36f, 30f));
         }
 
         private void DrawLevelSelectButton(string key, string label, GameMode targetMode, Rect rect)
@@ -797,21 +797,13 @@ namespace HandOfGod.Gameplay
             GUI.Label(new Rect(panel.x + 32f, panel.y + 84f, panel.width - 64f, 48f), TutorialDetail(), detailStyle);
             GUI.Label(new Rect(panel.x + 32f, panel.y + 136f, panel.width - 64f, 22f), $"{HandStatusText()}    Pinch threshold: {pinchThreshold:0.00}", statusStyle);
 
-            if (TutorialStageSucceeded())
-            {
-                var finalStage = IsFinalTutorialStage();
-                DrawSuccessBanner(new Rect(Screen.width * 0.5f - 210f, panel.yMax + 14f, 420f, 58f), finalStage ? "TUTORIAL COMPLETE" : "SUCCESS");
-                var buttonLabel = finalStage ? "Next: Level 1" : "Continue";
-                var buttonAction = finalStage ? (System.Action)(() => StartLevel(GameMode.Level1)) : AdvanceTutorialStage;
-                DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 170f, panel.yMax + 82f, 340f, 64f), MenuDwellSeconds, buttonAction, 24);
-            }
-
+            var stageSucceeded = TutorialStageSucceeded();
             DrawTutorialStageMenu();
-            if (tutorialStage == TutorialStage.DrawCreate || tutorialStage == TutorialStage.DrawErase)
+            if (!stageSucceeded && (tutorialStage == TutorialStage.DrawCreate || tutorialStage == TutorialStage.DrawErase))
             {
                 DrawTutorialDrawingHud();
             }
-            if (TutorialUsesLabObject())
+            if (!stageSucceeded && TutorialUsesLabObject())
             {
                 var shapePanel = new Rect(Screen.width - 330f, 310f, 260f, 124f);
                 DrawPanel(shapePanel);
@@ -820,11 +812,20 @@ namespace HandOfGod.Gameplay
                 DrawHoverButton("shape-sphere", "Sphere", new Rect(shapePanel.x + 20f, shapePanel.y + 64f, 210f, 24f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Sphere), 13);
                 DrawHoverButton("shape-cylinder", "Cylinder", new Rect(shapePanel.x + 20f, shapePanel.y + 92f, 210f, 24f), MenuDwellSeconds, () => ReplaceLabObject(PrimitiveType.Cylinder), 13);
             }
+
+            if (stageSucceeded)
+            {
+                var finalStage = IsFinalTutorialStage();
+                DrawSuccessBanner(new Rect(Screen.width * 0.5f - 210f, panel.yMax + 14f, 420f, 58f), finalStage ? "TUTORIAL COMPLETE" : "SUCCESS");
+                var buttonLabel = finalStage ? "Next: Level 1" : "Continue";
+                var buttonAction = finalStage ? (System.Action)(() => StartLevel(GameMode.Level1)) : AdvanceTutorialStage;
+                DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 170f, panel.yMax + 82f, 340f, 64f), MenuDwellSeconds, buttonAction, 24);
+            }
         }
 
         private void DrawTutorialStageMenu()
         {
-            var panel = new Rect(48f, 310f, 260f, 392f);
+            var panel = new Rect(48f, 362f, 260f, 348f);
             DrawPanel(panel);
             var titleStyle = new GUIStyle(GUI.skin.label)
             {
@@ -833,18 +834,18 @@ namespace HandOfGod.Gameplay
                 alignment = TextAnchor.MiddleCenter,
             };
             GUI.Label(new Rect(panel.x + 12f, panel.y + 10f, panel.width - 24f, 24f), "Tutorial Steps", titleStyle);
-            var y = panel.y + 42f;
-            DrawTutorialStageButton("tutorial-jump-hands", "1  Recognize hands", TutorialStage.FindHands, new Rect(panel.x + 18f, y, panel.width - 36f, 26f));
-            DrawTutorialStageButton("tutorial-jump-drag", "2  One-hand drag", TutorialStage.OneHandDrag, new Rect(panel.x + 18f, y + 30f, panel.width - 36f, 26f));
-            DrawTutorialStageButton("tutorial-jump-rotate", "3  Two-hand rotate", TutorialStage.TwoHandRotate, new Rect(panel.x + 18f, y + 60f, panel.width - 36f, 26f));
-            DrawTutorialStageButton("tutorial-jump-bridge", "4  Join bridge", TutorialStage.BridgePull, new Rect(panel.x + 18f, y + 90f, panel.width - 36f, 26f));
-            DrawTutorialStageButton("tutorial-jump-palm", "5  Palm seal", TutorialStage.PalmActivate, new Rect(panel.x + 18f, y + 120f, panel.width - 36f, 26f));
-            DrawTutorialStageButton("tutorial-jump-map", "6  Map control", TutorialStage.MapControl, new Rect(panel.x + 18f, y + 150f, panel.width - 36f, 26f));
-            DrawTutorialStageButton("tutorial-jump-air", "7  Airflow", TutorialStage.AirflowDirection, new Rect(panel.x + 18f, y + 180f, panel.width - 36f, 26f));
-            DrawTutorialStageButton("tutorial-jump-draw", "8  Draw object", TutorialStage.DrawCreate, new Rect(panel.x + 18f, y + 210f, panel.width - 36f, 26f));
-            DrawTutorialStageButton("tutorial-jump-erase", "9  Erase object", TutorialStage.DrawErase, new Rect(panel.x + 18f, y + 240f, panel.width - 36f, 26f));
-            DrawTutorialStageButton("tutorial-jump-mirror", "10 Mirror rotate", TutorialStage.MirrorRotate, new Rect(panel.x + 18f, y + 270f, panel.width - 36f, 26f));
-            DrawTutorialStageButton("tutorial-jump-magnet", "11 Magnet poles", TutorialStage.MagnetPolarity, new Rect(panel.x + 18f, y + 300f, panel.width - 36f, 26f));
+            var y = panel.y + 40f;
+            DrawTutorialStageButton("tutorial-jump-hands", "1  Recognize hands", TutorialStage.FindHands, new Rect(panel.x + 18f, y, panel.width - 36f, 24f));
+            DrawTutorialStageButton("tutorial-jump-drag", "2  One-hand drag", TutorialStage.OneHandDrag, new Rect(panel.x + 18f, y + 28f, panel.width - 36f, 24f));
+            DrawTutorialStageButton("tutorial-jump-rotate", "3  Two-hand rotate", TutorialStage.TwoHandRotate, new Rect(panel.x + 18f, y + 56f, panel.width - 36f, 24f));
+            DrawTutorialStageButton("tutorial-jump-bridge", "4  Join bridge", TutorialStage.BridgePull, new Rect(panel.x + 18f, y + 84f, panel.width - 36f, 24f));
+            DrawTutorialStageButton("tutorial-jump-palm", "5  Palm seal", TutorialStage.PalmActivate, new Rect(panel.x + 18f, y + 112f, panel.width - 36f, 24f));
+            DrawTutorialStageButton("tutorial-jump-map", "6  Map control", TutorialStage.MapControl, new Rect(panel.x + 18f, y + 140f, panel.width - 36f, 24f));
+            DrawTutorialStageButton("tutorial-jump-air", "7  Airflow", TutorialStage.AirflowDirection, new Rect(panel.x + 18f, y + 168f, panel.width - 36f, 24f));
+            DrawTutorialStageButton("tutorial-jump-draw", "8  Draw object", TutorialStage.DrawCreate, new Rect(panel.x + 18f, y + 196f, panel.width - 36f, 24f));
+            DrawTutorialStageButton("tutorial-jump-erase", "9  Erase object", TutorialStage.DrawErase, new Rect(panel.x + 18f, y + 224f, panel.width - 36f, 24f));
+            DrawTutorialStageButton("tutorial-jump-mirror", "10 Mirror rotate", TutorialStage.MirrorRotate, new Rect(panel.x + 18f, y + 252f, panel.width - 36f, 24f));
+            DrawTutorialStageButton("tutorial-jump-magnet", "11 Magnet poles", TutorialStage.MagnetPolarity, new Rect(panel.x + 18f, y + 280f, panel.width - 36f, 24f));
         }
 
         private void DrawTutorialStageButton(string key, string label, TutorialStage targetStage, Rect rect)
