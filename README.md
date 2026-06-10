@@ -24,7 +24,7 @@
 - 校准界面只显示摄像头背景、手骨架和清晰提示，避免地图物体干扰。
 - 所有主要 UI 按钮支持食指悬停选择，同时保留鼠标点击兜底。
 - 左上方 `Exit` / `Calibrate` 按钮放大并向屏幕内侧移动，降低边缘手势抖动和误触。
-- 校准完成后，左侧常驻 `Level Select` 选关栏，可随时进入或重进 Level 0、Level 1、Level 2。
+- 校准完成后，左侧常驻 `Level Select` 选关栏，可随时进入或重进 Level 0、Level 1、Level 2、Level 3。
 - `Start / Retry Camera` 可在自动桥接失败时手动重试。
 - Python 桥接使用本地锁端口 `5007` 保证单实例运行。
 - Unity 退出时会关闭由 Unity 启动的桥接进程，释放摄像头。
@@ -81,7 +81,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - `Exit`：退出游戏。
 - 鼠标点击：所有 UI 按钮仍可用鼠标触发。
 
-校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path` 或 `Level 2: Portals`；在关卡中选择当前关卡会重新开始该关。
+校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path`、`Level 2: Portals` 或 `Level 3: Creation Spring`；在关卡中选择当前关卡会重新开始该关。
 
 ## 手势与交互
 
@@ -118,13 +118,23 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 | 步骤 | 教学目标 | 成功条件 |
 | --- | --- | --- |
-| 1/7 Move your hands freely | 随意移动双手，观察屏幕上的识别效果 | Unity 同时识别到左右手 |
-| 2/7 Pinch an object with one hand and drag it | 单手拇指和食指捏合拖动物体 | 物体被拖动超过指定距离 |
-| 3/7 Pinch both sides and rotate the object | 双手捏住物体两侧并像真实物体一样旋转 | 物体旋转超过指定角度 |
-| 4/7 Join a bridge with both hands | 双手捏住桥板两端并向内拉合 | 双手距离缩短到阈值，桥板锁定 |
-| 5/7 Open your palm over the glowing seal | 张开手掌悬停在发光神印上 | 神印区域内张掌保持到指定时长 |
-| 6/7 Bring index and middle fingers together on both hands | 双手食指中指并拢控制地图 | 地图旋转或缩放超过指定变化量 |
-| 7/7 Point the airflow with one hand | 单手拇指伸出、食指中指并拢、无名指小指收起，向左或向右指示气流 | 第 2 关同款气流区显示 `LEFT` 或 `RIGHT` 风效反馈；手势消失后风效关闭 |
+| 1/9 Move your hands freely | 随意移动双手，观察屏幕上的识别效果 | Unity 同时识别到左右手 |
+| 2/9 Pinch an object with one hand and drag it | 单手拇指和食指捏合拖动物体 | 物体被拖动超过指定距离 |
+| 3/9 Pinch both sides and rotate the object | 双手捏住物体两侧并像真实物体一样旋转 | 物体旋转超过指定角度 |
+| 4/9 Join a bridge with both hands | 双手捏住桥板两端并向内拉合 | 双手距离缩短到阈值，桥板锁定 |
+| 5/9 Open your palm over the glowing seal | 张开手掌悬停在发光神印上 | 神印区域内张掌保持到指定时长 |
+| 6/9 Bring index and middle fingers together on both hands | 双手食指中指并拢控制地图 | 地图旋转或缩放超过指定变化量 |
+| 7/9 Point the airflow with one hand | 单手拇指伸出、食指中指并拢、无名指小指收起，向左或向右指示气流 | 第 2 关同款气流区显示 `LEFT` 或 `RIGHT` 风效反馈；手势消失后风效关闭 |
+| 8/9 Draw a new object | 左右食指指尖重合 2 秒确认开始；开始后只记录右手食指轨迹，左手移动不会结束绘制；右手握拳 2 秒取消；绘制后左右食指再次重合 2 秒确认结束 | 轨迹闭合后识别圆形、矩形或三角形；圆形生成近似半径的球体；矩形生成近似长宽并跟随绘制方向的立方体；三角形生成近似底面和高度的三棱锥；无法识别则提示并取消 |
+| 9/9 Erase a drawn object | 双手食指交叉选中已创建物体；目标命中后物体变为高亮材质 | 交叉姿态保持 2 秒完成确认，只消除当前高亮物体；未命中或松开手势会重置进度 |
+
+第 8、9 步绘制与消除细节：
+
+- 绘制开始和结束都使用左右食指指尖重合确认，确认期间显示进度条，避免单帧误触。
+- 绘制轨迹只使用右手食指点，按屏幕射线投射到固定世界平面后采样；短距离抖动不会产生新采样点。
+- 图形识别要求轨迹闭合，并根据路径长度、包围尺寸、折线简化、边缘拟合、半径误差和长宽比区分圆形、矩形和三角形。
+- 绘制成功后，创造物加入可操作列表；单手捏合可拖动，双手捏合可绕 Y 轴旋转。
+- 消除使用同一套可操作列表，只对当前交叉食指命中的最近物体生效；确认完成后从列表和场景中删除该物体。
 
 教学关中的交互反馈：
 
@@ -239,6 +249,45 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - 气流带使用 `AirBeltTrigger`，在小球停留于触发区时以渐进强度施加水平方向加速度，并限制最大水平推速，让玩家有时间修正方向；风向反转时不会瞬移或清零速度，而是通过反向加速度让小球自然减速、掉头。
 - 气流带在关闭时隐藏实体触发器；保持有效气流手势后 Kenney 粒子贴图雾带和流线随风向滚动，HUD 同步显示 `Airflow: OFF / LEFT / RIGHT`。
 - 保持右风手势时，第二道挡门打开，HUD 显示右风提示；左风会显示纠正提示；松开或姿态不满足气流手势时，气流回到 `OFF`，已打开的挡门保持打开，避免突然卡住小球。
+
+### Level 3: Creation Spring
+
+当前 Level 3 规则：第一机关需要玩家分别绘制并创建一个立方体和一个球体，将立方体放到带 cube 标记的平台、球体放到带 sphere 标记的平台，两个平台都匹配后才生成第一段桥。第二机关是低位弹簧平台，平台初始被重物压低形成断路；双手食指交叉选中并消除重物后，弹簧平台弹起到路面高度，补成完整道路。整条路线带轻微下坡角度，小球可依靠重力继续滑向终点。
+
+第 3 关是创造与消除机关关，放在 Level 1 和 Level 2 之后。玩家需要复用第 0 关第 8、9 步教学中的绘制创造、移动旋转和交叉消除手势，让小球通过一段由机关控制的路径。
+
+关卡类型：绘制创造 + 物体摆放 + 交叉消除 + 弹簧机关。
+
+绘制与消除规则：
+
+- 第 3 关的绘制、图形识别、物体创建、拖动、旋转和消除全部复用第 0 关第 8、9 步的核心算法。
+- 绘制开始、绘制结束、取消绘制、无效图形提示、可识别形状和生成物体类型与教程关一致。
+- 已创建物体可用单手捏合移动、双手捏合绕 Y 轴旋转，也可用双手食指交叉选中并保持 2 秒消除。
+- 绘制或消除刚完成后，必须先松开/退出交叉消除姿态，下一次消除才会重新开始计时，避免新建物体被结束手势立即删除。
+- 第一机关完成前，弹簧压块不会成为可消除目标；只有立方体和球体都放到对应平台并打开前段桥后，第二机关的压块才响应交叉消除。
+
+胜利条件：
+
+- 绘制并创建一个矩形物体和一个圆形物体，对应生成立方体和球体。
+- 将立方体移动或绕 Y 轴旋转到 cube 平台、球体移动到 sphere 平台，两个平台都匹配后打开前段桥和第一道门。
+- 用双手食指交叉选中弹簧装置上的压块，压块变为高亮材质并显示 2 秒进度条。
+- 确认消除压块后弹簧释放，打开后续挡门。
+- 让小球继续前进到终点祭坛并显示 `PASS`。
+
+失败条件：
+
+- 小球掉落到安全高度以下。
+- 失败后重建 Level 3，已创造物、压力板、弹簧压块、挡门和小球回到初始状态。
+
+关卡结构：
+
+| 阶段 | 名称 | 机关 | 使用手势 | 目标 |
+| --- | --- | --- | --- | --- |
+| Segment 1 | 创造准备区 | 发光压力板、断桥、第一道门 | 绘制创造；单手移动；双手旋转 | 创建一个物体并放到压力板上，补出可通过路径 |
+| Segment 2 | 弹簧机关区 | 弹簧底座、可消除压块、第二道门 | 双手食指交叉消除 | 高亮选中压块并保持 2 秒，释放弹簧 |
+| Segment 3 | 终点区 | 终点祭坛 | 物理小球 | 弹簧门打开后让小球到达终点 |
+
+主菜单和左侧 `Level Select` 可直接进入 `Level 3: Creation Spring`；Level 2 通关后的 `PASS` 界面会显示 `Next: Level 3`。Level 3 通关后只显示 `Restart` 和 `Tutorial`。
 
 ## 技术架构
 
@@ -479,7 +528,7 @@ Unity 场景由编辑器工具生成：
 unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 ```
 
-`Level01.unity` 是完整游戏入口场景，启动后包含自动桥接、校准、第 0 关教学、第 1 关和第 2 关。仓库中也包含 `Level02.unity` 作为第二关独立场景资源文件；在 Unity Editor 中直接打开 `Level02.unity` 会自动进入第二关，方便单独检查传送门、气流和地牢美术。Windows 构建包含 `Level01.unity` 和 `Level02.unity`，首个启动场景仍是 `Level01.unity`。
+`Level01.unity` 是完整游戏入口场景，启动后包含自动桥接、校准、第 0 关教学、第 1 关、第 2 关和第 3 关入口。仓库中也包含 `Level02.unity` 与 `Level03.unity` 作为正式关卡独立场景资源文件；在 Unity Editor 中直接打开 `Level02.unity` 或 `Level03.unity` 会自动进入对应关卡，方便单独检查机关、美术和交互。Windows 构建包含 `Level01.unity`、`Level02.unity` 和 `Level03.unity`，首个启动场景仍是 `Level01.unity`。
 
 ## 手动运行桥接
 
@@ -514,8 +563,8 @@ cd "unity\gesture_bridge"
 
 - 张掌保持和捏合保持均可完成校准。
 - `Start / Retry Camera` 可重新启动桥接。
-- `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Restart`、`Tutorial` 都可用食指悬停触发。
-- 校准完成后的左侧 `Level Select` 可随时选择 Level 0、Level 1、Level 2。
+- `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Next: Level 3`、`Restart`、`Tutorial` 都可用食指悬停触发。
+- 校准完成后的左侧 `Level Select` 可随时选择 Level 0、Level 1、Level 2、Level 3。
 - 第 0 关左侧 `Tutorial Steps` 可随时选择任意教学步骤。
 - 按钮尺寸和位置适合手势悬停，不需要把手移动到屏幕极边缘。
 
@@ -530,6 +579,8 @@ cd "unity\gesture_bridge"
 - 张掌悬停可激活神印。
 - 双手食指中指并拢可控制地图旋转和缩放。
 - 单手气流指向手势可在教学地板中央的第 2 关同款气流地板、雾带、流线和箭头上显示左风或右风反馈；手势停止后风效关闭。
+- 第 8 步可用左右食指重合启动绘制，右手食指轨迹能稳定识别圆形、矩形和三角形并创建对应物体；右手握拳可取消。
+- 第 9 步可用双手食指交叉高亮已创建物体，保持 2 秒后只消除当前高亮目标。
 - 每步成功后显示醒目 `SUCCESS`，并等待玩家手动 `Continue`。
 - 最后一个教学步骤完成后不进入自由操作页，悬停 `Next: Level 1` 进入第 1 关。
 - `TUTORIAL COMPLETE` 始终横向显示，只做光晕闪烁，不出现横竖交替抖动。
@@ -566,6 +617,15 @@ cd "unity\gesture_bridge"
 - 小球到达终点后显示 `PASS`。
 - 小球掉落后 Level 2 全局重置，钥匙、锁座、传送门、气流方向、气流 VFX、挡门和小球回到初始状态。
 
+第 3 关：
+
+- `Level03.unity` 位于 `Assets/Scenes` 并登记到 Build Settings，场景生成、入口和重置框架与一二关一致。
+- 绘制、识别、创建、移动、旋转和消除体验应与教程第 8、9 步一致。
+- 第一机关完成前，弹簧压块不响应交叉消除，不会提前释放第二机关。
+- 立方体放到 cube 平台、球体放到 sphere 平台后，前段桥和第一道门打开。
+- 第一机关完成后，交叉食指选中弹簧压块并保持 2 秒可释放弹簧平台。
+- 绘制或消除刚完成后，继续保持交叉姿态不会立刻误删新创建物体。
+
 ## 目录结构
 
 ```text
@@ -583,7 +643,8 @@ cd "unity\gesture_bridge"
 │     │  │  └─ LevelSceneGenerator.cs
 │     │  ├─ Scenes
 │     │  │  ├─ Level01.unity
-│     │  │  └─ Level02.unity
+│     │  │  ├─ Level02.unity
+│     │  │  └─ Level03.unity
 │     │  └─ Scripts
 │     │     ├─ AirBeltTrigger.cs
 │     │     ├─ BallController.cs
