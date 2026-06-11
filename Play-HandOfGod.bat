@@ -10,7 +10,7 @@ set "BRIDGE_DIR=%ROOT%unity\gesture_bridge"
 set "BRIDGE_PY=%BRIDGE_DIR%\mediapipe_udp_sender.py"
 set "BRIDGE_RUNTIME=D:\Unity\HandOfGodGestureBridge"
 set "VENV_PY=%BRIDGE_RUNTIME%\.venv\Scripts\python.exe"
-set "PYTHON_CMD=py -3.11"
+set "PYTHON_CMD="
 set "PYTHON_AVAILABLE=1"
 
 if not exist "%GAME_EXE%" (
@@ -33,18 +33,34 @@ if errorlevel 2 (
 
 where py >nul 2>nul
 if errorlevel 1 (
-  echo Python launcher was not found. The game will start, but the gesture bridge cannot run.
-  echo Install Python 3.11 or repair the Python launcher.
-  pause
-  set "PYTHON_AVAILABLE=0"
+  where python >nul 2>nul
+  if errorlevel 1 (
+    echo Python was not found. The game will start without the gesture bridge.
+    set "PYTHON_AVAILABLE=0"
+  ) else (
+    set "PYTHON_CMD=python"
+  )
+)
+
+if "%PYTHON_AVAILABLE%"=="1" if "%PYTHON_CMD%"=="" (
+  py -3.11 --version >nul 2>nul
+  if not errorlevel 1 set "PYTHON_CMD=py -3.11"
+)
+
+if "%PYTHON_AVAILABLE%"=="1" if "%PYTHON_CMD%"=="" (
+  py -3.12 --version >nul 2>nul
+  if not errorlevel 1 set "PYTHON_CMD=py -3.12"
+)
+
+if "%PYTHON_AVAILABLE%"=="1" if "%PYTHON_CMD%"=="" (
+  py -3 --version >nul 2>nul
+  if not errorlevel 1 set "PYTHON_CMD=py -3"
 )
 
 if "%PYTHON_AVAILABLE%"=="1" (
   %PYTHON_CMD% --version >nul 2>nul
   if errorlevel 1 (
-    echo Python 3.11 was not found.
-    echo Install 64-bit Python 3.11 and make sure "py -3.11 --version" works.
-    pause
+    echo Python was not found. The game will start without the gesture bridge.
     set "PYTHON_AVAILABLE=0"
   )
 )
@@ -69,5 +85,9 @@ if "%PYTHON_AVAILABLE%"=="1" if exist "%BRIDGE_PY%" (
 
 )
 
-start "" "%GAME_EXE%" --gesture-bridge-dir "%BRIDGE_DIR%" --gesture-python "%VENV_PY%"
+if exist "%VENV_PY%" (
+  start "" "%GAME_EXE%" --gesture-bridge-dir "%BRIDGE_DIR%" --gesture-python "%VENV_PY%"
+) else (
+  start "" "%GAME_EXE%"
+)
 exit /b 0

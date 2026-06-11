@@ -101,6 +101,22 @@ namespace HandOfGod.Gameplay
             public float SecondScore;
         }
 
+        private readonly struct Level3TransformOverride
+        {
+            public readonly string Name;
+            public readonly Vector3 LocalPosition;
+            public readonly Quaternion LocalRotation;
+            public readonly Vector3 LocalScale;
+
+            public Level3TransformOverride(string name, Vector3 localPosition, Quaternion localRotation, Vector3 localScale)
+            {
+                Name = name;
+                LocalPosition = localPosition;
+                LocalRotation = localRotation;
+                LocalScale = localScale;
+            }
+        }
+
         private sealed class TutorialDrawnShapeMarker : MonoBehaviour
         {
             public TutorialDrawShape Shape;
@@ -118,6 +134,114 @@ namespace HandOfGod.Gameplay
         private const float Level3RoadSlope = -0.0735f;
         private const float Level3RoadThickness = 0.22f;
         private const float Level3SpringPlatformThickness = 0.18f;
+        private const float Level3SlideBridgeParkZ = 2.42f;
+        private const float Level3SlideBridgeFinalZ = 0f;
+        private const float Level3SlideBridgeCenterX = 1.15f;
+        private const float Level3SlideBridgeWidth = 1.12f;
+        private static readonly Level3TransformOverride[] Level3SceneTransformOverrides =
+        {
+            new Level3TransformOverride("Kenney template-detail", new Vector3(4.45f, -0.287825f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.88f, 0.3f, 0.88f)),
+            new Level3TransformOverride("Level03 Creation Spring", new Vector3(0f, 0f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
+            new Level3TransformOverride("level2 goal inner halo", new Vector3(4.45f, 0.072175f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1.1f, 1.1f, 1.1f)),
+            new Level3TransformOverride("level2 goal outer halo", new Vector3(4.45f, -0.027825f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
+            new Level3TransformOverride("Level2 Portal Accent Light", new Vector3(0.6f, 2.8f, -1.4f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
+            new Level3TransformOverride("level3 created objects", new Vector3(0f, 0f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
+            new Level3TransformOverride("level3 creation bridge patch", new Vector3(-2.12f, 0.12507f, 0f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.92f, 0.16f, 1.62f)),
+            new Level3TransformOverride("level3 creation gate", new Vector3(-2.82f, 0.83652f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
+            new Level3TransformOverride("level3 creation gate cyan lock core", new Vector3(0.024f, -0.094f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.13f, 0.22f, 0.22f)),
+            new Level3TransformOverride("level3 creation gate glow lintel", new Vector3(0.024f, 0.186f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.16f, 0.08f, 1.74f)),
+            new Level3TransformOverride("level3 creation gate lower rail", new Vector3(0.024f, -0.454f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.16f, 0.08f, 1.74f)),
+            new Level3TransformOverride("level3 creation gate metal bar 0", new Vector3(0.024f, -0.154f, -0.696f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 creation gate metal bar 1", new Vector3(0.024f, -0.154f, -0.464f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 creation gate metal bar 2", new Vector3(0.024f, -0.154f, -0.232f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 creation gate metal bar 3", new Vector3(0.024f, -0.154f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 creation gate metal bar 4", new Vector3(0.024f, -0.154f, 0.232f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 creation gate metal bar 5", new Vector3(0.024f, -0.154f, 0.464f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 creation gate metal bar 6", new Vector3(0.024f, -0.154f, 0.696f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 cube platform", new Vector3(-2.113f, 0.285f, 1.3f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.32f, 0.06f, 0.98f)),
+            new Level3TransformOverride("level3 cube platform icon", new Vector3(-2.131f, 0.307f, 1.3f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.24f, 0.05f, 0.24f)),
+            new Level3TransformOverride("level3 cube platform rune corner glow 0", new Vector3(-2.68f, 0.36507f, 0.9f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.13f, 0.028f, 0.13f)),
+            new Level3TransformOverride("level3 cube platform rune corner glow 1", new Vector3(-2.68f, 0.36507f, 1.7f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.13f, 0.028f, 0.13f)),
+            new Level3TransformOverride("level3 cube platform rune corner glow 2", new Vector3(-1.563f, 0.276f, 0.9f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.13f, 0.028f, 0.13f)),
+            new Level3TransformOverride("level3 cube platform rune corner glow 3", new Vector3(-1.563f, 0.276f, 1.7f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.13f, 0.028f, 0.13f)),
+            new Level3TransformOverride("level3 finish centerline", new Vector3(3.25f, -0.159625f, 0f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.45f, 0.018f, 0.055f)),
+            new Level3TransformOverride("level3 finish floor", new Vector3(3.25f, -0.289625f, 0f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(3.15f, 0.22f, 1.78f)),
+            new Level3TransformOverride("level3 finish railing side 0 lower rail", new Vector3(3.245f, -0.054737f, -0.86f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.85f, 0.045f, 0.05f)),
+            new Level3TransformOverride("level3 finish railing side 0 support 0", new Vector3(1.82f, 0.06f, -0.86f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 finish railing side 0 support 1", new Vector3(2.77f, -0.009825f, -0.86f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 finish railing side 0 support 2", new Vector3(3.72f, -0.07965f, -0.86f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 finish railing side 0 support 3", new Vector3(4.67f, -0.149475f, -0.86f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 finish railing side 0 upper rail", new Vector3(3.245f, 0.075263f, -0.86f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.85f, 0.055f, 0.06f)),
+            new Level3TransformOverride("level3 finish railing side 1 lower rail", new Vector3(3.245f, -0.063f, 0.853f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.85f, 0.045f, 0.05f)),
+            new Level3TransformOverride("level3 finish railing side 1 support 0", new Vector3(1.82f, 0.051737f, 0.853f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 finish railing side 1 support 1", new Vector3(2.77f, -0.018088f, 0.853f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 finish railing side 1 support 2", new Vector3(3.72f, -0.087913f, 0.853f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 finish railing side 1 support 3", new Vector3(4.67f, -0.157738f, 0.853f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 finish railing side 1 upper rail", new Vector3(3.245f, 0.067f, 0.853f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.85f, 0.055f, 0.06f)),
+            new Level3TransformOverride("Level3 Goal Trigger - Sacred Altar", new Vector3(4.45f, -0.157825f, 0f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.7f, 0.11f, 0.7f)),
+            new Level3TransformOverride("Level3 Golden Physics Ball", new Vector3(-4.56f, 0.76441f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.46f, 0.46f, 0.46f)),
+            new Level3TransformOverride("level3 middle centerline", new Vector3(-0.42f, 0.11012f, 0f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.15f, 0.018f, 0.055f)),
+            new Level3TransformOverride("level3 middle floor", new Vector3(-0.42f, -0.01988f, 0f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.05f, 0.22f, 1.78f)),
+            new Level3TransformOverride("level3 middle railing side 0 lower rail", new Vector3(-0.424667f, 0.21107f, -0.84f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.72f, 0.045f, 0.05f)),
+            new Level3TransformOverride("level3 middle railing side 0 support 0", new Vector3(-1.284f, 0.298f, -0.836f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 middle railing side 0 support 1", new Vector3(-0.711333f, 0.24214f, -0.84f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 middle railing side 0 support 2", new Vector3(-0.138f, 0.2f, -0.84f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 middle railing side 0 support 3", new Vector3(0.435333f, 0.15786f, -0.84f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 middle railing side 0 upper rail", new Vector3(-0.424667f, 0.34107f, -0.84f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.72f, 0.055f, 0.06f)),
+            new Level3TransformOverride("level3 middle railing side 1 lower rail", new Vector3(-0.426f, 0.19421f, 0.851f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.72f, 0.045f, 0.05f)),
+            new Level3TransformOverride("level3 middle railing side 1 support 0", new Vector3(-1.286f, 0.26742f, 0.851f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 middle railing side 1 support 1", new Vector3(-0.712667f, 0.22528f, 0.851f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 middle railing side 1 support 2", new Vector3(-0.139333f, 0.18314f, 0.851f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 middle railing side 1 support 3", new Vector3(0.434f, 0.141f, 0.851f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 middle railing side 1 upper rail", new Vector3(-0.426f, 0.32421f, 0.851f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.72f, 0.055f, 0.06f)),
+            new Level3TransformOverride("level3 side parked sliding bridge", new Vector3(1.15f, -0.115329f, 2.42f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.12f, 0.18f, 1.78f)),
+            new Level3TransformOverride("level3 slide gate", new Vector3(0.78f, 0.57192f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
+            new Level3TransformOverride("level3 slide gate cyan lock core", new Vector3(-0.234f, -0.082f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.13f, 0.22f, 0.22f)),
+            new Level3TransformOverride("level3 slide gate glow lintel", new Vector3(-0.234f, 0.198f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.16f, 0.08f, 1.74f)),
+            new Level3TransformOverride("level3 slide gate lower rail", new Vector3(-0.234f, -0.442f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.16f, 0.08f, 1.74f)),
+            new Level3TransformOverride("level3 slide gate metal bar 0", new Vector3(-0.234f, -0.142f, -0.696f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 slide gate metal bar 1", new Vector3(-0.234f, -0.142f, -0.464f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 slide gate metal bar 2", new Vector3(-0.234f, -0.142f, -0.232f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 slide gate metal bar 3", new Vector3(-0.234f, -0.142f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 slide gate metal bar 4", new Vector3(-0.234f, -0.142f, 0.232f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 slide gate metal bar 5", new Vector3(-0.234f, -0.142f, 0.464f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 slide gate metal bar 6", new Vector3(-0.234f, -0.142f, 0.696f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.1f, 0.86f, 0.045f)),
+            new Level3TransformOverride("level3 slide path chevron lower 0", new Vector3(1.303f, -0.035f, 2.939f), new Quaternion(-0.008865f, -0.241759f, -0.035555f, 0.969644f), new Vector3(0.36f, 0.018f, 0.045f)),
+            new Level3TransformOverride("level3 slide path chevron lower 1", new Vector3(1.303f, -0.035f, 2.539f), new Quaternion(-0.008865f, -0.241759f, -0.035555f, 0.969644f), new Vector3(0.36f, 0.018f, 0.045f)),
+            new Level3TransformOverride("level3 slide path chevron lower 2", new Vector3(1.303f, -0.035f, 2.139f), new Quaternion(-0.008865f, -0.241759f, -0.035555f, 0.969644f), new Vector3(0.36f, 0.018f, 0.045f)),
+            new Level3TransformOverride("level3 slide path chevron lower 3", new Vector3(1.303f, -0.035f, 1.739f), new Quaternion(-0.008865f, -0.241759f, -0.035555f, 0.969644f), new Vector3(0.36f, 0.018f, 0.045f)),
+            new Level3TransformOverride("level3 slide path chevron lower 4", new Vector3(1.303f, -0.035f, 1.339f), new Quaternion(-0.008865f, -0.241759f, -0.035555f, 0.969644f), new Vector3(0.36f, 0.018f, 0.045f)),
+            new Level3TransformOverride("level3 slide path chevron upper 0", new Vector3(1.006f, -0.013f, 2.936f), new Quaternion(0.008865f, 0.241759f, -0.035555f, 0.969644f), new Vector3(0.36f, 0.018f, 0.045f)),
+            new Level3TransformOverride("level3 slide path chevron upper 1", new Vector3(1.006f, -0.013f, 2.536f), new Quaternion(0.008865f, 0.241759f, -0.035555f, 0.969644f), new Vector3(0.36f, 0.018f, 0.045f)),
+            new Level3TransformOverride("level3 slide path chevron upper 2", new Vector3(1.006f, -0.013f, 2.136f), new Quaternion(0.008865f, 0.241759f, -0.035555f, 0.969644f), new Vector3(0.36f, 0.018f, 0.045f)),
+            new Level3TransformOverride("level3 slide path chevron upper 3", new Vector3(1.006f, -0.013f, 1.736f), new Quaternion(0.008865f, 0.241759f, -0.035555f, 0.969644f), new Vector3(0.36f, 0.018f, 0.045f)),
+            new Level3TransformOverride("level3 slide path chevron upper 4", new Vector3(1.006f, -0.013f, 1.336f), new Quaternion(0.008865f, 0.241759f, -0.035555f, 0.969644f), new Vector3(0.36f, 0.018f, 0.045f)),
+            new Level3TransformOverride("level3 sliding bridge left rail", new Vector3(0.541f, -0.135f, 1.863f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.08f, 0.1f, 3f)),
+            new Level3TransformOverride("level3 sliding bridge lock block", new Vector3(1.152f, 0.169f, 1.25f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.96f, 0.72f, 0.5f)),
+            new Level3TransformOverride("level3 sliding bridge parked slot", new Vector3(1.111f, -0.205f, 2.09f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.26f, 0.035f, 2.6f)),
+            new Level3TransformOverride("level3 sliding bridge right rail", new Vector3(1.741f, -0.195f, 1.866f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.08f, 0.1f, 3f)),
+            new Level3TransformOverride("level3 sphere platform", new Vector3(-2.12f, 0.28507f, -1.3f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.32f, 0.06f, 0.98f)),
+            new Level3TransformOverride("level3 sphere platform icon", new Vector3(-2.132f, 0.319f, -1.3f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.28f, 0.05f, 0.28f)),
+            new Level3TransformOverride("level3 sphere platform rune corner glow 0", new Vector3(-2.68f, 0.36507f, -1.7f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.13f, 0.028f, 0.13f)),
+            new Level3TransformOverride("level3 sphere platform rune corner glow 1", new Vector3(-2.68f, 0.36507f, -0.9f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.13f, 0.028f, 0.13f)),
+            new Level3TransformOverride("level3 sphere platform rune corner glow 2", new Vector3(-1.563f, 0.276f, -1.7f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.13f, 0.028f, 0.13f)),
+            new Level3TransformOverride("level3 sphere platform rune corner glow 3", new Vector3(-1.563f, 0.276f, -0.9f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.13f, 0.028f, 0.13f)),
+            new Level3TransformOverride("level3 start centerline", new Vector3(-3.86f, 0.36296f, 0f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(1.75f, 0.018f, 0.055f)),
+            new Level3TransformOverride("level3 start floor", new Vector3(-3.86f, 0.23296f, 0f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.25f, 0.22f, 1.78f)),
+            new Level3TransformOverride("level3 start railing side 0 lower rail", new Vector3(-3.864333f, 0.479888f, -0.849f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.05f, 0.045f, 0.05f)),
+            new Level3TransformOverride("level3 start railing side 0 support 0", new Vector3(-4.889333f, 0.565225f, -0.849f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 start railing side 0 support 1", new Vector3(-4.206f, 0.515f, -0.849f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 start railing side 0 support 2", new Vector3(-3.522667f, 0.464775f, -0.849f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 start railing side 0 support 3", new Vector3(-2.839334f, 0.41455f, -0.849f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 start railing side 0 upper rail", new Vector3(-3.864333f, 0.609888f, -0.849f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.05f, 0.055f, 0.06f)),
+            new Level3TransformOverride("level3 start railing side 1 lower rail", new Vector3(-3.865f, 0.465337f, 0.842f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.05f, 0.045f, 0.05f)),
+            new Level3TransformOverride("level3 start railing side 1 support 0", new Vector3(-4.889999f, 0.550675f, 0.842f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 start railing side 1 support 1", new Vector3(-4.206666f, 0.50045f, 0.842f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 start railing side 1 support 2", new Vector3(-3.523333f, 0.450225f, 0.842f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 start railing side 1 support 3", new Vector3(-2.84f, 0.4f, 0.842f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(0.055f, 0.28f, 0.055f)),
+            new Level3TransformOverride("level3 start railing side 1 upper rail", new Vector3(-3.865f, 0.595338f, 0.842f), new Quaternion(0f, 0f, -0.036644f, 0.999328f), new Vector3(2.05f, 0.055f, 0.06f)),
+            new Level3TransformOverride("level3 void shadow plinth", new Vector3(0f, -0.72f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(11.4f, 0.42f, 5.1f)),
+        };
         private static readonly int[] HandConnectionPairs =
         {
             0, 1, 1, 2, 2, 3, 3, 4,
@@ -1556,7 +1680,7 @@ namespace HandOfGod.Gameplay
         private bool CanEraseLevel3SpringBlock()
         {
             return mode == GameMode.Level3
-                && (level3Stage == Level3Stage.EraseSpringBlock || level3Stage == Level3Stage.RunToGoal);
+                && (level3BridgePlaced || level3Stage == Level3Stage.EraseSpringBlock || level3Stage == Level3Stage.RunToGoal);
         }
 
         private bool CanManipulateDrawnObjects()
@@ -2850,7 +2974,7 @@ namespace HandOfGod.Gameplay
             }
             var selected = IsIndexCrossEraseGesture(frame, out var crossPoint);
             var target = selected
-                ? FindNearestTutorialDrawnObjectByScreenPoint(crossPoint, mode == GameMode.Level3 ? 0.16f : 0.13f, mode == GameMode.Level0 || mode == GameMode.Level3 ? 1.45f : 1.05f)
+                ? FindNearestTutorialDrawnObjectByScreenPoint(crossPoint, mode == GameMode.Level3 ? 0.22f : 0.16f, mode == GameMode.Level0 || mode == GameMode.Level3 ? 1.8f : 1.05f)
                 : null;
             if (target != null)
             {
@@ -2938,6 +3062,7 @@ namespace HandOfGod.Gameplay
             }
 
             GameObject nearest = null;
+            var viewportPoint = HandPointToViewportPoint(normalizedPoint);
             var nearestScreenDistance = maxScreenDistance;
             for (var i = tutorialDrawnObjects.Count - 1; i >= 0; i--)
             {
@@ -2956,7 +3081,7 @@ namespace HandOfGod.Gameplay
                     continue;
                 }
 
-                var screenDistance = TutorialDrawnObjectScreenDistance(normalizedPoint, bounds);
+                var screenDistance = TutorialDrawnObjectScreenDistance(viewportPoint, bounds);
                 if (screenDistance > nearestScreenDistance)
                 {
                     continue;
@@ -3000,13 +3125,30 @@ namespace HandOfGod.Gameplay
             return candidate != null;
         }
 
-        private float TutorialDrawnObjectScreenDistance(Vector2 normalizedPoint, Bounds bounds)
+        private static Vector2 HandPointToViewportPoint(Vector2 normalizedPoint)
+        {
+            return new Vector2(Mathf.Clamp01(normalizedPoint.x), Mathf.Clamp01(1f - normalizedPoint.y));
+        }
+
+        private float TutorialDrawnObjectScreenDistance(Vector2 viewportPoint, Bounds bounds)
         {
             var best = float.PositiveInfinity;
+            if (TryGetProjectedViewportBounds(bounds, out var projectedMin, out var projectedMax))
+            {
+                const float padding = 0.015f;
+                var minX = projectedMin.x - padding;
+                var maxX = projectedMax.x + padding;
+                var minY = projectedMin.y - padding;
+                var maxY = projectedMax.y + padding;
+                var dx = viewportPoint.x < minX ? minX - viewportPoint.x : viewportPoint.x > maxX ? viewportPoint.x - maxX : 0f;
+                var dy = viewportPoint.y < minY ? minY - viewportPoint.y : viewportPoint.y > maxY ? viewportPoint.y - maxY : 0f;
+                best = Mathf.Min(best, new Vector2(dx, dy).magnitude);
+            }
+
             var center = bounds.center;
-            best = Mathf.Min(best, ViewportDistance(normalizedPoint, center));
-            best = Mathf.Min(best, ViewportDistance(normalizedPoint, new Vector3(center.x, bounds.min.y, center.z)));
-            best = Mathf.Min(best, ViewportDistance(normalizedPoint, new Vector3(center.x, bounds.max.y, center.z)));
+            best = Mathf.Min(best, ViewportDistance(viewportPoint, center));
+            best = Mathf.Min(best, ViewportDistance(viewportPoint, new Vector3(center.x, bounds.min.y, center.z)));
+            best = Mathf.Min(best, ViewportDistance(viewportPoint, new Vector3(center.x, bounds.max.y, center.z)));
 
             for (var x = 0; x < 2; x++)
             {
@@ -3015,7 +3157,7 @@ namespace HandOfGod.Gameplay
                     for (var z = 0; z < 2; z++)
                     {
                         var corner = new Vector3(x == 0 ? bounds.min.x : bounds.max.x, y == 0 ? bounds.min.y : bounds.max.y, z == 0 ? bounds.min.z : bounds.max.z);
-                        best = Mathf.Min(best, ViewportDistance(normalizedPoint, corner));
+                        best = Mathf.Min(best, ViewportDistance(viewportPoint, corner));
                     }
                 }
             }
@@ -3023,14 +3165,40 @@ namespace HandOfGod.Gameplay
             return best;
         }
 
-        private float ViewportDistance(Vector2 normalizedPoint, Vector3 worldPoint)
+        private bool TryGetProjectedViewportBounds(Bounds bounds, out Vector2 projectedMin, out Vector2 projectedMax)
+        {
+            projectedMin = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+            projectedMax = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+            var hasVisiblePoint = false;
+            for (var x = 0; x < 2; x++)
+            {
+                for (var y = 0; y < 2; y++)
+                {
+                    for (var z = 0; z < 2; z++)
+                    {
+                        var corner = new Vector3(x == 0 ? bounds.min.x : bounds.max.x, y == 0 ? bounds.min.y : bounds.max.y, z == 0 ? bounds.min.z : bounds.max.z);
+                        var viewport = mainCamera.WorldToViewportPoint(corner);
+                        if (viewport.z <= 0f)
+                        {
+                            continue;
+                        }
+                        hasVisiblePoint = true;
+                        projectedMin = Vector2.Min(projectedMin, new Vector2(viewport.x, viewport.y));
+                        projectedMax = Vector2.Max(projectedMax, new Vector2(viewport.x, viewport.y));
+                    }
+                }
+            }
+            return hasVisiblePoint;
+        }
+
+        private float ViewportDistance(Vector2 viewportPoint, Vector3 worldPoint)
         {
             var viewport = mainCamera.WorldToViewportPoint(worldPoint);
             if (viewport.z <= 0f)
             {
                 return float.PositiveInfinity;
             }
-            return Vector2.Distance(normalizedPoint, new Vector2(viewport.x, viewport.y));
+            return Vector2.Distance(viewportPoint, new Vector2(viewport.x, viewport.y));
         }
 
         private static float TutorialDrawnObjectSelectionDistance(Vector3 point, GameObject candidate)
@@ -3974,8 +4142,9 @@ namespace HandOfGod.Gameplay
             DestroyUnityObject(sphereIcon.GetComponent<Collider>());
 
             startGate = CreateLevel2Gate("level3 creation gate", new Vector3(-2.82f, Level3RoadY(-2.82f) + 0.68f, 0f), 1.74f);
-            bridgeGate = CreateLevel2Gate("level3 spring gate", new Vector3(0.78f, Level3RoadY(0.78f) + 0.68f, 0f), 1.74f);
+            bridgeGate = CreateLevel2Gate("level3 slide gate", new Vector3(0.78f, Level3RoadY(0.78f) + 0.68f, 0f), 1.74f);
             BuildLevel3SpringDevice(1.10f);
+            BuildLevel3Decorations();
 
             var ballObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             ballObject.name = "Level3 Golden Physics Ball";
@@ -4000,34 +4169,105 @@ namespace HandOfGod.Gameplay
             DestroyUnityObject(goal.GetComponent<Collider>());
             levelBall.Configure(goal.transform);
             CreateLevel2GoalArt(goal.transform.position);
+            ApplyLevel3SceneTransformOverrides();
         }
 
         private void BuildLevel3SpringDevice(float x)
         {
-            var roadY = Level3RoadY(x);
-            var highY = Level3SpringPlatformCenterY(x);
-            var lowY = highY - 0.62f;
-            var position = new Vector3(x, lowY, 0f);
-            CreateBox("level3 spring base", new Vector3(x, roadY - 0.74f, 0f), new Vector3(0.86f, 0.18f, 0.86f), level2WallMaterial, levelRoot, Quaternion.identity, false);
-            CreateTorus("level3 spring lower coil", new Vector3(x, roadY - 0.58f, 0f), 0.34f, 0.035f, tealGlow, levelRoot);
-            CreateTorus("level3 spring upper coil", new Vector3(x, roadY - 0.36f, 0f), 0.34f, 0.035f, tealGlow, levelRoot);
-            var core = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            core.name = "level3 spring core";
-            core.transform.SetParent(levelRoot, false);
-            core.transform.position = new Vector3(x, roadY - 0.47f, 0f);
-            core.transform.localScale = new Vector3(0.16f, 0.34f, 0.16f);
-            core.GetComponent<Renderer>().sharedMaterial = level2TrimMaterial;
-            DestroyUnityObject(core.GetComponent<Collider>());
-            level3SpringCore = core.transform;
+            var bridgeY = Level3SpringPlatformCenterY(Level3SlideBridgeCenterX);
+            var bridgeScale = new Vector3(Level3SlideBridgeWidth, Level3SpringPlatformThickness, 1.78f);
+            CreateBox("level3 sliding bridge parked slot", new Vector3(1.111f, -0.205f, 1.85f), new Vector3(1.26f, 0.035f, 3f), level2WallMaterial, levelRoot, Level3RoadRotation(), false);
+            CreateBox("level3 sliding bridge left rail", new Vector3(0.541f, -0.135f, 1.863f), new Vector3(0.08f, 0.10f, 3f), level2TrimMaterial, levelRoot, Level3RoadRotation(), false);
+            CreateBox("level3 sliding bridge right rail", new Vector3(1.741f, -0.195f, 1.866f), new Vector3(0.08f, 0.10f, 3f), level2TrimMaterial, levelRoot, Level3RoadRotation(), false);
 
-            var platform = CreateBox("level3 depressed spring platform", position, new Vector3(2.15f, Level3SpringPlatformThickness, 1.78f), level2TrimMaterial, levelRoot, Level3RoadRotation(), true);
+            var platform = CreateBox("level3 side parked sliding bridge", new Vector3(Level3SlideBridgeCenterX, bridgeY, Level3SlideBridgeParkZ), bridgeScale, level2TrimMaterial, levelRoot, Level3RoadRotation(), true);
             level3SpringPlatform = platform.transform;
             level3SpringPlatformRenderer = platform.GetComponent<Renderer>();
 
-            level3SpringBlock = CreateBox("level3 spring heavy erase block", position + new Vector3(0f, Level3SpringPlatformThickness * 0.5f + 0.36f, 0f), new Vector3(0.96f, 0.72f, 0.96f), boxIdle, levelRoot, Level3RoadRotation(), true);
+            var blockScale = new Vector3(0.96f, 0.72f, 0.5f);
+            level3SpringBlock = CreateBox("level3 sliding bridge lock block", new Vector3(1.13f, 0.17f, 1.18f), blockScale, boxIdle, levelRoot, Level3RoadRotation(), true);
             level3SpringBlockRenderer = level3SpringBlock.GetComponent<Renderer>();
-            level3SpringBlockHalo = CreateTorus("level3 spring block erase halo", level3SpringBlock.transform.position + new Vector3(0f, 0.43f, 0f), 0.62f, 0.035f, amberGlow, levelRoot);
+            level3SpringBlockHalo = null;
             tutorialDrawnObjects.Add(level3SpringBlock);
+        }
+
+        private void BuildLevel3Decorations()
+        {
+            var roadRotation = Level3RoadRotation();
+            CreateLevel3Railing("level3 start railing", -3.86f, 2.05f);
+            CreateLevel3Railing("level3 middle railing", -0.42f, 1.72f);
+            CreateLevel3Railing("level3 finish railing", 3.25f, 2.85f);
+
+            var slideChevronZ = new[] { 2.22f, 1.82f, 1.42f, 1.02f, 0.62f };
+            for (var i = 0; i < slideChevronZ.Length; i++)
+            {
+                var z = slideChevronZ[i];
+                var y = Level3SpringPlatformCenterY(Level3SlideBridgeCenterX) + 0.12f;
+                CreateBox($"level3 slide path chevron upper {i}", new Vector3(Level3SlideBridgeCenterX - 0.16f, y, z), new Vector3(0.36f, 0.018f, 0.045f), level2PortalCoreMaterial, levelRoot, roadRotation * Quaternion.Euler(0f, 28f, 0f), false);
+                CreateBox($"level3 slide path chevron lower {i}", new Vector3(Level3SlideBridgeCenterX + 0.16f, y, z), new Vector3(0.36f, 0.018f, 0.045f), level2PortalCoreMaterial, levelRoot, roadRotation * Quaternion.Euler(0f, -28f, 0f), false);
+            }
+
+            CreateLevel3RuneCornerMarkers("level3 cube platform rune", level3CubePlate.position, 0.56f, 0.40f);
+            CreateLevel3RuneCornerMarkers("level3 sphere platform rune", level3SpherePlate.position, 0.56f, 0.40f);
+        }
+
+        private void ApplyLevel3SceneTransformOverrides()
+        {
+            if (levelRoot == null)
+            {
+                return;
+            }
+
+            var transforms = levelRoot.GetComponentsInChildren<Transform>(true);
+            for (var i = 0; i < Level3SceneTransformOverrides.Length; i++)
+            {
+                var item = Level3SceneTransformOverrides[i];
+                for (var j = 0; j < transforms.Length; j++)
+                {
+                    var target = transforms[j];
+                    if (target.name != item.Name)
+                    {
+                        continue;
+                    }
+
+                    target.localPosition = item.LocalPosition;
+                    target.localRotation = item.LocalRotation;
+                    target.localScale = item.LocalScale;
+                    break;
+                }
+            }
+        }
+
+        private void CreateLevel3Railing(string prefix, float centerX, float length)
+        {
+            var sides = new[] { -1.03f, 1.03f };
+            for (var side = 0; side < sides.Length; side++)
+            {
+                var z = sides[side];
+                CreateLevel3RoadBox($"{prefix} side {side} upper rail", centerX, z, new Vector3(length, 0.055f, 0.06f), level2TrimMaterial, false, 0.43f);
+                CreateLevel3RoadBox($"{prefix} side {side} lower rail", centerX, z, new Vector3(length, 0.045f, 0.05f), level2WallMaterial, false, 0.30f);
+                for (var i = 0; i < 4; i++)
+                {
+                    var t = i / 3f;
+                    var x = centerX - length * 0.5f + length * t;
+                    CreateLevel3RoadBox($"{prefix} side {side} support {i}", x, z, new Vector3(0.055f, 0.28f, 0.055f), level2TrimMaterial, false, 0.31f);
+                }
+            }
+        }
+
+        private void CreateLevel3RuneCornerMarkers(string prefix, Vector3 center, float halfX, float halfZ)
+        {
+            var offsets = new[]
+            {
+                new Vector3(-halfX, 0.08f, -halfZ),
+                new Vector3(-halfX, 0.08f, halfZ),
+                new Vector3(halfX, 0.08f, -halfZ),
+                new Vector3(halfX, 0.08f, halfZ),
+            };
+            for (var i = 0; i < offsets.Length; i++)
+            {
+                CreateBox($"{prefix} corner glow {i}", center + offsets[i], new Vector3(0.13f, 0.028f, 0.13f), tealGlow, levelRoot, Level3RoadRotation(), false);
+            }
         }
 
         private GameObject CreateLevel3RoadBox(string name, float x, float z, Vector3 scale, Material material, bool keepCollider, float yOffset = 0f)
@@ -4153,7 +4393,7 @@ namespace HandOfGod.Gameplay
                 }
                 OpenGate(startGate);
                 AdvanceLevel3(Level3Stage.EraseSpringBlock);
-                level3HintMessage = "Bridge is open. Erase the heavy block to release the spring platform.";
+                level3HintMessage = "Bridge is open. Erase the lock block to slide the side bridge into the gap.";
             }
         }
 
@@ -4173,16 +4413,12 @@ namespace HandOfGod.Gameplay
                 level3SpringBlockHalo = null;
             }
             level3SpringReleaseStart = Time.time;
-            if (level3SpringCore != null)
-            {
-                level3SpringCore.GetComponent<Renderer>().sharedMaterial = tealGlow;
-            }
             if (level3SpringPlatformRenderer != null)
             {
                 level3SpringPlatformRenderer.sharedMaterial = tealGlow;
             }
             OpenGate(bridgeGate);
-            level3HintMessage = "The spring platform is rising into the road.";
+            level3HintMessage = "The side bridge is sliding into the road gap.";
         }
 
         private void UpdateLevel3SpringAnimation()
@@ -4196,19 +4432,14 @@ namespace HandOfGod.Gameplay
             var smooth = Mathf.SmoothStep(0f, 1f, t);
             if (level3SpringPlatform != null)
             {
-                var highY = Level3SpringPlatformCenterY(level3SpringPlatform.position.x);
-                var lowY = highY - 0.62f;
-                level3SpringPlatform.position = new Vector3(level3SpringPlatform.position.x, Mathf.Lerp(lowY, highY, smooth), level3SpringPlatform.position.z);
-            }
-            if (level3SpringCore != null)
-            {
-                var coreY = Level3RoadY(level3SpringCore.position.x) - Mathf.Lerp(0.47f, 0.16f, smooth);
-                level3SpringCore.position = new Vector3(level3SpringCore.position.x, coreY, level3SpringCore.position.z);
+                var y = Level3SpringPlatformCenterY(level3SpringPlatform.position.x);
+                var z = Mathf.Lerp(Level3SlideBridgeParkZ, Level3SlideBridgeFinalZ, smooth);
+                level3SpringPlatform.position = new Vector3(level3SpringPlatform.position.x, y, z);
             }
             if (t >= 1f && level3Stage != Level3Stage.RunToGoal)
             {
                 AdvanceLevel3(Level3Stage.RunToGoal);
-                level3HintMessage = "The road is complete. The ball can roll to the altar.";
+                level3HintMessage = "The sliding bridge is locked in place. The ball can roll to the altar.";
             }
         }
 
@@ -4229,8 +4460,8 @@ namespace HandOfGod.Gameplay
             {
                 Level3Stage.CreateBridgeObject => "Create a cube and a sphere. Put each one on the matching marked platform.",
                 Level3Stage.PlaceCreatedObject => "Move or rotate the cube to the cube mark and the sphere to the sphere mark.",
-                Level3Stage.EraseSpringBlock => "Cross both index fingers over the heavy block and hold for 2 seconds.",
-                Level3Stage.RunToGoal => "The spring platform completed the road. Let the ball roll to the altar.",
+                Level3Stage.EraseSpringBlock => "Cross both index fingers over the lock block and hold for 2 seconds.",
+                Level3Stage.RunToGoal => "The sliding bridge completed the road. Let the ball roll to the altar.",
                 _ => "",
             };
         }

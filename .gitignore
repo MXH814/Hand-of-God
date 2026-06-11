@@ -35,5 +35,7 @@ __pycache__/
 Preview/
 # 忽略所有批处理启动脚本
 *.bat
+Build-HandOfGod.bat
+Play-HandOfGod.bat
 # 忽略Visual Studio本地缓存
 .vs/
