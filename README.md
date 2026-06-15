@@ -383,6 +383,7 @@ numpy
 - `handedness`
 - `score`
 - `landmarks`
+- `displayLandmarks`
 - `thumbExtended`
 - `indexExtended`
 - `middleExtended`
@@ -424,7 +425,12 @@ Unity 端职责：
 
 ### Landmark 平滑
 
-Python 对每个 hand id 的每个 landmark 维护一个 `SmoothedPoint`。新 landmark 到来时，根据点位移动速度和屏幕边缘程度计算动态 `alpha`：
+Python 对每个 hand id 的每个 landmark 同时维护两套输出：
+
+- `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用，优先稳定。
+- `displayLandmarks`：骨架显示用 landmarks，只负责 Unity 前景 21 点骨架，优先实时手型。
+
+控制用 `landmarks` 新点到来时，根据点位移动速度和屏幕边缘程度计算动态 `alpha`：
 
 - 先用很小的 normalized deadband 丢弃亚像素级抖动；超过 deadband 的动作会立即进入快速跟随。
 - 速度高时增大 `alpha`，让快速动作保持跟手；手指点最高响应接近原始 MediaPipe 输出。
@@ -432,7 +438,8 @@ Python 对每个 hand id 的每个 landmark 维护一个 `SmoothedPoint`。新 l
 - 腕点和掌心中心使用更稳的响应；指根、手指中间关节和指尖使用更高的响应，保证弯曲、伸直时骨架形状和真实手型同步。
 - 真实弯曲、伸直动作不再被小位移平滑拖慢，避免第一指节滞后造成的“折断感”。
 - `alpha` 被限制在稳定范围内，避免过度延迟或过度跳变。
-- 手势分析使用平滑后的 landmarks，避免显示骨架稳定但 pinch/index 交互点仍受原始抖动影响。
+- 手势分析使用控制用 landmarks，避免交互点和手势状态受原始抖动影响。
+- `displayLandmarks` 使用更小 deadband 和接近实时的跟随系数，真实弯曲动作会快速同步到骨架显示；UI 和机关判定不直接依赖这套显示点。
 
 ### Cursor EMA 平滑
 

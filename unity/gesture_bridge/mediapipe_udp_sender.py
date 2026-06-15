@@ -78,6 +78,42 @@ class SmoothedPoint:
         return self.x, self.y, self.z
 
 
+class DisplayPoint:
+    def __init__(self, x, y, z):
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+        self.last_time = time.time()
+
+    def update(self, x, y, z, index=-1):
+        now = time.time()
+        dx = x - self.x
+        dy = y - self.y
+        dz = z - self.z
+        displacement = float(np.linalg.norm(np.array([dx, dy, dz])))
+        is_palm_anchor = index in PALM_LANDMARKS
+        deadband = 0.00065 if is_palm_anchor else 0.00030
+        if displacement <= deadband:
+            self.last_time = now
+            return self.x, self.y, self.z
+
+        live_motion = (displacement - deadband) / displacement
+        dx *= live_motion
+        dy *= live_motion
+        dz *= live_motion
+        alpha = 0.82 if is_palm_anchor else 0.96
+        edge = max(abs(x - 0.5), abs(y - 0.5)) * 2.0
+        alpha -= max(edge - 0.84, 0.0) * (0.05 if is_palm_anchor else 0.025)
+        if displacement > 0.006 and not is_palm_anchor:
+            alpha = 1.0
+        alpha = max(0.72 if is_palm_anchor else 0.88, min(1.0, alpha))
+        self.x += dx * alpha
+        self.y += dy * alpha
+        self.z += dz * alpha
+        self.last_time = now
+        return self.x, self.y, self.z
+
+
 def smooth_landmarks(hand_id, landmarks, smooth_points):
     slots = smooth_points.setdefault(hand_id, {})
     smoothed_json = []
@@ -91,6 +127,19 @@ def smooth_landmarks(hand_id, landmarks, smooth_points):
         smoothed_points.append(LandmarkPoint(x, y, z))
         smoothed_json.append({"x": float(x), "y": float(y), "z": float(z)})
     return smoothed_json, smoothed_points
+
+
+def display_landmarks(hand_id, landmarks, display_points):
+    slots = display_points.setdefault(hand_id, {})
+    display_json = []
+    for index, point in enumerate(landmarks):
+        slot = slots.get(index)
+        if slot is None:
+            slot = DisplayPoint(point.x, point.y, point.z)
+            slots[index] = slot
+        x, y, z = slot.update(point.x, point.y, point.z, index)
+        display_json.append({"x": float(x), "y": float(y), "z": float(z)})
+    return display_json
 
 
 class VideoStreamClient:
@@ -266,6 +315,7 @@ def main():
     last_raw = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
     pinch_latches = {}
     smooth_landmarks_by_hand = {}
+    display_landmarks_by_hand = {}
     smooth_cursors = {}
 
     print("Hand of God bridge: headless camera tracking started. Use --preview for a debug window.")
@@ -293,8 +343,10 @@ def main():
                     score = category.score if category else 1.0
                     hand_id = label if label in ("Left", "Right") else f"Unknown-{index}"
                     active_ids.add(hand_id)
+                    display_landmark_json = display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand)
                     smoothed_landmarks, smoothed_points = smooth_landmarks(hand_id, hand.landmark, smooth_landmarks_by_hand)
                     hand_payload, raw = analyze_hand(smoothed_points, label, score, hand_id, neutral, smoothed_landmarks)
+                    hand_payload["displayLandmarks"] = display_landmark_json
                     last_raw = raw
 
                     distance = raw["pinchDistance"]
@@ -335,6 +387,7 @@ def main():
             stale_ids = [hand_id for hand_id in smooth_landmarks_by_hand if hand_id not in active_ids]
             for hand_id in stale_ids:
                 smooth_landmarks_by_hand.pop(hand_id, None)
+                display_landmarks_by_hand.pop(hand_id, None)
                 smooth_cursors.pop(hand_id, None)
                 pinch_latches.pop(hand_id, None)
 

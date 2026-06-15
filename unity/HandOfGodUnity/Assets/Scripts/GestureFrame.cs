@@ -34,6 +34,7 @@ namespace HandOfGod.Gestures
         public bool ringExtended;
         public bool pinkyExtended;
         public GestureLandmark[] landmarks;
+        public GestureLandmark[] displayLandmarks;
     }
 
     [Serializable]
@@ -96,6 +97,10 @@ namespace HandOfGod.Gestures
             frame.palmYaw = Mathf.Clamp(frame.palmYaw, -1f, 1f);
             frame.confidence = Mathf.Clamp01(frame.confidence);
             frame.hands ??= Array.Empty<GestureHandFrame>();
+            for (var i = 0; i < frame.hands.Length; i++)
+            {
+                frame.hands[i].displayLandmarks ??= Array.Empty<GestureLandmark>();
+            }
             frame.handCount = Mathf.Max(frame.handCount, frame.hands.Length);
             return frame;
         }

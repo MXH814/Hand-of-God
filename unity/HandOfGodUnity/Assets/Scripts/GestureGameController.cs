@@ -6492,7 +6492,10 @@ namespace HandOfGod.Gameplay
 
             foreach (var hand in frame.hands)
             {
-                if (hand.landmarks == null || hand.landmarks.Length < 21)
+                var displayLandmarks = hand.displayLandmarks != null && hand.displayLandmarks.Length >= 21
+                    ? hand.displayLandmarks
+                    : hand.landmarks;
+                if (displayLandmarks == null || displayLandmarks.Length < 21)
                 {
                     continue;
                 }
@@ -6503,20 +6506,20 @@ namespace HandOfGod.Gameplay
                 var pinchColor = IsPinching(hand) ? new Color(0.12f, 1f, 0.85f, 1f) : baseColor;
                 for (var i = 0; i < HandConnectionPairs.Length; i += 2)
                 {
-                    var a = LandmarkToScreen(hand.landmarks[HandConnectionPairs[i]]);
-                    var b = LandmarkToScreen(hand.landmarks[HandConnectionPairs[i + 1]]);
+                    var a = LandmarkToScreen(displayLandmarks[HandConnectionPairs[i]]);
+                    var b = LandmarkToScreen(displayLandmarks[HandConnectionPairs[i + 1]]);
                     DrawLine(a, b, pinchColor, 3f);
                 }
 
-                for (var i = 0; i < hand.landmarks.Length; i++)
+                for (var i = 0; i < displayLandmarks.Length; i++)
                 {
-                    var point = LandmarkToScreen(hand.landmarks[i]);
+                    var point = LandmarkToScreen(displayLandmarks[i]);
                     var radius = i == 4 || i == 8 ? 5f : 3.5f;
                     GUI.color = i == 4 || i == 8 ? Color.cyan : baseColor;
                     GUI.DrawTexture(new Rect(point.x - radius, point.y - radius, radius * 2f, radius * 2f), Texture2D.whiteTexture);
                 }
                 var label = $"{hand.handedness} {hand.score:0.00}";
-                var labelPoint = LandmarkToScreen(hand.landmarks[0]);
+                var labelPoint = LandmarkToScreen(displayLandmarks[0]);
                 GUI.color = baseColor;
                 GUI.Label(new Rect(labelPoint.x + 8f, labelPoint.y - 10f, 110f, 22f), label);
                 GUI.color = Color.white;
