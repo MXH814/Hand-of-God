@@ -19,7 +19,6 @@ FINGERS = {
 }
 
 WRIST_LANDMARKS = {0}
-FINGERTIP_LANDMARKS = {4, 8, 12, 16, 20}
 FINGER_CHAIN_LANDMARKS = set(range(1, 21))
 
 
@@ -48,8 +47,14 @@ class SmoothedPoint:
         edge = max(abs(x - 0.5), abs(y - 0.5)) * 2.0
 
         is_wrist_anchor = index in WRIST_LANDMARKS
-        is_fingertip = index in FINGERTIP_LANDMARKS
         is_finger_chain = index in FINGER_CHAIN_LANDMARKS
+        if is_finger_chain:
+            self.x = float(x)
+            self.y = float(y)
+            self.z = float(z)
+            self.last_time = now
+            return self.x, self.y, self.z
+
         deadband = 0.00065 if is_wrist_anchor else 0.00008
         if displacement <= deadband:
             self.last_time = now
@@ -63,17 +68,11 @@ class SmoothedPoint:
             alpha = 0.24 + min(speed * 0.030, 0.26)
             max_alpha = 0.55
             min_alpha = 0.10
-        elif is_finger_chain:
-            alpha = 0.94 + min(speed * 0.030, 0.06)
-            max_alpha = 1.0
-            min_alpha = 0.82
         else:
             alpha = 0.70 + min(speed * 0.035, 0.18)
             max_alpha = 0.92
             min_alpha = 0.35
 
-        if is_fingertip:
-            alpha = max(alpha, 0.96)
         alpha -= max(edge - 0.78, 0.0) * (0.06 if is_wrist_anchor else 0.018)
 
         alpha = max(min_alpha, min(max_alpha, alpha))

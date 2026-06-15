@@ -435,19 +435,19 @@ Unity 端职责：
 
 Python 对每个 hand id 的每个 landmark 同时维护两套输出：
 
-- `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用，优先稳定。
+- `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用；手指链条优先实时，腕部和 cursor 优先稳定。
 - `displayLandmarks`：骨架显示用原始 landmarks，只负责 Unity 前景 21 点骨架，优先实时手型。
 - MediaPipe Hands 默认使用 `model_complexity=1` 和逐帧检测模式，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型或 ROI tracking 造成的骨架形变不自然。
 
-控制用 `landmarks` 新点到来时，根据点位移动速度和屏幕边缘程度计算动态 `alpha`：
+控制用 `landmarks` 分为手指链条和腕部两条路径：
 
-- 先用很小的 normalized deadband 丢弃亚像素级抖动；超过 deadband 的动作会立即进入快速跟随。
-- 速度高时增大 `alpha`，让快速动作保持跟手；手指链条 landmarks 采用接近 raw 的高响应更新，腕部保留更强稳定性，避免第一指节或指根跟随过慢。
+- 手指链条 landmarks（1-20）直接使用当前 MediaPipe 点，不做 deadband、插值或 alpha 平滑，避免第一指节、指根和指尖跟随过慢。
+- 腕部 landmark（0）根据点位移动速度和屏幕边缘程度计算动态 `alpha`，保留更强稳定性，减少整只手在边缘区域的低频晃动。
 - 靠近画面边缘时降低 `alpha`，减少边缘识别抖动。
-- 腕点和掌心中心使用更稳的响应；指根、手指中间关节和指尖使用更高的响应，保证弯曲、伸直时骨架形状和真实手型同步。
+- 交互用 cursor（`pinchX` / `indexX` 等）仍使用独立 EMA 和手势迟滞来抑制 UI 悬停抖动；手指关节本身不再被这层 cursor 平滑拖慢。
 - 真实弯曲、伸直动作不再被小位移平滑拖慢，避免第一指节滞后造成的“折断感”。
-- `alpha` 被限制在稳定范围内，避免过度延迟或过度跳变。
-- 手势分析使用控制用 landmarks，避免交互点和手势状态受原始抖动影响。
+- 腕部 `alpha` 被限制在稳定范围内，避免过度延迟或过度跳变。
+- 手势分析使用控制用 landmarks；手指姿态读取 raw 当前帧，交互点和手势开关再通过 cursor EMA、迟滞阈值和保持时间抑制抖动。
 - `displayLandmarks` 直接使用原始 MediaPipe 点；Unity 绘制骨架时对这套显示点直绘当前帧，不再经过缓存、插值或单个指节限速，真实弯曲动作会立即同步到骨架显示。只有缺少 raw display landmarks、退回控制用 landmarks 时，才对整只手的单帧异常位移做整体保护；UI 和机关判定不直接依赖这套显示点。
 
 ### Cursor EMA 平滑
