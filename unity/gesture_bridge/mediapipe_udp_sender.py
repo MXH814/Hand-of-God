@@ -33,7 +33,7 @@ class SmoothedPoint:
         self.z = float(z)
         self.last_time = time.time()
 
-    def update(self, x, y, z):
+    def update(self, x, y, z, index=-1):
         now = time.time()
         dt = max(now - self.last_time, 1e-3)
         dx = x - self.x
@@ -42,10 +42,14 @@ class SmoothedPoint:
         displacement = float(np.linalg.norm(np.array([dx, dy, dz])))
         speed = displacement / dt
         edge = max(abs(x - 0.5), abs(y - 0.5)) * 2.0
-        alpha = 0.12 + min(speed * 0.010, 0.16) - max(edge - 0.66, 0.0) * 0.10
+        alpha = 0.09 + min(speed * 0.0075, 0.12) - max(edge - 0.60, 0.0) * 0.12
+        if index in (4, 8, 12, 16, 20):
+            alpha *= 0.62
         if displacement < 0.006:
-            alpha *= 0.45
-        alpha = max(0.045, min(0.32, alpha))
+            alpha *= 0.35
+        if displacement < 0.0025:
+            alpha *= 0.28
+        alpha = max(0.026, min(0.22, alpha))
         self.x += dx * alpha
         self.y += dy * alpha
         self.z += dz * alpha
@@ -62,7 +66,7 @@ def smooth_landmarks(hand_id, landmarks, smooth_points):
         if slot is None:
             slot = SmoothedPoint(point.x, point.y, point.z)
             slots[index] = slot
-        x, y, z = slot.update(point.x, point.y, point.z)
+        x, y, z = slot.update(point.x, point.y, point.z, index)
         smoothed_points.append(LandmarkPoint(x, y, z))
         smoothed_json.append({"x": float(x), "y": float(y), "z": float(z)})
     return smoothed_json, smoothed_points
@@ -283,9 +287,16 @@ def main():
                         and not hand_payload["ringExtended"]
                         and not hand_payload["pinkyExtended"]
                     )
-                    pinch_alpha = 0.34 if latched else 0.18
-                    index_alpha = 0.12 if index_only else 0.24
+                    pinch_alpha = 0.30 if latched else 0.14
                     previous = smooth_cursors.get(hand_id, (hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"]))
+                    index_motion = float(np.linalg.norm(np.array([
+                        hand_payload["indexX"] - previous[2],
+                        hand_payload["indexY"] - previous[3],
+                    ])))
+                    if index_only:
+                        index_alpha = 0.045 if index_motion < 0.035 else 0.075
+                    else:
+                        index_alpha = 0.18
                     smoothed = (
                         previous[0] * (1.0 - pinch_alpha) + hand_payload["pinchX"] * pinch_alpha,
                         previous[1] * (1.0 - pinch_alpha) + hand_payload["pinchY"] * pinch_alpha,

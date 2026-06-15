@@ -1,4 +1,5 @@
 using HandOfGod.Gestures;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
@@ -101,6 +102,20 @@ namespace HandOfGod.Gameplay
             public float SecondScore;
         }
 
+        private readonly struct UiPointer
+        {
+            public readonly string Id;
+            public readonly Vector2 Position;
+            public readonly bool Pinching;
+
+            public UiPointer(string id, Vector2 position, bool pinching)
+            {
+                Id = id;
+                Position = position;
+                Pinching = pinching;
+            }
+        }
+
         private readonly struct Level3TransformOverride
         {
             public readonly string Name;
@@ -141,7 +156,7 @@ namespace HandOfGod.Gameplay
         private static readonly Level3TransformOverride[] Level3SceneTransformOverrides =
         {
             new Level3TransformOverride("Kenney template-detail", new Vector3(4.45f, -0.287825f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.88f, 0.3f, 0.88f)),
-            new Level3TransformOverride("Level03 Creation Spring", new Vector3(0f, 0f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
+            new Level3TransformOverride("Level03 Create Erase", new Vector3(0f, 0f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
             new Level3TransformOverride("level2 goal inner halo", new Vector3(4.45f, 0.072175f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1.1f, 1.1f, 1.1f)),
             new Level3TransformOverride("level2 goal outer halo", new Vector3(4.45f, -0.027825f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
             new Level3TransformOverride("Level2 Portal Accent Light", new Vector3(0.6f, 2.8f, -1.4f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
@@ -277,6 +292,10 @@ namespace HandOfGod.Gameplay
         private Material level2WindMistMaterial;
         private Material level2PortalTwirlMaterial;
         private Material level2RuneMaterial;
+        private Material level4BeamAmberMaterial;
+        private Material level4BeamTealMaterial;
+        private Material level4BeamHaloAmberMaterial;
+        private Material level4BeamHaloTealMaterial;
         private Material cameraBackgroundMaterial;
         private Transform cameraBackgroundPlane;
 
@@ -286,8 +305,7 @@ namespace HandOfGod.Gameplay
         private float pinchThreshold = 0.56f;
         private float pinchSampleSum;
         private int pinchSampleCount;
-        private string hoverKey = "";
-        private float hoverStart = -1f;
+        private readonly Dictionary<string, float> hoverStartsByPointer = new Dictionary<string, float>();
         private GameObject labObject;
         private Rigidbody labBody;
         private Renderer labRenderer;
@@ -379,6 +397,7 @@ namespace HandOfGod.Gameplay
         private bool rotateGateLocked;
         private bool sealActivated;
         private bool rotateGateHeld;
+        private bool level1RotateRequiresPinchReset;
         private float level1BridgeStartDistance;
         private float level1RotateStartAngle;
         private float sealHoldStart = -1f;
@@ -445,7 +464,7 @@ namespace HandOfGod.Gameplay
         private const float AirflowDirectionHoldSeconds = 0.25f;
         private float levelStartTime = -10f;
 
-        // Level4: Rotation & Reflection mechanics
+        // Level4: Mirror & magnet mechanics
         private Level4Stage level4Stage;
         private Transform level4Mirror;
         private Renderer level4MirrorRenderer;
@@ -572,6 +591,9 @@ namespace HandOfGod.Gameplay
             DestroyNamed("Level01 First Path");
             DestroyNamed("Level02 Portal Airflow");
             DestroyNamed("Level03 Creation Spring");
+            DestroyNamed("Level03 Create Erase");
+            DestroyNamed("Level04 Rotation Reflection");
+            DestroyNamed("Level04 Mirror Magnet");
             BuildMaterials();
             BuildCameraAndLights();
             BuildLobbyShell();
@@ -783,8 +805,7 @@ namespace HandOfGod.Gameplay
             SetLobbyVisible(false);
             mode = GameMode.CalibrationOpen;
             holdStart = -1f;
-            hoverKey = "";
-            hoverStart = -1f;
+            hoverStartsByPointer.Clear();
             pinchSampleSum = 0f;
             pinchSampleCount = 0;
         }
@@ -881,8 +902,8 @@ namespace HandOfGod.Gameplay
             DrawLevelSelectButton("select-level0", "Level 0: Tutorial", GameMode.Level0, new Rect(panel.x + 18f, panel.y + 44f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level1", "Level 1: Moving Path", GameMode.Level1, new Rect(panel.x + 18f, panel.y + 80f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level2", "Level 2: Portals", GameMode.Level2, new Rect(panel.x + 18f, panel.y + 116f, panel.width - 36f, 30f));
-            DrawLevelSelectButton("select-level3", "Level 3: Spring", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 152f, panel.width - 36f, 30f));
-            DrawLevelSelectButton("select-level4", "Level 4: Reflection", GameMode.Level4, new Rect(panel.x + 18f, panel.y + 188f, panel.width - 36f, 30f));
+            DrawLevelSelectButton("select-level3", "Level 3: Create & Erase", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 152f, panel.width - 36f, 30f));
+            DrawLevelSelectButton("select-level4", "Level 4: Mirror & Magnet", GameMode.Level4, new Rect(panel.x + 18f, panel.y + 188f, panel.width - 36f, 30f));
         }
 
         private void DrawLevelSelectButton(string key, string label, GameMode targetMode, Rect rect)
@@ -900,8 +921,8 @@ namespace HandOfGod.Gameplay
             DrawHoverButton("level0", "Level 0: Tutorial", new Rect(70, 172, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
             DrawHoverButton("level1", "Level 1: First Path", new Rect(70, 224, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             DrawHoverButton("level2", "Level 2: Portals & Airflow", new Rect(70, 276, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level2));
-            DrawHoverButton("level3", "Level 3: Creation Spring", new Rect(70, 328, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level3));
-            DrawHoverButton("level4", "Level 4: Mirrors & Magnets", new Rect(70, 380, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level4));
+            DrawHoverButton("level3", "Level 3: Create & Erase", new Rect(70, 328, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level3));
+            DrawHoverButton("level4", "Level 4: Mirror & Magnet", new Rect(70, 380, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level4));
             DrawHoverButton("recalibrate", "Recalibrate", new Rect(70, 432, 260, 42), MenuDwellSeconds, ResetToCalibration);
         }
 
@@ -1073,7 +1094,7 @@ namespace HandOfGod.Gameplay
             DrawPanel(panel);
             var titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
             var objectiveStyle = new GUIStyle(GUI.skin.label) { fontSize = 17, wordWrap = true };
-            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 3: Creation Spring", titleStyle);
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 3: Create & Erase", titleStyle);
             GUI.Label(new Rect(panel.x + 28f, panel.y + 52f, panel.width - 56f, 48f), Level3ObjectiveText(), objectiveStyle);
             GUI.Label(new Rect(panel.x + 28f, panel.y + 104f, panel.width - 56f, 24f), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}" : "Ball speed: 0.00");
             if (!string.IsNullOrEmpty(level3HintMessage))
@@ -1128,7 +1149,7 @@ namespace HandOfGod.Gameplay
             DrawPanel(panel);
             var titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
             var objectiveStyle = new GUIStyle(GUI.skin.label) { fontSize = 17, wordWrap = true };
-            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 4: Rotation & Reflection", titleStyle);
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 4: Mirror & Magnet", titleStyle);
             var detail = level4Stage switch
             {
                 Level4Stage.LightGuide => "Pinch with both hands and rotate the mirror until the beam strikes the light gate.",
@@ -1202,8 +1223,7 @@ namespace HandOfGod.Gameplay
             }
             mode = level;
             levelStartTime = Time.time;
-            hoverKey = "";
-            hoverStart = -1f;
+            hoverStartsByPointer.Clear();
         }
 
         private void BuildLevel0()
@@ -1866,8 +1886,7 @@ namespace HandOfGod.Gameplay
             {
                 var initialReflectedEnd = tutorialMirrorProp.position + Quaternion.Euler(0f, -18f, 0f) * Vector3.right * 1.70f;
                 PositionLevel4Beam(tutorialMirrorReflectedBeam, tutorialMirrorProp.position, initialReflectedEnd);
-                var beamRenderer = tutorialMirrorReflectedBeam.GetComponent<Renderer>();
-                if (beamRenderer != null) beamRenderer.sharedMaterial = amberGlow;
+                SetLevel4BeamMaterials(tutorialMirrorReflectedBeam, false);
             }
             UpdateTutorialMagnetVisuals(tutorialMagnetPreviewPolarity);
             SetTutorialAirflowDirection(0);
@@ -3011,7 +3030,7 @@ namespace HandOfGod.Gameplay
                         tutorialDrawErased = false;
                         level3EraseRequiresGestureReset = true;
                     }
-                    tutorialDrawMessage = erasedSpringBlock ? "Spring block erased. The spring released." : "Object erased.";
+                    tutorialDrawMessage = erasedSpringBlock ? "Lock block erased. The sliding bridge is released." : "Object erased.";
                     tutorialDrawMessageUntil = Time.time + 1.8f;
                     ResetTutorialDrawHold();
                 }
@@ -3395,8 +3414,7 @@ namespace HandOfGod.Gameplay
             if (tutorialMirrorReflectedBeam != null)
             {
                 PositionLevel4Beam(tutorialMirrorReflectedBeam, tutorialMirrorProp.position, reflectedEnd);
-                var beamRenderer = tutorialMirrorReflectedBeam.GetComponent<Renderer>();
-                if (beamRenderer != null) beamRenderer.sharedMaterial = aligned ? tealGlow : amberGlow;
+                SetLevel4BeamMaterials(tutorialMirrorReflectedBeam, aligned);
             }
             if (tutorialMirrorRenderer != null)
             {
@@ -3769,6 +3787,7 @@ namespace HandOfGod.Gameplay
             rotateGateLocked = false;
             sealActivated = false;
             rotateGateHeld = false;
+            level1RotateRequiresPinchReset = false;
             level1BridgeStartDistance = 0f;
             sealHoldStart = -1f;
             level1SuccessUntil = -1f;
@@ -3936,6 +3955,8 @@ namespace HandOfGod.Gameplay
                 bridgeLeftRenderer.sharedMaterial = tealGlow;
                 bridgeRightRenderer.sharedMaterial = tealGlow;
                 OpenGate(bridgeGate);
+                level1RotateRequiresPinchReset = true;
+                rotateGateHeld = false;
                 AdvanceLevel1(Level1Stage.RotateGate);
             }
         }
@@ -3945,6 +3966,23 @@ namespace HandOfGod.Gameplay
             if (rotateGateLocked || level1Stage != Level1Stage.RotateGate || rotateGate == null)
             {
                 return;
+            }
+
+            if (level1RotateRequiresPinchReset)
+            {
+                rotateGateHeld = false;
+                if (!twoHandsPinching)
+                {
+                    level1RotateRequiresPinchReset = false;
+                }
+                else
+                {
+                    if (rotateGateRenderer != null)
+                    {
+                        rotateGateRenderer.sharedMaterial = boxHover;
+                    }
+                    return;
+                }
             }
 
             if (twoHandsPinching)
@@ -4090,10 +4128,10 @@ namespace HandOfGod.Gameplay
             return hand.score >= 0.35f && hand.pinchDistance < pinchThreshold;
         }
 
-        // -------------------- Level3: Creation Spring --------------------
+        // -------------------- Level3: Create & Erase --------------------
         private void BuildLevel3()
         {
-            levelRoot = new GameObject("Level03 Creation Spring").transform;
+            levelRoot = new GameObject("Level03 Create Erase").transform;
             level3Stage = Level3Stage.CreateBridgeObject;
             level3CubePlaced = false;
             level3SpherePlaced = false;
@@ -5569,10 +5607,10 @@ namespace HandOfGod.Gameplay
 
         // -------------------- End Level2 methods --------------------
 
-        // -------------------- Level4: Rotation & Reflection --------------------
+        // -------------------- Level4: Mirror & Magnet --------------------
         private void BuildLevel4()
         {
-            levelRoot = new GameObject("Level04 Rotation Reflection").transform;
+            levelRoot = new GameObject("Level04 Mirror Magnet").transform;
             level4Stage = Level4Stage.LightGuide;
             level4MagnetPolarity = -1;
             level4MirrorHeld = false;
@@ -5736,9 +5774,22 @@ namespace HandOfGod.Gameplay
 
         private GameObject CreateLevel4Beam(string name, Vector3 start, Vector3 end, Material material)
         {
-            var beam = CreateBox(name, Vector3.zero, Vector3.one, material, levelRoot, Quaternion.identity, false);
-            PositionLevel4Beam(beam.transform, start, end);
-            return beam;
+            var root = new GameObject(name);
+            root.transform.SetParent(levelRoot, false);
+
+            var halo = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            halo.name = name + " soft glow";
+            halo.transform.SetParent(root.transform, false);
+            DestroyUnityObject(halo.GetComponent<Collider>());
+
+            var core = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            core.name = name + " bright core";
+            core.transform.SetParent(root.transform, false);
+            DestroyUnityObject(core.GetComponent<Collider>());
+
+            SetLevel4BeamMaterials(root.transform, material == tealGlow);
+            PositionLevel4Beam(root.transform, start, end);
+            return root;
         }
 
         private void PositionLevel4Beam(Transform beam, Vector3 start, Vector3 end)
@@ -5752,7 +5803,40 @@ namespace HandOfGod.Gameplay
             var length = new Vector2(delta.x, delta.z).magnitude;
             beam.position = (start + end) * 0.5f;
             beam.rotation = Quaternion.Euler(0f, Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg + 90f, 0f);
-            beam.localScale = new Vector3(length, 0.035f, 0.035f);
+            beam.localScale = Vector3.one;
+            var halo = beam.Find(beam.name + " soft glow");
+            if (halo != null)
+            {
+                halo.localPosition = Vector3.zero;
+                halo.localRotation = Quaternion.identity;
+                halo.localScale = new Vector3(length, 0.34f, 1f);
+            }
+            var core = beam.Find(beam.name + " bright core");
+            if (core != null)
+            {
+                core.localPosition = new Vector3(0f, 0.002f, 0f);
+                core.localRotation = Quaternion.identity;
+                core.localScale = new Vector3(length, 0.11f, 1f);
+            }
+        }
+
+        private void SetLevel4BeamMaterials(Transform beam, bool aligned)
+        {
+            if (beam == null)
+            {
+                return;
+            }
+
+            var halo = beam.Find(beam.name + " soft glow")?.GetComponent<Renderer>();
+            if (halo != null)
+            {
+                halo.sharedMaterial = aligned ? level4BeamHaloTealMaterial : level4BeamHaloAmberMaterial;
+            }
+            var core = beam.Find(beam.name + " bright core")?.GetComponent<Renderer>();
+            if (core != null)
+            {
+                core.sharedMaterial = aligned ? level4BeamTealMaterial : level4BeamAmberMaterial;
+            }
         }
 
         private void UpdateLevel4(GestureHandFrame hand)
@@ -5910,8 +5994,7 @@ namespace HandOfGod.Gameplay
             var reflectedEnd = aligned ? targetGatePosition : mirrorPosition + Quaternion.Euler(0f, yaw, 0f) * Vector3.right * 2.10f;
             PositionLevel4Beam(level4BeamSegments[1], mirrorPosition, reflectedEnd);
 
-            var beamRenderer = level4BeamSegments[1].GetComponent<Renderer>();
-            if (beamRenderer != null) beamRenderer.sharedMaterial = aligned ? tealGlow : amberGlow;
+            SetLevel4BeamMaterials(level4BeamSegments[1], aligned);
             if (level4DoorRenderer != null) level4DoorRenderer.sharedMaterial = aligned ? tealGlow : level2PortalCoreMaterial;
 
             var wasSolved = level4LightSolved;
@@ -6268,23 +6351,41 @@ namespace HandOfGod.Gameplay
             return IsPinching(a) && IsPinching(b);
         }
 
-        private Vector2 CursorScreen()
+        private List<UiPointer> GetUiPointers()
         {
-            return TryGetPrimaryHand(out var hand)
-                ? new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height)
-                : new Vector2(-1000f, -1000f);
+            var pointers = new List<UiPointer>(2);
+            var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
+            if (frame.hands != null && frame.hands.Length > 0)
+            {
+                for (var i = 0; i < frame.hands.Length; i++)
+                {
+                    var hand = frame.hands[i];
+                    if (hand.score < 0.25f || !hand.indexExtended)
+                    {
+                        continue;
+                    }
+
+                    var id = !string.IsNullOrEmpty(hand.id) ? hand.id : (!string.IsNullOrEmpty(hand.handedness) ? hand.handedness : $"hand-{i}");
+                    pointers.Add(new UiPointer(id, new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height), IsPinching(hand)));
+                }
+            }
+            else if (TryGetPrimaryHand(out var hand))
+            {
+                pointers.Add(new UiPointer("primary", new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height), IsPinching(hand)));
+            }
+            return pointers;
         }
 
         private void DrawCursor()
         {
-            if (!TryGetPrimaryHand(out var hand))
+            var pointers = GetUiPointers();
+            foreach (var pointer in pointers)
             {
-                return;
+                var pos = pointer.Position;
+                var rect = new Rect(pos.x - 14f, pos.y - 14f, 28f, 28f);
+                GUI.color = pointer.Pinching ? Color.cyan : Color.white;
+                GUI.Box(rect, pointer.Pinching ? "P" : "");
             }
-            var pos = CursorScreen();
-            var rect = new Rect(pos.x - 14f, pos.y - 14f, 28f, 28f);
-            GUI.color = IsPinching(hand) ? Color.cyan : Color.white;
-            GUI.Box(rect, IsPinching(hand) ? "P" : "");
             GUI.color = Color.white;
         }
 
@@ -6300,23 +6401,37 @@ namespace HandOfGod.Gameplay
 
         private void DrawButtonCore(string key, string label, Rect rect, float dwellSeconds, System.Action action, bool allowMouseClick, int fontSize)
         {
-            var cursor = CursorScreen();
-            var inside = rect.Contains(cursor);
-            if (inside)
+            var pointers = GetUiPointers();
+            var activeHoverIds = new List<string>(pointers.Count);
+            var progress = 0f;
+            foreach (var pointer in pointers)
             {
-                if (hoverKey != key)
+                var hoverId = $"{key}|{pointer.Id}";
+                if (rect.Contains(pointer.Position))
                 {
-                    hoverKey = key;
-                    hoverStart = Time.time;
+                    activeHoverIds.Add(hoverId);
+                    if (!hoverStartsByPointer.ContainsKey(hoverId))
+                    {
+                        hoverStartsByPointer[hoverId] = Time.time;
+                    }
+                    progress = Mathf.Max(progress, Mathf.Clamp01((Time.time - hoverStartsByPointer[hoverId]) / dwellSeconds));
                 }
             }
-            else if (hoverKey == key)
+
+            var prefix = key + "|";
+            var staleHoverIds = new List<string>();
+            foreach (var entry in hoverStartsByPointer)
             {
-                hoverKey = "";
-                hoverStart = -1f;
+                if (entry.Key.StartsWith(prefix) && !activeHoverIds.Contains(entry.Key))
+                {
+                    staleHoverIds.Add(entry.Key);
+                }
+            }
+            foreach (var hoverId in staleHoverIds)
+            {
+                hoverStartsByPointer.Remove(hoverId);
             }
 
-            var progress = hoverKey == key && hoverStart >= 0f ? Mathf.Clamp01((Time.time - hoverStart) / dwellSeconds) : 0f;
             var style = fontSize > 0
                 ? new GUIStyle(GUI.skin.button)
                 {
@@ -6336,9 +6451,25 @@ namespace HandOfGod.Gameplay
             GUI.color = Color.white;
             if (clicked || progress >= 1f)
             {
-                hoverKey = "";
-                hoverStart = -1f;
+                RemoveHoverStartsForKey(key);
                 action();
+            }
+        }
+
+        private void RemoveHoverStartsForKey(string key)
+        {
+            var prefix = key + "|";
+            var removeIds = new List<string>();
+            foreach (var entry in hoverStartsByPointer)
+            {
+                if (entry.Key.StartsWith(prefix))
+                {
+                    removeIds.Add(entry.Key);
+                }
+            }
+            foreach (var id in removeIds)
+            {
+                hoverStartsByPointer.Remove(id);
             }
         }
 
@@ -6855,6 +6986,7 @@ namespace HandOfGod.Gameplay
             rotateGateLocked = false;
             sealActivated = false;
             rotateGateHeld = false;
+            level1RotateRequiresPinchReset = false;
             startGate = null;
             bridgeGate = null;
             rotateGateStop = null;
@@ -7007,6 +7139,10 @@ namespace HandOfGod.Gameplay
             level2WindMistMaterial = NewParticleMaterial("Kenney wind mist material", new Color(0.38f, 0.95f, 1f, 0.32f), Resources.Load<Texture2D>("KenneyParticles/soft_smoke"));
             level2PortalTwirlMaterial = NewParticleMaterial("Kenney portal twirl material", new Color(0.10f, 0.96f, 1f, 0.68f), Resources.Load<Texture2D>("KenneyParticles/portal_twirl"));
             level2RuneMaterial = NewMaterial("Level2 active rune gold", new Color(1f, 0.73f, 0.20f), 0.36f, 0.65f);
+            level4BeamAmberMaterial = NewParticleMaterial("Level4 amber light beam core", new Color(1f, 0.58f, 0.12f, 0.82f), Resources.Load<Texture2D>("KenneyParticles/wind_trace"));
+            level4BeamTealMaterial = NewParticleMaterial("Level4 teal light beam core", new Color(0.18f, 1f, 0.92f, 0.86f), Resources.Load<Texture2D>("KenneyParticles/wind_trace"));
+            level4BeamHaloAmberMaterial = NewParticleMaterial("Level4 amber light beam halo", new Color(1f, 0.42f, 0.10f, 0.28f), Resources.Load<Texture2D>("KenneyParticles/soft_smoke"));
+            level4BeamHaloTealMaterial = NewParticleMaterial("Level4 teal light beam halo", new Color(0.16f, 1f, 0.90f, 0.32f), Resources.Load<Texture2D>("KenneyParticles/soft_smoke"));
         }
 
         private static Material NewMaterial(string name, Color color, float smoothness, float emission)
