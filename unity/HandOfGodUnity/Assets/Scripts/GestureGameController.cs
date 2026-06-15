@@ -960,7 +960,8 @@ namespace HandOfGod.Gameplay
 
             var stageSucceeded = TutorialStageSucceeded();
             DrawTutorialStageMenu();
-            if (!stageSucceeded && (tutorialStage == TutorialStage.DrawCreate || tutorialStage == TutorialStage.DrawErase))
+            if ((tutorialStage == TutorialStage.DrawCreate || tutorialStage == TutorialStage.DrawErase)
+                && (!stageSucceeded || tutorialStage == TutorialStage.DrawCreate || TutorialDrawInputActive()))
             {
                 DrawTutorialDrawingHud();
             }
@@ -977,10 +978,11 @@ namespace HandOfGod.Gameplay
             if (stageSucceeded)
             {
                 var finalStage = IsFinalTutorialStage();
-                DrawSuccessBanner(new Rect(Screen.width * 0.5f - 210f, panel.yMax + 14f, 420f, 58f), finalStage ? "TUTORIAL COMPLETE" : "SUCCESS");
+                var successY = tutorialStage == TutorialStage.DrawCreate ? panel.yMax + 126f : panel.yMax + 14f;
+                DrawSuccessBanner(new Rect(Screen.width * 0.5f - 210f, successY, 420f, 58f), finalStage ? "TUTORIAL COMPLETE" : "SUCCESS");
                 var buttonLabel = finalStage ? "Next: Level 1" : "Continue";
                 var buttonAction = finalStage ? (System.Action)(() => StartLevel(GameMode.Level1)) : AdvanceTutorialStage;
-                DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 170f, panel.yMax + 82f, 340f, 64f), MenuDwellSeconds, buttonAction, 24);
+                DrawHoverButton("tutorial-continue", buttonLabel, new Rect(Screen.width * 0.5f - 170f, successY + 68f, 340f, 64f), MenuDwellSeconds, buttonAction, 24);
             }
         }
 
@@ -5803,15 +5805,10 @@ namespace HandOfGod.Gameplay
             var root = new GameObject(name);
             root.transform.SetParent(levelRoot, false);
 
-            var halo = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            halo.name = name + " soft glow";
-            halo.transform.SetParent(root.transform, false);
-            DestroyUnityObject(halo.GetComponent<Collider>());
-
-            var core = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            core.name = name + " bright core";
-            core.transform.SetParent(root.transform, false);
-            DestroyUnityObject(core.GetComponent<Collider>());
+            var column = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            column.name = name + " transparent column";
+            column.transform.SetParent(root.transform, false);
+            DestroyUnityObject(column.GetComponent<Collider>());
 
             SetLevel4BeamMaterials(root.transform, material == tealGlow);
             PositionLevel4Beam(root.transform, start, end);
@@ -5830,19 +5827,12 @@ namespace HandOfGod.Gameplay
             beam.position = (start + end) * 0.5f;
             beam.rotation = Quaternion.Euler(0f, Mathf.Atan2(delta.x, delta.z) * Mathf.Rad2Deg + 90f, 0f);
             beam.localScale = Vector3.one;
-            var halo = beam.Find(beam.name + " soft glow");
-            if (halo != null)
+            var column = beam.Find(beam.name + " transparent column");
+            if (column != null)
             {
-                halo.localPosition = Vector3.zero;
-                halo.localRotation = Quaternion.identity;
-                halo.localScale = new Vector3(length, 0.34f, 1f);
-            }
-            var core = beam.Find(beam.name + " bright core");
-            if (core != null)
-            {
-                core.localPosition = new Vector3(0f, 0.002f, 0f);
-                core.localRotation = Quaternion.identity;
-                core.localScale = new Vector3(length, 0.11f, 1f);
+                column.localPosition = Vector3.zero;
+                column.localRotation = Quaternion.identity;
+                column.localScale = new Vector3(length, 0.035f, 0.035f);
             }
         }
 
@@ -5853,15 +5843,10 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
-            var halo = beam.Find(beam.name + " soft glow")?.GetComponent<Renderer>();
-            if (halo != null)
+            var column = beam.Find(beam.name + " transparent column")?.GetComponent<Renderer>();
+            if (column != null)
             {
-                halo.sharedMaterial = aligned ? level4BeamHaloTealMaterial : level4BeamHaloAmberMaterial;
-            }
-            var core = beam.Find(beam.name + " bright core")?.GetComponent<Renderer>();
-            if (core != null)
-            {
-                core.sharedMaterial = aligned ? level4BeamTealMaterial : level4BeamAmberMaterial;
+                column.sharedMaterial = aligned ? level4BeamTealMaterial : level4BeamAmberMaterial;
             }
         }
 
@@ -7272,10 +7257,12 @@ namespace HandOfGod.Gameplay
             level2WindMistMaterial = NewParticleMaterial("Kenney wind mist material", new Color(0.38f, 0.95f, 1f, 0.32f), Resources.Load<Texture2D>("KenneyParticles/soft_smoke"));
             level2PortalTwirlMaterial = NewParticleMaterial("Kenney portal twirl material", new Color(0.10f, 0.96f, 1f, 0.68f), Resources.Load<Texture2D>("KenneyParticles/portal_twirl"));
             level2RuneMaterial = NewMaterial("Level2 active rune gold", new Color(1f, 0.73f, 0.20f), 0.36f, 0.65f);
-            level4BeamAmberMaterial = NewParticleMaterial("Level4 amber light beam core", new Color(1f, 0.58f, 0.12f, 0.82f), Resources.Load<Texture2D>("KenneyParticles/wind_trace"));
-            level4BeamTealMaterial = NewParticleMaterial("Level4 teal light beam core", new Color(0.18f, 1f, 0.92f, 0.86f), Resources.Load<Texture2D>("KenneyParticles/wind_trace"));
-            level4BeamHaloAmberMaterial = NewParticleMaterial("Level4 amber light beam halo", new Color(1f, 0.42f, 0.10f, 0.28f), Resources.Load<Texture2D>("KenneyParticles/soft_smoke"));
-            level4BeamHaloTealMaterial = NewParticleMaterial("Level4 teal light beam halo", new Color(0.16f, 1f, 0.90f, 0.32f), Resources.Load<Texture2D>("KenneyParticles/soft_smoke"));
+            level4BeamAmberMaterial = NewMaterial("Level4 transparent amber light column", new Color(1f, 0.58f, 0.12f, 0.54f), 0.20f, 0.55f);
+            level4BeamTealMaterial = NewMaterial("Level4 transparent teal light column", new Color(0.18f, 1f, 0.92f, 0.58f), 0.20f, 0.62f);
+            ConfigureTransparentMaterial(level4BeamAmberMaterial);
+            ConfigureTransparentMaterial(level4BeamTealMaterial);
+            level4BeamHaloAmberMaterial = level4BeamAmberMaterial;
+            level4BeamHaloTealMaterial = level4BeamTealMaterial;
         }
 
         private static Material NewMaterial(string name, Color color, float smoothness, float emission)
