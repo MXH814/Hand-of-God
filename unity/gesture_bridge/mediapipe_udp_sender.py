@@ -169,9 +169,6 @@ class ResponsiveFingerDisplayHand:
             corrected[dip] += self._limited(dip_correction, max(finger_span * 0.38, palm_width * 0.12))
             self._soft_preserve_finger_chain(raw_points, corrected, (mcp, pip, dip, tip))
 
-        for chain in DISPLAY_FINGER_CHAINS[1:]:
-            self._straighten_extended_finger(raw_points, corrected, chain, palm_width)
-
         stabilized = self._stabilize_display(corrected, palm_width)
         self.previous = raw_points
         self.displayed = stabilized
@@ -250,50 +247,6 @@ class ResponsiveFingerDisplayHand:
                 elif b_movable:
                     corrected[b] += adjustment
 
-    @staticmethod
-    def _straighten_extended_finger(raw_points, corrected, chain, palm_width):
-        mcp, pip, dip, tip = chain
-        base = corrected[mcp]
-        end = corrected[tip]
-        line = end - base
-        direct = float(np.linalg.norm(line[:2]))
-        if direct <= max(0.018, palm_width * 0.20):
-            return
-
-        raw_lengths = [
-            float(np.linalg.norm(raw_points[pip][:2] - raw_points[mcp][:2])),
-            float(np.linalg.norm(raw_points[dip][:2] - raw_points[pip][:2])),
-            float(np.linalg.norm(raw_points[tip][:2] - raw_points[dip][:2])),
-        ]
-        total = sum(raw_lengths)
-        if total <= 1e-5:
-            return
-
-        straightness = direct / total
-        if straightness < 0.62:
-            return
-
-        direction = line / max(float(np.linalg.norm(line)), 1e-5)
-        pip_target = base + direction * (direct * raw_lengths[0] / total)
-        dip_target = base + direction * (direct * (raw_lengths[0] + raw_lengths[1]) / total)
-
-        pip_lateral = float(np.linalg.norm((corrected[pip] - pip_target)[:2]))
-        dip_lateral = float(np.linalg.norm((corrected[dip] - dip_target)[:2]))
-        lateral = max(pip_lateral, dip_lateral)
-        lateral_start = palm_width * 0.018
-        lateral_full = palm_width * 0.16
-        if lateral <= lateral_start:
-            return
-
-        straight_blend = min(1.0, max(0.0, (straightness - 0.62) / 0.28))
-        lateral_blend = min(1.0, max(0.0, (lateral - lateral_start) / max(lateral_full - lateral_start, 1e-5)))
-        blend = straight_blend * lateral_blend
-        if blend <= 0.0:
-            return
-
-        corrected[pip] = corrected[pip] * (1.0 - blend) + pip_target * blend
-        corrected[dip] = corrected[dip] * (1.0 - blend) + dip_target * blend
-
 
 def smooth_landmarks(hand_id, landmarks, smooth_points):
     slots = smooth_points.setdefault(hand_id, {})
@@ -332,6 +285,106 @@ def raw_display_landmarks(landmarks):
 
 def landmark_points_from_json(landmarks):
     return [LandmarkPoint(point["x"], point["y"], point["z"]) for point in landmarks]
+
+
+def stabilize_crossed_index_fingers(detections):
+    by_label = {item["label"]: item for item in detections if item["label"] in ("Left", "Right")}
+    if "Left" not in by_label or "Right" not in by_label:
+        return
+
+    left = by_label["Left"]["displayLandmarks"]
+    right = by_label["Right"]["displayLandmarks"]
+    if len(left) < 21 or len(right) < 21:
+        return
+
+    left_width = normalized_distance_json(left[5], left[17], 1.0)
+    right_width = normalized_distance_json(right[5], right[17], 1.0)
+    palm_width = max((left_width + right_width) * 0.5, 0.055)
+    crossing_distance = segment_distance_2d(left[5], left[8], right[5], right[8])
+    if crossing_distance > max(0.018, palm_width * 0.16):
+        return
+
+    stabilize_crossed_index_chain(left, palm_width)
+    stabilize_crossed_index_chain(right, palm_width)
+
+
+def stabilize_crossed_index_chain(landmarks, palm_width):
+    mcp, pip, dip, tip = 5, 6, 7, 8
+    direct = normalized_distance_json(landmarks[mcp], landmarks[tip], 1.0)
+    segment_total = (
+        normalized_distance_json(landmarks[mcp], landmarks[pip], 1.0)
+        + normalized_distance_json(landmarks[pip], landmarks[dip], 1.0)
+        + normalized_distance_json(landmarks[dip], landmarks[tip], 1.0)
+    )
+    if direct <= max(0.018, palm_width * 0.20) or segment_total <= 1e-5:
+        return
+
+    straightness = direct / segment_total
+    if straightness < 0.60:
+        return
+
+    base = np.array([landmarks[mcp]["x"], landmarks[mcp]["y"], landmarks[mcp]["z"]], dtype=np.float32)
+    end = np.array([landmarks[tip]["x"], landmarks[tip]["y"], landmarks[tip]["z"]], dtype=np.float32)
+    direction = end - base
+    direction /= max(float(np.linalg.norm(direction)), 1e-5)
+
+    first = normalized_distance_json(landmarks[mcp], landmarks[pip], 1.0)
+    second = normalized_distance_json(landmarks[pip], landmarks[dip], 1.0)
+    pip_target = base + direction * (direct * first / segment_total)
+    dip_target = base + direction * (direct * (first + second) / segment_total)
+
+    lateral = max(
+        point_to_segment_distance_2d(landmarks[pip], landmarks[mcp], landmarks[tip]),
+        point_to_segment_distance_2d(landmarks[dip], landmarks[mcp], landmarks[tip]),
+    )
+    lateral_start = palm_width * 0.024
+    lateral_full = palm_width * 0.15
+    if lateral <= lateral_start:
+        return
+
+    straight_blend = min(1.0, max(0.0, (straightness - 0.60) / 0.28))
+    lateral_blend = min(1.0, max(0.0, (lateral - lateral_start) / max(lateral_full - lateral_start, 1e-5)))
+    blend = 0.55 * straight_blend * lateral_blend
+    if blend <= 0.0:
+        return
+
+    blend_landmark_json(landmarks[pip], pip_target, blend)
+    blend_landmark_json(landmarks[dip], dip_target, blend)
+
+
+def blend_landmark_json(landmark, target, blend):
+    landmark["x"] = float(landmark["x"] * (1.0 - blend) + target[0] * blend)
+    landmark["y"] = float(landmark["y"] * (1.0 - blend) + target[1] * blend)
+    landmark["z"] = float(landmark["z"] * (1.0 - blend) + target[2] * blend)
+
+
+def normalized_distance_json(a, b, scale):
+    dx = float(a["x"]) - float(b["x"])
+    dy = float(a["y"]) - float(b["y"])
+    dz = float(a["z"]) - float(b["z"])
+    return float(np.linalg.norm(np.array([dx, dy, dz]))) / max(scale, 1e-5)
+
+
+def point_to_segment_distance_2d(point, start, end):
+    p = np.array([float(point["x"]), float(point["y"])], dtype=np.float32)
+    a = np.array([float(start["x"]), float(start["y"])], dtype=np.float32)
+    b = np.array([float(end["x"]), float(end["y"])], dtype=np.float32)
+    ab = b - a
+    denom = float(np.dot(ab, ab))
+    if denom <= 1e-8:
+        return float(np.linalg.norm(p - a))
+    t = min(1.0, max(0.0, float(np.dot(p - a, ab) / denom)))
+    projection = a + ab * t
+    return float(np.linalg.norm(p - projection))
+
+
+def segment_distance_2d(a0, a1, b0, b1):
+    return min(
+        point_to_segment_distance_2d(a0, b0, b1),
+        point_to_segment_distance_2d(a1, b0, b1),
+        point_to_segment_distance_2d(b0, a0, a1),
+        point_to_segment_distance_2d(b1, a0, a1),
+    )
 
 
 class VideoStreamClient:
@@ -631,6 +684,7 @@ def main():
             active_ids = set()
             if result.multi_hand_landmarks:
                 handedness_list = result.multi_handedness or []
+                detections = []
                 for index, hand in enumerate(result.multi_hand_landmarks[:2]):
                     category = handedness_list[index].classification[0] if index < len(handedness_list) else None
                     label = category.label if category else "Unknown"
@@ -643,6 +697,21 @@ def main():
                         display_landmark_json = raw_display_landmarks(hand.landmark)
                     else:
                         display_landmark_json = responsive_finger_display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand)
+                    detections.append({
+                        "label": label,
+                        "score": score,
+                        "hand_id": hand_id,
+                        "displayLandmarks": display_landmark_json,
+                    })
+                    if args.preview:
+                        drawing.draw_landmarks(frame, hand, mp.solutions.hands.HAND_CONNECTIONS)
+
+                stabilize_crossed_index_fingers(detections)
+                for detection in detections:
+                    label = detection["label"]
+                    score = detection["score"]
+                    hand_id = detection["hand_id"]
+                    display_landmark_json = detection["displayLandmarks"]
                     interaction_points = landmark_points_from_json(display_landmark_json)
                     hand_payload, raw = analyze_hand(interaction_points, label, score, hand_id, neutral, display_landmark_json)
                     hand_payload["displayLandmarks"] = display_landmark_json
@@ -656,8 +725,6 @@ def main():
                     hand_payload["pinch"] = latched
                     hand_payload["openPalm"] = hand_payload["openPalm"] and not latched
                     analyzed.append(hand_payload)
-                    if args.preview:
-                        drawing.draw_landmarks(frame, hand, mp.solutions.hands.HAND_CONNECTIONS)
             stale_ids = [hand_id for hand_id in set(display_landmarks_by_hand) | set(pinch_latches) if hand_id not in active_ids]
             for hand_id in stale_ids:
                 display_landmarks_by_hand.pop(hand_id, None)

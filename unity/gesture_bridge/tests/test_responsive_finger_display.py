@@ -48,6 +48,10 @@ def point(seq, index):
     return item.x, item.y, item.z
 
 
+def json_points(seq):
+    return [{"x": point(seq, index)[0], "y": point(seq, index)[1], "z": point(seq, index)[2]} for index in range(len(seq))]
+
+
 def segment_length(seq, a, b):
     return math.dist(point(seq, a), point(seq, b))
 
@@ -171,30 +175,46 @@ class ResponsiveFingerDisplayTests(unittest.TestCase):
         self.assertGreater(output[8]["y"], base[8].y + 0.002)
         self.assertGreater(output[7]["y"], base[7].y + 0.0015)
 
-    def test_extended_crossed_finger_keeps_inner_joints_straight(self):
-        base = make_hand()
-        state = bridge.ResponsiveFingerDisplayHand(base)
-        crossed = make_hand()
-        crossed[6] = landmark(0.515, 0.42)
-        crossed[7] = landmark(0.385, 0.34)
+    def test_crossed_left_right_index_fingers_reduce_inner_joint_jitter(self):
+        left = make_hand()
+        right = make_hand()
+        left[6] = landmark(0.515, 0.42)
+        left[7] = landmark(0.385, 0.34)
+        right[6] = landmark(0.385, 0.42)
+        right[7] = landmark(0.515, 0.34)
+        detections = [
+            {"label": "Left", "displayLandmarks": json_points(left)},
+            {"label": "Right", "displayLandmarks": json_points(right)},
+        ]
 
-        output = state.update(crossed)
+        raw_lateral = max(
+            line_distance(detections[0]["displayLandmarks"], 6, 5, 8),
+            line_distance(detections[0]["displayLandmarks"], 7, 5, 8),
+            line_distance(detections[1]["displayLandmarks"], 6, 5, 8),
+            line_distance(detections[1]["displayLandmarks"], 7, 5, 8),
+        )
+        bridge.stabilize_crossed_index_fingers(detections)
+        output_lateral = max(
+            line_distance(detections[0]["displayLandmarks"], 6, 5, 8),
+            line_distance(detections[0]["displayLandmarks"], 7, 5, 8),
+            line_distance(detections[1]["displayLandmarks"], 6, 5, 8),
+            line_distance(detections[1]["displayLandmarks"], 7, 5, 8),
+        )
 
-        raw_lateral = max(line_distance(crossed, 6, 5, 8), line_distance(crossed, 7, 5, 8))
-        output_lateral = max(line_distance(output, 6, 5, 8), line_distance(output, 7, 5, 8))
-        self.assertLess(output_lateral, raw_lateral * 0.72)
+        self.assertLess(output_lateral, raw_lateral * 0.86)
 
-    def test_curled_finger_is_not_forced_straight(self):
-        base = make_hand()
-        state = bridge.ResponsiveFingerDisplayHand(base)
-        curled = make_hand()
-        curled[6] = landmark(0.45, 0.45)
-        curled[7] = landmark(0.53, 0.45)
-        curled[8] = landmark(0.53, 0.52)
+    def test_bent_index_is_not_changed_without_left_right_crossing(self):
+        bent = make_hand()
+        bent[6] = landmark(0.45, 0.45)
+        bent[7] = landmark(0.53, 0.45)
+        bent[8] = landmark(0.53, 0.52)
+        display = json_points(bent)
+        before = [dict(item) for item in display]
+        detections = [{"label": "Left", "displayLandmarks": display}]
 
-        output = state.update(curled)
+        bridge.stabilize_crossed_index_fingers(detections)
 
-        self.assertGreater(line_distance(output, 7, 5, 8), 0.045)
+        self.assertEqual(before, display)
 
 
 if __name__ == "__main__":
