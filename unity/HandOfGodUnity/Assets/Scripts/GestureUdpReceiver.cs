@@ -18,6 +18,7 @@ namespace HandOfGod.Gestures
         private UdpClient client;
         private volatile bool running;
         private long lastReceivedTicks;
+        private double lastFrameTimestamp;
 
         public bool HasFreshFrame
         {
@@ -42,6 +43,40 @@ namespace HandOfGod.Gestures
                 {
                     return latest;
                 }
+            }
+        }
+
+        public float ReceiveAgeSeconds
+        {
+            get
+            {
+                var receivedTicks = Interlocked.Read(ref lastReceivedTicks);
+                if (receivedTicks == 0L)
+                {
+                    return -1f;
+                }
+
+                return (DateTime.UtcNow.Ticks - receivedTicks) / (float)TimeSpan.TicksPerSecond;
+            }
+        }
+
+        public float FrameAgeSeconds
+        {
+            get
+            {
+                GestureFrame frame;
+                lock (gate)
+                {
+                    frame = latest;
+                }
+
+                if (frame.timestamp <= 0d)
+                {
+                    return -1f;
+                }
+
+                var unixNow = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
+                return Mathf.Max(0f, (float)(unixNow - frame.timestamp));
             }
         }
 
@@ -86,7 +121,16 @@ namespace HandOfGod.Gestures
                     var frame = GestureFrameUtility.Clamp(JsonUtility.FromJson<GestureFrame>(json));
                     lock (gate)
                     {
+                        if (frame.timestamp > 0d && lastFrameTimestamp > 0d && frame.timestamp < lastFrameTimestamp)
+                        {
+                            continue;
+                        }
+
                         latest = frame;
+                        if (frame.timestamp > 0d)
+                        {
+                            lastFrameTimestamp = frame.timestamp;
+                        }
                     }
                     Interlocked.Exchange(ref lastReceivedTicks, DateTime.UtcNow.Ticks);
                 }

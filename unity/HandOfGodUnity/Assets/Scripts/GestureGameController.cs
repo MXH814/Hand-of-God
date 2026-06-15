@@ -850,7 +850,7 @@ namespace HandOfGod.Gameplay
 
         private void DrawCalibration()
         {
-            var panel = new Rect(Screen.width / 2f - 250f, 34, 500, 304);
+            var panel = new Rect(Screen.width / 2f - 250f, 34, 500, 330);
             var title = mode == GameMode.CalibrationOpen ? "Calibration: Open Hand" : "Calibration: Pinch";
             var detail = mode == GameMode.CalibrationOpen
                 ? "Hold an open palm for 1 second."
@@ -870,9 +870,12 @@ namespace HandOfGod.Gameplay
                 GUI.Label(new Rect(panel.x + 24, panel.y + 164, 450, 24), $"Bridge: {frame.bridgeFps:0.0} FPS  |  processing {frame.processingMs:0.0} ms");
                 var captureFourcc = string.IsNullOrWhiteSpace(frame.captureFourcc) ? "----" : frame.captureFourcc;
                 GUI.Label(new Rect(panel.x + 24, panel.y + 188, 450, 24), $"Capture: {frame.captureWidth:0}x{frame.captureHeight:0} @ {frame.captureFps:0.0} FPS  {captureFourcc}");
+                var frameAgeMs = Mathf.Max(0f, receiver.FrameAgeSeconds * 1000f);
+                var receiveAgeMs = Mathf.Max(0f, receiver.ReceiveAgeSeconds * 1000f);
+                GUI.Label(new Rect(panel.x + 24, panel.y + 212, 450, 24), $"Latency: frame age {frameAgeMs:0} ms  |  receive age {receiveAgeMs:0} ms");
             }
-            DrawUtilityButton("start-camera", "Start / Retry Camera", new Rect(panel.x + 24, panel.y + 230, 190, 34), SafeDwellSeconds, StartVisibleGestureBridge);
-            DrawHoverButton("skip", "Skip calibration", new Rect(panel.x + 236, panel.y + 230, 190, 34), SafeDwellSeconds, () =>
+            DrawUtilityButton("start-camera", "Start / Retry Camera", new Rect(panel.x + 24, panel.y + 256, 190, 34), SafeDwellSeconds, StartVisibleGestureBridge);
+            DrawHoverButton("skip", "Skip calibration", new Rect(panel.x + 236, panel.y + 256, 190, 34), SafeDwellSeconds, () =>
             {
                 pinchThreshold = 0.56f;
                 StartLevel(GameMode.Level0);

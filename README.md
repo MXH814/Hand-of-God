@@ -82,7 +82,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - `Skip Calibration`：食指悬停跳过校准，用于课堂展示或无摄像头环境。
 - `Exit`：退出游戏。
 - 鼠标点击：所有 UI 按钮仍可用鼠标触发。
-- 校准面板会在识别到手后显示桥接端 FPS、单帧处理耗时、实际采集分辨率、实际采集 FPS 和 FOURCC，方便判断摄像头与 MediaPipe 是否处于低延迟状态。
+- 校准面板会在识别到手后显示桥接端 FPS、单帧处理耗时、实际采集分辨率、实际采集 FPS、FOURCC、手势帧龄和 Unity 接收龄，方便判断摄像头、MediaPipe 与 Unity 显示链路是否处于低延迟状态。
 
 校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path`、`Level 2: Portals` 或 `Level 3: 创造和消除`；在关卡中选择当前关卡会重新开始该关。
 
@@ -444,6 +444,7 @@ Python 对每个 hand id 的每个 landmark 同时维护两套输出：
 - `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用；手指链条优先实时，腕部和 cursor 优先稳定。
 - `displayLandmarks`：骨架显示用保形 landmarks，只负责 Unity 前景 21 点骨架；Python 只对掌心锚点做轻量稳定，手指相对掌心的形状完全来自当前 MediaPipe 帧，保持实时手型。
 - MediaPipe Hands 默认使用 `model_complexity=1` 和逐帧检测模式，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型或 ROI tracking 造成的骨架形变不自然。
+- Unity UDP 接收器会丢弃 timestamp 倒退的旧手势包，并在校准界面显示 frame age / receive age，避免旧帧回灌造成骨架慢半拍却难以定位。
 
 控制用 `landmarks` 分为手指链条和腕部两条路径：
 
