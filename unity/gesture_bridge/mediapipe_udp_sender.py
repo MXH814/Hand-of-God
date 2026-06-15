@@ -84,6 +84,61 @@ class SmoothedPoint:
         return self.x, self.y, self.z
 
 
+class ResponsiveDisplayPoint:
+    def __init__(self, x, y, z):
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+        self.vx = 0.0
+        self.vy = 0.0
+        self.vz = 0.0
+        self.last_time = time.time()
+
+    def update(self, x, y, z, index=-1):
+        now = time.time()
+        dt = max(now - self.last_time, 1e-3)
+        raw_dx = float(x) - self.x
+        raw_dy = float(y) - self.y
+        raw_dz = float(z) - self.z
+        displacement = float(np.linalg.norm(np.array([raw_dx, raw_dy, raw_dz])))
+        speed = displacement / dt
+        is_finger = index in FINGER_CHAIN_LANDMARKS
+
+        deadband = 0.00016 if is_finger else 0.00055
+        if displacement <= deadband:
+            self.last_time = now
+            return self.x, self.y, self.z
+
+        velocity_alpha = 0.62 if is_finger else 0.38
+        self.vx = self.vx * (1.0 - velocity_alpha) + (raw_dx / dt) * velocity_alpha
+        self.vy = self.vy * (1.0 - velocity_alpha) + (raw_dy / dt) * velocity_alpha
+        self.vz = self.vz * (1.0 - velocity_alpha) + (raw_dz / dt) * velocity_alpha
+
+        if is_finger:
+            alpha = 0.80 + min(speed * 0.045, 0.17)
+            lead_seconds = 0.014 + min(speed * 0.018, 0.014)
+            max_lead = 0.016
+        else:
+            alpha = 0.54 + min(speed * 0.030, 0.18)
+            lead_seconds = 0.006 + min(speed * 0.010, 0.006)
+            max_lead = 0.008
+
+        alpha = max(0.50, min(0.97, alpha))
+        lead = np.array([self.vx * lead_seconds, self.vy * lead_seconds, self.vz * lead_seconds])
+        lead_norm = float(np.linalg.norm(lead))
+        if lead_norm > max_lead:
+            lead *= max_lead / lead_norm
+
+        target_x = float(x) + float(lead[0])
+        target_y = float(y) + float(lead[1])
+        target_z = float(z) + float(lead[2])
+        self.x += (target_x - self.x) * alpha
+        self.y += (target_y - self.y) * alpha
+        self.z += (target_z - self.z) * alpha
+        self.last_time = now
+        return self.x, self.y, self.z
+
+
 def smooth_landmarks(hand_id, landmarks, smooth_points):
     slots = smooth_points.setdefault(hand_id, {})
     smoothed_json = []
@@ -99,8 +154,17 @@ def smooth_landmarks(hand_id, landmarks, smooth_points):
     return smoothed_json, smoothed_points
 
 
-def display_landmarks(landmarks):
-    return [{"x": float(point.x), "y": float(point.y), "z": float(point.z)} for point in landmarks]
+def display_landmarks(hand_id, landmarks, display_points):
+    slots = display_points.setdefault(hand_id, {})
+    display_json = []
+    for index, point in enumerate(landmarks):
+        slot = slots.get(index)
+        if slot is None:
+            slot = ResponsiveDisplayPoint(point.x, point.y, point.z)
+            slots[index] = slot
+        x, y, z = slot.update(point.x, point.y, point.z, index)
+        display_json.append({"x": float(x), "y": float(y), "z": float(z)})
+    return display_json
 
 
 class VideoStreamClient:
@@ -361,6 +425,7 @@ def main():
     last_raw = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
     pinch_latches = {}
     smooth_landmarks_by_hand = {}
+    display_landmarks_by_hand = {}
     smooth_cursors = {}
     bridge_fps = 0.0
     processing_ms = 0.0
@@ -398,7 +463,7 @@ def main():
                     score = category.score if category else 1.0
                     hand_id = label if label in ("Left", "Right") else f"Unknown-{index}"
                     active_ids.add(hand_id)
-                    display_landmark_json = display_landmarks(hand.landmark)
+                    display_landmark_json = display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand)
                     smoothed_landmarks, smoothed_points = smooth_landmarks(hand_id, hand.landmark, smooth_landmarks_by_hand)
                     hand_payload, raw = analyze_hand(smoothed_points, label, score, hand_id, neutral, smoothed_landmarks)
                     hand_payload["displayLandmarks"] = display_landmark_json
@@ -422,9 +487,9 @@ def main():
                         hand_payload["indexY"] - previous[3],
                     ])))
                     if index_only:
-                        index_alpha = 0.62 if index_motion < 0.004 else (0.82 if index_motion < 0.014 else 0.92)
+                        index_alpha = 0.76 if index_motion < 0.003 else (0.90 if index_motion < 0.014 else 0.96)
                     else:
-                        index_alpha = 0.84
+                        index_alpha = 0.90
                     smoothed = (
                         previous[0] * (1.0 - pinch_alpha) + hand_payload["pinchX"] * pinch_alpha,
                         previous[1] * (1.0 - pinch_alpha) + hand_payload["pinchY"] * pinch_alpha,
@@ -442,6 +507,7 @@ def main():
             stale_ids = [hand_id for hand_id in smooth_landmarks_by_hand if hand_id not in active_ids]
             for hand_id in stale_ids:
                 smooth_landmarks_by_hand.pop(hand_id, None)
+                display_landmarks_by_hand.pop(hand_id, None)
                 smooth_cursors.pop(hand_id, None)
                 pinch_latches.pop(hand_id, None)
 

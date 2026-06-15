@@ -442,7 +442,7 @@ Unity 端职责：
 Python 对每个 hand id 的每个 landmark 同时维护两套输出：
 
 - `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用；手指链条优先实时，腕部和 cursor 优先稳定。
-- `displayLandmarks`：骨架显示用原始 landmarks，只负责 Unity 前景 21 点骨架，优先实时手型。
+- `displayLandmarks`：骨架显示用响应式 landmarks，只负责 Unity 前景 21 点骨架；静止时抑制极小噪声，运动时用高更新系数和极短速度前瞻保持实时手型。
 - MediaPipe Hands 默认使用 `model_complexity=1` 和逐帧检测模式，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型或 ROI tracking 造成的骨架形变不自然。
 
 控制用 `landmarks` 分为手指链条和腕部两条路径：
@@ -454,7 +454,7 @@ Python 对每个 hand id 的每个 landmark 同时维护两套输出：
 - 真实弯曲、伸直动作不再被小位移平滑拖慢，避免第一指节滞后造成的“折断感”。
 - 腕部 `alpha` 被限制在稳定范围内，避免过度延迟或过度跳变。
 - 手势分析使用控制用 landmarks；手指姿态读取 raw 当前帧，交互点和手势开关再通过 cursor EMA、迟滞阈值和保持时间抑制抖动。
-- `displayLandmarks` 直接使用原始 MediaPipe 点；Unity 绘制骨架时对这套显示点直绘当前帧，不再经过缓存、插值或单个指节限速，真实弯曲动作会立即同步到骨架显示。只有缺少 raw display landmarks、退回控制用 landmarks 时，才对整只手的单帧异常位移做整体保护；UI 和机关判定不直接依赖这套显示点。
+- `displayLandmarks` 使用 `ResponsiveDisplayPoint`：手指链条 landmarks（1-20）使用高 alpha 和 14-28 ms 的速度前瞻，补偿摄像头与模型带来的视觉滞后；腕部使用更保守的前瞻和更低 alpha，保证整只手不跳变。Unity 绘制骨架时对这套显示点直绘当前帧，不再经过缓存、插值或单个指节限速，真实弯曲动作会立即同步到骨架显示。只有缺少 display landmarks、退回控制用 landmarks 时，才对整只手的单帧异常位移做整体保护；UI 和机关判定不直接依赖这套显示点。
 
 ### Cursor EMA 平滑
 
@@ -464,7 +464,7 @@ Python 对 `pinchX`、`pinchY`、`indexX`、`indexY` 使用指数移动平均：
 smoothed = previous * 0.72 + current * 0.28
 ```
 
-实际运行时会根据姿态动态调整平滑强度：捏合拖动物体时使用更高 pinch center 响应速度；只伸出食指且其他手指弯曲时，对极低幅抖动保留过滤，但正常小动作和快速移动都会用高更新系数跟随，减少 UI 悬停抖动的同时避免指尖和指节滞后。骨架显示优先保持实时手型，UI 悬停稳定性主要由 cursor EMA 承担。
+实际运行时会根据姿态动态调整平滑强度：捏合拖动物体时使用更高 pinch center 响应速度；只伸出食指且其他手指弯曲时，对极低幅抖动保留过滤，但正常小动作和快速移动都会使用更高更新系数跟随，减少 UI 悬停抖动的同时避免指尖和指节滞后。骨架显示优先保持实时手型，UI 悬停稳定性主要由 cursor EMA 承担。
 
 ### 捏合检测
 
