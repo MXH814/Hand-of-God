@@ -600,6 +600,7 @@ cd "unity\gesture_bridge"
 基础验证：
 
 - `python -m py_compile unity\gesture_bridge\mediapipe_udp_sender.py`
+- `python -m unittest discover -s unity\gesture_bridge\tests`
 - Unity batchmode 重建 `Level01.unity` 无编译错误。
 - `.\Build-HandOfGod.bat` 成功生成 Windows exe。
 - 启动游戏后自动进入校准界面。
