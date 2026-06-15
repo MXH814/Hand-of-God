@@ -258,6 +258,9 @@ def main():
     parser.add_argument("--jpeg-quality", type=int, default=72)
     parser.add_argument("--lock-port", type=int, default=5007)
     parser.add_argument("--model-complexity", type=int, choices=(0, 1), default=1, help="MediaPipe Hands model complexity. 1 improves finger-joint fidelity; 0 is faster.")
+    parser.add_argument("--track-roi", action="store_true", help="Use MediaPipe ROI tracking between detections. Faster, but fast finger-bend changes can feel less immediate.")
+    parser.add_argument("--detection-confidence", type=float, default=0.60)
+    parser.add_argument("--tracking-confidence", type=float, default=0.82)
     args = parser.parse_args()
 
     lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -271,7 +274,13 @@ def main():
     os.environ.setdefault("GLOG_minloglevel", "1")
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     video = VideoStreamClient(args.video_host, args.video_port)
-    hands_model = mp.solutions.hands.Hands(max_num_hands=2, model_complexity=args.model_complexity, min_detection_confidence=0.65, min_tracking_confidence=0.65)
+    hands_model = mp.solutions.hands.Hands(
+        static_image_mode=not args.track_roi,
+        max_num_hands=2,
+        model_complexity=args.model_complexity,
+        min_detection_confidence=args.detection_confidence,
+        min_tracking_confidence=args.tracking_confidence,
+    )
     drawing = mp.solutions.drawing_utils
     cap = cv2.VideoCapture(args.camera, cv2.CAP_DSHOW)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -288,7 +297,8 @@ def main():
     frame_counter = 0
     diagnostics_start = time.time()
 
-    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}, camera_fps={args.camera_fps}. Use --preview for a debug window.")
+    tracking_mode = "roi-tracking" if args.track_roi else "detect-every-frame"
+    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}, camera_fps={args.camera_fps}, mode={tracking_mode}. Use --preview for a debug window.")
     try:
         while cap.isOpened():
             frame_start = time.time()
@@ -394,7 +404,7 @@ def main():
             elapsed = time.time() - diagnostics_start
             if elapsed >= 5.0:
                 bridge_fps = frame_counter / elapsed
-                print(f"Bridge diagnostics: fps={bridge_fps:.1f} processing={processing_ms:.1f}ms model_complexity={args.model_complexity}")
+                print(f"Bridge diagnostics: fps={bridge_fps:.1f} processing={processing_ms:.1f}ms model_complexity={args.model_complexity} mode={tracking_mode}")
                 diagnostics_start = time.time()
                 frame_counter = 0
 

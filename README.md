@@ -352,14 +352,15 @@ numpy
 - 使用 OpenCV 采集摄像头。
 - 摄像头采集使用低缓冲设置，并默认请求 `30 FPS`，减少摄像头队列积压造成的显示延迟。
 - 使用 MediaPipe Hands 最多识别两只手，默认 `model_complexity=1`，优先保证手指关节和骨架形状精度。
+- MediaPipe 默认使用 `detect-every-frame` 模式逐帧检测手部，而不是长时间沿用 ROI tracking，减少快速弯曲手指时第一指节被旧姿态拖慢的现象。
 - 支持镜像画面，保证玩家看到的左右移动符合屏幕直觉。
 - 输出 21 点 landmarks、左右手标签、识别分数、捏合中心、食指尖位置、掌宽、五指伸展、掌心姿态。
 - 通过 UDP `127.0.0.1:5005` 发送手势 JSON。
 - 通过 TCP `127.0.0.1:5006` 发送长度前缀 JPEG 摄像头帧。
 - 使用 TCP 锁端口 `5007` 防止多个桥接实例同时占用摄像头。
 - 默认 headless 运行；只有手动传入 `--preview` 时才显示 OpenCV 调试窗口。
-- 如低配机器帧率不足，可手动传入 `--model-complexity 0` 回退到更快但关节精度较低的模型。
-- 可用 `--camera-fps` 调整摄像头目标帧率；桥接每 5 秒向 `gesture-bridge-runtime.log` 输出一次 FPS、处理耗时和模型复杂度。
+- 如低配机器帧率不足，可手动传入 `--model-complexity 0` 回退到更快但关节精度较低的模型，或传入 `--track-roi` 使用 MediaPipe ROI tracking 换取更高帧率。
+- 可用 `--camera-fps` 调整摄像头目标帧率，也可用 `--detection-confidence` / `--tracking-confidence` 调整 MediaPipe 置信度阈值；桥接每 5 秒向 `gesture-bridge-runtime.log` 输出一次 FPS、处理耗时、模型复杂度和 tracking 模式。
 
 ### 手势数据字段
 
@@ -435,7 +436,7 @@ Python 对每个 hand id 的每个 landmark 同时维护两套输出：
 
 - `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用，优先稳定。
 - `displayLandmarks`：骨架显示用原始 landmarks，只负责 Unity 前景 21 点骨架，优先实时手型。
-- MediaPipe Hands 默认使用 `model_complexity=1`，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型造成的骨架形变不自然。
+- MediaPipe Hands 默认使用 `model_complexity=1` 和逐帧检测模式，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型或 ROI tracking 造成的骨架形变不自然。
 
 控制用 `landmarks` 新点到来时，根据点位移动速度和屏幕边缘程度计算动态 `alpha`：
 
