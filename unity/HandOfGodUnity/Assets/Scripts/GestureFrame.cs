@@ -58,6 +58,7 @@ namespace HandOfGod.Gestures
         public float captureHeight;
         public float captureFps;
         public string captureFourcc;
+        public string displayMode;
         public bool pinch;
         public bool openPalm;
         public int handCount;
@@ -84,6 +85,7 @@ namespace HandOfGod.Gestures
             captureHeight = 0f,
             captureFps = 0f,
             captureFourcc = "",
+            displayMode = "",
             pinch = false,
             openPalm = false,
             handCount = 0,
@@ -114,6 +116,7 @@ namespace HandOfGod.Gestures
             frame.captureHeight = Mathf.Max(0f, frame.captureHeight);
             frame.captureFps = Mathf.Max(0f, frame.captureFps);
             frame.captureFourcc ??= "";
+            frame.displayMode ??= "";
             frame.hands ??= Array.Empty<GestureHandFrame>();
             for (var i = 0; i < frame.hands.Length; i++)
             {

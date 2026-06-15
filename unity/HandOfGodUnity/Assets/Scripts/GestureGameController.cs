@@ -850,7 +850,7 @@ namespace HandOfGod.Gameplay
 
         private void DrawCalibration()
         {
-            var panel = new Rect(Screen.width / 2f - 250f, 34, 500, 330);
+            var panel = new Rect(Screen.width / 2f - 250f, 34, 500, 356);
             var title = mode == GameMode.CalibrationOpen ? "Calibration: Open Hand" : "Calibration: Pinch";
             var detail = mode == GameMode.CalibrationOpen
                 ? "Hold an open palm for 1 second."
@@ -873,9 +873,11 @@ namespace HandOfGod.Gameplay
                 var frameAgeMs = Mathf.Max(0f, receiver.FrameAgeSeconds * 1000f);
                 var receiveAgeMs = Mathf.Max(0f, receiver.ReceiveAgeSeconds * 1000f);
                 GUI.Label(new Rect(panel.x + 24, panel.y + 212, 450, 24), $"Latency: frame age {frameAgeMs:0} ms  |  receive age {receiveAgeMs:0} ms");
+                var displayMode = string.IsNullOrWhiteSpace(frame.displayMode) ? "unknown" : frame.displayMode;
+                GUI.Label(new Rect(panel.x + 24, panel.y + 236, 450, 24), $"Display skeleton: {displayMode}");
             }
-            DrawUtilityButton("start-camera", "Start / Retry Camera", new Rect(panel.x + 24, panel.y + 256, 190, 34), SafeDwellSeconds, StartVisibleGestureBridge);
-            DrawHoverButton("skip", "Skip calibration", new Rect(panel.x + 236, panel.y + 256, 190, 34), SafeDwellSeconds, () =>
+            DrawUtilityButton("start-camera", "Start / Retry Camera", new Rect(panel.x + 24, panel.y + 282, 190, 34), SafeDwellSeconds, StartVisibleGestureBridge);
+            DrawHoverButton("skip", "Skip calibration", new Rect(panel.x + 236, panel.y + 282, 190, 34), SafeDwellSeconds, () =>
             {
                 pinchThreshold = 0.56f;
                 StartLevel(GameMode.Level0);
@@ -1083,7 +1085,7 @@ namespace HandOfGod.Gameplay
             }
             else if (lastLevel == GameMode.Level2)
             {
-                DrawHoverButton("pass-next", "Next: Level 3", new Rect(Screen.width / 2f - 50f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level3), 20);
+                DrawHoverButton("pass-next", "Next: Level 3 创造和消除", new Rect(Screen.width / 2f - 95f, 222, 240, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level3), 20);
                 DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 130f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level0), 20);
             }
             else if (lastLevel == GameMode.Level3)

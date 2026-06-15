@@ -82,7 +82,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - `Skip Calibration`：食指悬停跳过校准，用于课堂展示或无摄像头环境。
 - `Exit`：退出游戏。
 - 鼠标点击：所有 UI 按钮仍可用鼠标触发。
-- 校准面板会在识别到手后显示桥接端 FPS、单帧处理耗时、实际采集分辨率、实际采集 FPS、FOURCC、手势帧龄和 Unity 接收龄，方便判断摄像头、MediaPipe 与 Unity 显示链路是否处于低延迟状态。
+- 校准面板会在识别到手后显示桥接端 FPS、单帧处理耗时、实际采集分辨率、实际采集 FPS、FOURCC、手势帧龄、Unity 接收龄和显示骨架模式，方便判断摄像头、MediaPipe 与 Unity 显示链路是否处于低延迟状态。
 
 校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path`、`Level 2: Portals` 或 `Level 3: 创造和消除`；在关卡中选择当前关卡会重新开始该关。
 
@@ -288,7 +288,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 | Segment 2 | 侧向滑桥区 | 侧边滑桥、可消除锁块、第二道门 | 双手食指交叉消除 | 高亮选中锁块并保持 2 秒，释放滑桥 |
 | Segment 3 | 终点区 | 终点祭坛 | 物理小球 | 滑桥锁定后让小球到达终点 |
 
-主菜单和左侧 `Level Select` 可直接进入 `Level 3: 创造和消除`；Level 2 通关后的 `PASS` 界面会显示 `Next: Level 3`。Level 3 通关后只显示 `Restart` 和 `Tutorial`。
+主菜单和左侧 `Level Select` 可直接进入 `Level 3: 创造和消除`；Level 2 通关后的 `PASS` 界面会显示 `Next: Level 3 创造和消除`。Level 3 通关后只显示 `Restart` 和 `Tutorial`。
 
 ### Level 4: Mirror & Magnet
 
@@ -390,6 +390,7 @@ numpy
 - `captureHeight`
 - `captureFps`
 - `captureFourcc`
+- `displayMode`
 
 每只手包含：
 
@@ -610,7 +611,7 @@ cd "unity\gesture_bridge"
 
 - 张掌保持和捏合保持均可完成校准。
 - `Start / Retry Camera` 可重新启动桥接。
-- `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Next: Level 3`、`Restart`、`Tutorial` 都可用食指悬停触发。
+- `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Next: Level 3 创造和消除`、`Restart`、`Tutorial` 都可用食指悬停触发。
 - 校准完成后的左侧 `Level Select` 可随时选择 Level 0、Level 1、Level 2、Level 3、Level 4。
 - 第 0 关左侧 `Tutorial Steps` 可随时选择任意教学步骤。
 - 按钮尺寸和位置适合手势悬停，不需要把手移动到屏幕极边缘。

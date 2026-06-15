@@ -341,6 +341,7 @@ def neutral_payload():
         "captureHeight": 0.0,
         "captureFps": 0.0,
         "captureFourcc": "",
+        "displayMode": "",
         "pinch": False,
         "openPalm": False,
         "handCount": 0,
@@ -516,6 +517,7 @@ def main():
                     "captureHeight": actual_capture_height,
                     "captureFps": actual_capture_fps,
                     "captureFourcc": actual_fourcc,
+                    "displayMode": display_mode,
                     "pinch": primary["pinch"],
                     "openPalm": primary["openPalm"],
                     "handCount": len(analyzed),
@@ -528,6 +530,7 @@ def main():
             payload["captureHeight"] = actual_capture_height
             payload["captureFps"] = actual_capture_fps
             payload["captureFourcc"] = actual_fourcc
+            payload["displayMode"] = display_mode
 
             sock.sendto(json.dumps(payload).encode("utf-8"), (args.host, args.port))
             now = time.time()
