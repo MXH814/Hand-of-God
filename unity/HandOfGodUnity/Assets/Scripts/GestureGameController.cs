@@ -932,7 +932,7 @@ namespace HandOfGod.Gameplay
         {
             DrawPanel(new Rect(40, 40, 390, 456));
             GUI.Label(new Rect(70, 62, 300, 30), "Hand of God");
-            GUI.Label(new Rect(70, 92, 320, 24), "Open your palm over an option.");
+            GUI.Label(new Rect(70, 92, 320, 24), "Hover your index finger over an option.");
             DrawHoverButton("start", "Start Game", new Rect(70, 120, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             DrawHoverButton("level0", "Level 0: Tutorial", new Rect(70, 172, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
             DrawHoverButton("level1", "Level 1: First Path", new Rect(70, 224, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
@@ -6428,46 +6428,6 @@ namespace HandOfGod.Gameplay
             return pointers;
         }
 
-        private List<UiPointer> GetButtonPointers()
-        {
-            var pointers = new List<UiPointer>(2);
-            var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
-            if (frame.hands != null && frame.hands.Length > 0)
-            {
-                for (var i = 0; i < frame.hands.Length; i++)
-                {
-                    var hand = frame.hands[i];
-                    if (!IsButtonPressHand(hand))
-                    {
-                        continue;
-                    }
-
-                    var id = !string.IsNullOrEmpty(hand.id) ? hand.id : (!string.IsNullOrEmpty(hand.handedness) ? hand.handedness : $"hand-{i}");
-                    pointers.Add(new UiPointer(id, new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height), false));
-                }
-            }
-            else if (TryGetPrimaryHand(out var hand) && IsButtonPressHand(hand))
-            {
-                pointers.Add(new UiPointer("primary", new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height), false));
-            }
-            return pointers;
-        }
-
-        private bool IsButtonPressHand(GestureHandFrame hand)
-        {
-            if (hand.score < 0.25f || IsPinching(hand))
-            {
-                return false;
-            }
-
-            if (hand.openPalm)
-            {
-                return true;
-            }
-
-            return hand.indexExtended && hand.middleExtended && hand.ringExtended && hand.pinkyExtended;
-        }
-
         private void DrawCursor()
         {
             var pointers = GetUiPointers();
@@ -6493,30 +6453,35 @@ namespace HandOfGod.Gameplay
 
         private void DrawButtonCore(string key, string label, Rect rect, float dwellSeconds, System.Action action, bool allowMouseClick, int fontSize)
         {
-            var pointers = GetButtonPointers();
+            var pointers = GetUiPointers();
+            var activeHoverIds = new List<string>(pointers.Count);
             var progress = 0f;
-            var hovering = false;
             foreach (var pointer in pointers)
             {
+                var hoverId = $"{key}|{pointer.Id}";
                 if (rect.Contains(pointer.Position))
                 {
-                    hovering = true;
-                    break;
+                    activeHoverIds.Add(hoverId);
+                    if (!hoverStartsByPointer.ContainsKey(hoverId))
+                    {
+                        hoverStartsByPointer[hoverId] = Time.time;
+                    }
+                    progress = Mathf.Max(progress, Mathf.Clamp01((Time.time - hoverStartsByPointer[hoverId]) / dwellSeconds));
                 }
             }
 
-            if (hovering)
+            var prefix = key + "|";
+            var staleHoverIds = new List<string>();
+            foreach (var entry in hoverStartsByPointer)
             {
-                if (!hoverStartsByPointer.ContainsKey(key))
+                if (entry.Key.StartsWith(prefix) && !activeHoverIds.Contains(entry.Key))
                 {
-                    RemoveHoverStartsForKey(key);
-                    hoverStartsByPointer[key] = Time.time;
+                    staleHoverIds.Add(entry.Key);
                 }
-                progress = Mathf.Clamp01((Time.time - hoverStartsByPointer[key]) / dwellSeconds);
             }
-            else
+            foreach (var hoverId in staleHoverIds)
             {
-                RemoveHoverStartsForKey(key);
+                hoverStartsByPointer.Remove(hoverId);
             }
 
             var style = fontSize > 0
@@ -6549,7 +6514,7 @@ namespace HandOfGod.Gameplay
             var removeIds = new List<string>();
             foreach (var entry in hoverStartsByPointer)
             {
-                if (entry.Key == key || entry.Key.StartsWith(prefix))
+                if (entry.Key.StartsWith(prefix))
                 {
                     removeIds.Add(entry.Key);
                 }
