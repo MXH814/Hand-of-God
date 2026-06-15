@@ -94,6 +94,31 @@ class ResponsiveFingerDisplayTests(unittest.TestCase):
         self.assertAlmostEqual(output[7]["x"], current[7].x)
         self.assertAlmostEqual(output[8]["x"], current[8].x)
 
+    def test_static_micro_jitter_stays_inside_display_deadband(self):
+        base = make_hand()
+        state = bridge.ResponsiveFingerDisplayHand(base)
+        jittered = make_hand()
+        for index, item in enumerate(jittered):
+            item.x += 0.00055 if index % 2 == 0 else -0.00055
+            item.y += -0.00045 if index % 2 == 0 else 0.00045
+
+        output = state.update(jittered)
+
+        self.assertLess(math.dist(point(output, 8), point(base, 8)), 0.0002)
+        self.assertLess(math.dist(point(output, 6), point(base, 6)), 0.0002)
+
+    def test_real_finger_motion_escapes_display_deadband(self):
+        base = make_hand()
+        state = bridge.ResponsiveFingerDisplayHand(base)
+        moved = make_hand()
+        moved[8] = landmark(0.45, 0.29)
+        moved[7] = landmark(0.45, 0.37)
+
+        output = state.update(moved)
+
+        self.assertGreater(output[8]["y"], base[8].y + 0.025)
+        self.assertGreater(output[7]["y"], base[7].y + 0.018)
+
 
 if __name__ == "__main__":
     unittest.main()

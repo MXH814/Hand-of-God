@@ -133,6 +133,7 @@ class ResponsiveDisplayHand:
 class ResponsiveFingerDisplayHand:
     def __init__(self, landmarks):
         self.previous = self._points(landmarks)
+        self.displayed = self.previous.copy()
 
     def update(self, landmarks):
         raw_points = self._points(landmarks)
@@ -141,7 +142,8 @@ class ResponsiveFingerDisplayHand:
         palm_shift = float(np.linalg.norm(self._palm_center(raw_points)[:2] - self._palm_center(self.previous)[:2]))
         if palm_shift > palm_width * 1.6:
             self.previous = raw_points
-            return [{"x": float(point[0]), "y": float(point[1]), "z": float(point[2])} for point in corrected]
+            self.displayed = corrected.copy()
+            return self._json_points(corrected)
 
         for mcp, pip, dip, tip in DISPLAY_FINGER_CHAINS:
             tip_delta = raw_points[tip] - self.previous[tip]
@@ -167,8 +169,10 @@ class ResponsiveFingerDisplayHand:
             corrected[dip] += self._limited(dip_correction, max(finger_span * 0.38, palm_width * 0.12))
             self._soft_preserve_finger_chain(raw_points, corrected, (mcp, pip, dip, tip))
 
+        stabilized = self._stabilize_display(corrected, palm_width)
         self.previous = raw_points
-        return [{"x": float(point[0]), "y": float(point[1]), "z": float(point[2])} for point in corrected]
+        self.displayed = stabilized
+        return self._json_points(stabilized)
 
     @staticmethod
     def _points(landmarks):
@@ -184,6 +188,24 @@ class ResponsiveFingerDisplayHand:
         if magnitude <= limit or magnitude <= 1e-6:
             return vector
         return vector * (limit / magnitude)
+
+    def _stabilize_display(self, target, palm_width):
+        stabilized = self.displayed.copy()
+        jitter_radius = max(0.0012, palm_width * 0.012)
+        live_radius = max(jitter_radius * 4.0, palm_width * 0.055)
+        for index in range(len(target)):
+            delta = target[index] - self.displayed[index]
+            motion = float(np.linalg.norm(delta[:2]))
+            if motion <= jitter_radius:
+                continue
+
+            alpha = min(1.0, 0.62 + ((motion - jitter_radius) / live_radius) * 0.38)
+            stabilized[index] = self.displayed[index] + delta * alpha
+        return stabilized
+
+    @staticmethod
+    def _json_points(points):
+        return [{"x": float(point[0]), "y": float(point[1]), "z": float(point[2])} for point in points]
 
     @staticmethod
     def _soft_preserve_finger_chain(raw_points, corrected, chain):
