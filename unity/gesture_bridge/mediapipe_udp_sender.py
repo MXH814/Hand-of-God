@@ -300,6 +300,8 @@ def main():
     parser.add_argument("--no-preview", action="store_true", help="Deprecated compatibility flag. The bridge is headless unless --preview is set.")
     parser.add_argument("--video-host", default="127.0.0.1")
     parser.add_argument("--video-port", type=int, default=5006)
+    parser.add_argument("--capture-width", type=int, default=960, help="Camera capture and MediaPipe processing width.")
+    parser.add_argument("--capture-height", type=int, default=720, help="Camera capture and MediaPipe processing height.")
     parser.add_argument("--video-width", type=int, default=640)
     parser.add_argument("--video-height", type=int, default=480)
     parser.add_argument("--camera-fps", type=int, default=30)
@@ -333,8 +335,8 @@ def main():
     drawing = mp.solutions.drawing_utils
     cap = cv2.VideoCapture(args.camera, cv2.CAP_DSHOW)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.video_width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.video_height)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.capture_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.capture_height)
     cap.set(cv2.CAP_PROP_FPS, args.camera_fps)
     camera = LatestCameraCapture(cap)
     camera.start()
@@ -351,7 +353,7 @@ def main():
     last_camera_sequence = 0
 
     tracking_mode = "roi-tracking" if args.track_roi else "detect-every-frame"
-    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}, camera_fps={args.camera_fps}, video_fps={args.video_fps}, mode={tracking_mode}. Use --preview for a debug window.")
+    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}, camera_fps={args.camera_fps}, capture={args.capture_width}x{args.capture_height}, video={args.video_width}x{args.video_height}@{args.video_fps}, mode={tracking_mode}. Use --preview for a debug window.")
     try:
         while cap.isOpened():
             frame_start = time.time()
@@ -359,7 +361,7 @@ def main():
             if not ok:
                 break
 
-            frame = cv2.resize(frame, (args.video_width, args.video_height), interpolation=cv2.INTER_AREA)
+            frame = cv2.resize(frame, (args.capture_width, args.capture_height), interpolation=cv2.INTER_AREA)
 
             if args.mirror:
                 frame = cv2.flip(frame, 1)
@@ -454,14 +456,15 @@ def main():
             now = time.time()
             video_interval = 1.0 / max(args.video_fps, 1.0)
             if now >= next_video_send:
-                video.send_jpeg(frame, max(30, min(args.jpeg_quality, 95)))
+                video_frame = cv2.resize(frame, (args.video_width, args.video_height), interpolation=cv2.INTER_AREA)
+                video.send_jpeg(video_frame, max(30, min(args.jpeg_quality, 95)))
                 next_video_send = now + video_interval
             processing_ms = (time.time() - frame_start) * 1000.0
             frame_counter += 1
             elapsed = time.time() - diagnostics_start
             if elapsed >= 5.0:
                 bridge_fps = frame_counter / elapsed
-                print(f"Bridge diagnostics: fps={bridge_fps:.1f} processing={processing_ms:.1f}ms model_complexity={args.model_complexity} video_fps={args.video_fps} mode={tracking_mode}")
+                print(f"Bridge diagnostics: fps={bridge_fps:.1f} processing={processing_ms:.1f}ms model_complexity={args.model_complexity} capture={args.capture_width}x{args.capture_height} video={args.video_width}x{args.video_height}@{args.video_fps} mode={tracking_mode}")
                 diagnostics_start = time.time()
                 frame_counter = 0
 
