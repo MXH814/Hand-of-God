@@ -291,6 +291,10 @@ def neutral_payload():
         "confidence": 0.0,
         "bridgeFps": 0.0,
         "processingMs": 0.0,
+        "captureWidth": 0.0,
+        "captureHeight": 0.0,
+        "captureFps": 0.0,
+        "captureFourcc": "",
         "pinch": False,
         "openPalm": False,
         "handCount": 0,
@@ -458,6 +462,10 @@ def main():
                     "confidence": primary["score"],
                     "bridgeFps": bridge_fps,
                     "processingMs": processing_ms,
+                    "captureWidth": actual_capture_width,
+                    "captureHeight": actual_capture_height,
+                    "captureFps": actual_capture_fps,
+                    "captureFourcc": actual_fourcc,
                     "pinch": primary["pinch"],
                     "openPalm": primary["openPalm"],
                     "handCount": len(analyzed),
@@ -466,6 +474,10 @@ def main():
                 })
             payload["bridgeFps"] = bridge_fps
             payload["processingMs"] = processing_ms
+            payload["captureWidth"] = actual_capture_width
+            payload["captureHeight"] = actual_capture_height
+            payload["captureFps"] = actual_capture_fps
+            payload["captureFourcc"] = actual_fourcc
 
             sock.sendto(json.dumps(payload).encode("utf-8"), (args.host, args.port))
             now = time.time()

@@ -850,7 +850,7 @@ namespace HandOfGod.Gameplay
 
         private void DrawCalibration()
         {
-            var panel = new Rect(Screen.width / 2f - 250f, 34, 500, 278);
+            var panel = new Rect(Screen.width / 2f - 250f, 34, 500, 304);
             var title = mode == GameMode.CalibrationOpen ? "Calibration: Open Hand" : "Calibration: Pinch";
             var detail = mode == GameMode.CalibrationOpen
                 ? "Hold an open palm for 1 second."
@@ -868,9 +868,11 @@ namespace HandOfGod.Gameplay
             {
                 var frame = receiver.Latest;
                 GUI.Label(new Rect(panel.x + 24, panel.y + 164, 450, 24), $"Bridge: {frame.bridgeFps:0.0} FPS  |  processing {frame.processingMs:0.0} ms");
+                var captureFourcc = string.IsNullOrWhiteSpace(frame.captureFourcc) ? "----" : frame.captureFourcc;
+                GUI.Label(new Rect(panel.x + 24, panel.y + 188, 450, 24), $"Capture: {frame.captureWidth:0}x{frame.captureHeight:0} @ {frame.captureFps:0.0} FPS  {captureFourcc}");
             }
-            DrawUtilityButton("start-camera", "Start / Retry Camera", new Rect(panel.x + 24, panel.y + 204, 190, 34), SafeDwellSeconds, StartVisibleGestureBridge);
-            DrawHoverButton("skip", "Skip calibration", new Rect(panel.x + 236, panel.y + 204, 190, 34), SafeDwellSeconds, () =>
+            DrawUtilityButton("start-camera", "Start / Retry Camera", new Rect(panel.x + 24, panel.y + 230, 190, 34), SafeDwellSeconds, StartVisibleGestureBridge);
+            DrawHoverButton("skip", "Skip calibration", new Rect(panel.x + 236, panel.y + 230, 190, 34), SafeDwellSeconds, () =>
             {
                 pinchThreshold = 0.56f;
                 StartLevel(GameMode.Level0);
@@ -907,7 +909,7 @@ namespace HandOfGod.Gameplay
             DrawLevelSelectButton("select-level0", "Level 0: Tutorial", GameMode.Level0, new Rect(panel.x + 18f, panel.y + 44f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level1", "Level 1: Moving Path", GameMode.Level1, new Rect(panel.x + 18f, panel.y + 80f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level2", "Level 2: Portals", GameMode.Level2, new Rect(panel.x + 18f, panel.y + 116f, panel.width - 36f, 30f));
-            DrawLevelSelectButton("select-level3", "Level 3: Creation & Erasure", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 152f, panel.width - 36f, 30f));
+            DrawLevelSelectButton("select-level3", "Level 3: 创造和消除", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 152f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level4", "Level 4: Mirror & Magnet", GameMode.Level4, new Rect(panel.x + 18f, panel.y + 188f, panel.width - 36f, 30f));
         }
 
@@ -926,7 +928,7 @@ namespace HandOfGod.Gameplay
             DrawHoverButton("level0", "Level 0: Tutorial", new Rect(70, 172, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
             DrawHoverButton("level1", "Level 1: First Path", new Rect(70, 224, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             DrawHoverButton("level2", "Level 2: Portals & Airflow", new Rect(70, 276, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level2));
-            DrawHoverButton("level3", "Level 3: Creation & Erasure", new Rect(70, 328, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level3));
+            DrawHoverButton("level3", "Level 3: 创造和消除", new Rect(70, 328, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level3));
             DrawHoverButton("level4", "Level 4: Mirror & Magnet", new Rect(70, 380, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level4));
             DrawHoverButton("recalibrate", "Recalibrate", new Rect(70, 432, 260, 42), MenuDwellSeconds, ResetToCalibration);
         }
@@ -1099,7 +1101,7 @@ namespace HandOfGod.Gameplay
             DrawPanel(panel);
             var titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
             var objectiveStyle = new GUIStyle(GUI.skin.label) { fontSize = 17, wordWrap = true };
-            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 3: Creation & Erasure", titleStyle);
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 3: 创造和消除", titleStyle);
             GUI.Label(new Rect(panel.x + 28f, panel.y + 52f, panel.width - 56f, 48f), Level3ObjectiveText(), objectiveStyle);
             GUI.Label(new Rect(panel.x + 28f, panel.y + 104f, panel.width - 56f, 24f), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}" : "Ball speed: 0.00");
             if (!string.IsNullOrEmpty(level3HintMessage))
@@ -4133,7 +4135,7 @@ namespace HandOfGod.Gameplay
             return hand.score >= 0.35f && hand.pinchDistance < pinchThreshold;
         }
 
-        // -------------------- Level3: Creation & Erasure --------------------
+        // -------------------- Level3: 创造和消除 --------------------
         private void BuildLevel3()
         {
             levelRoot = new GameObject("Level03 Creation Erasure").transform;

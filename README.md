@@ -31,7 +31,7 @@
 - 第 0 关提供完整手势教学，新增手势都会在教学关中练习或在正式关卡中给出 HUD 提示。
 - 第 1 关提供分段机关解谜路线，使用清障、合桥、旋转空中桥和张掌激活终点等机关。
 - 第 2 关提供传送门与气流机关路线，使用钥匙放置、传送门激活和气流方向控制。
-- 第 3 关 `Creation & Erasure`（创造和消除）提供绘制创造、物体摆放、交叉消除锁块和侧向滑桥机关。
+- 第 3 关 `创造和消除` 提供绘制创造、物体摆放、交叉消除锁块和侧向滑桥机关。
 - 第 4 关 `Mirror & Magnet` 提供镜面光路和磁力极性机关，光束使用透明贴图和光晕材质表现。
 - 小球到达终点后立即停止并隐藏，显示醒目的 `PASS`。
 - 小球掉落或离开安全路径后重置当前关卡机关状态。
@@ -82,9 +82,9 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - `Skip Calibration`：食指悬停跳过校准，用于课堂展示或无摄像头环境。
 - `Exit`：退出游戏。
 - 鼠标点击：所有 UI 按钮仍可用鼠标触发。
-- 校准面板会在识别到手后显示桥接端 FPS 和单帧处理耗时，方便判断摄像头与 MediaPipe 是否处于低延迟状态。
+- 校准面板会在识别到手后显示桥接端 FPS、单帧处理耗时、实际采集分辨率、实际采集 FPS 和 FOURCC，方便判断摄像头与 MediaPipe 是否处于低延迟状态。
 
-校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path`、`Level 2: Portals` 或 `Level 3: Creation & Erasure`（创造和消除）；在关卡中选择当前关卡会重新开始该关。
+校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path`、`Level 2: Portals` 或 `Level 3: 创造和消除`；在关卡中选择当前关卡会重新开始该关。
 
 ## 手势与交互
 
@@ -253,7 +253,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - 气流带在关闭时隐藏实体触发器；保持有效气流手势后 Kenney 粒子贴图雾带和流线随风向滚动，HUD 同步显示 `Airflow: OFF / LEFT / RIGHT`。
 - 保持右风手势时，第二道挡门打开，HUD 显示右风提示；左风会显示纠正提示；松开或姿态不满足气流手势时，气流回到 `OFF`，已打开的挡门保持打开，避免突然卡住小球。
 
-### Level 3: 创造和消除 / Creation and Erasure
+### Level 3: 创造和消除
 
 第 3 关是创造与消除机关关，放在 Level 1 和 Level 2 之后。第一机关需要玩家分别绘制并创建一个立方体和一个球体，将立方体放到带 cube 标记的平台、球体放到带 sphere 标记的平台；两个平台都匹配后生成第一段桥。第二机关是侧向滑桥：滑桥初始停在道路旁边，中央缺口无法通行；双手食指交叉选中并消除锁块后，滑桥从侧边滑入缺口并锁定为完整道路。整条路线带轻微下坡角度，小球可依靠重力继续滑向终点。
 
@@ -288,7 +288,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 | Segment 2 | 侧向滑桥区 | 侧边滑桥、可消除锁块、第二道门 | 双手食指交叉消除 | 高亮选中锁块并保持 2 秒，释放滑桥 |
 | Segment 3 | 终点区 | 终点祭坛 | 物理小球 | 滑桥锁定后让小球到达终点 |
 
-主菜单和左侧 `Level Select` 可直接进入 `Level 3: Creation & Erasure`（创造和消除）；Level 2 通关后的 `PASS` 界面会显示 `Next: Level 3`。Level 3 通关后只显示 `Restart` 和 `Tutorial`。
+主菜单和左侧 `Level Select` 可直接进入 `Level 3: 创造和消除`；Level 2 通关后的 `PASS` 界面会显示 `Next: Level 3`。Level 3 通关后只显示 `Restart` 和 `Tutorial`。
 
 ### Level 4: Mirror & Magnet
 
@@ -386,6 +386,10 @@ numpy
 - `confidence`
 - `bridgeFps`
 - `processingMs`
+- `captureWidth`
+- `captureHeight`
+- `captureFps`
+- `captureFourcc`
 
 每只手包含：
 
