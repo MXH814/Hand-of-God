@@ -145,6 +145,10 @@ def display_landmarks(hand_id, landmarks, display_points):
     return state.update(landmarks)
 
 
+def raw_display_landmarks(landmarks):
+    return [{"x": float(point.x), "y": float(point.y), "z": float(point.z)} for point in landmarks]
+
+
 class VideoStreamClient:
     def __init__(self, host, port):
         self.host = host
@@ -366,6 +370,7 @@ def main():
     parser.add_argument("--lock-port", type=int, default=5007)
     parser.add_argument("--model-complexity", type=int, choices=(0, 1), default=1, help="MediaPipe Hands model complexity. 1 improves finger-joint fidelity; 0 is faster.")
     parser.add_argument("--track-roi", action="store_true", help="Use MediaPipe ROI tracking between detections. Faster, but fast finger-bend changes can feel less immediate.")
+    parser.add_argument("--stable-display-landmarks", action="store_true", help="Apply light palm-anchor stabilization to display landmarks. Default is raw current-frame display for minimum finger-joint latency.")
     parser.add_argument("--detection-confidence", type=float, default=0.60)
     parser.add_argument("--tracking-confidence", type=float, default=0.82)
     args = parser.parse_args()
@@ -413,11 +418,12 @@ def main():
     last_camera_sequence = 0
 
     tracking_mode = "roi-tracking" if args.track_roi else "detect-every-frame"
+    display_mode = "stable-palm-anchor" if args.stable_display_landmarks else "raw-current-frame"
     actual_capture_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
     actual_capture_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
     actual_capture_fps = cap.get(cv2.CAP_PROP_FPS)
     actual_fourcc = decode_fourcc(cap.get(cv2.CAP_PROP_FOURCC))
-    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}, requested_capture={args.capture_width}x{args.capture_height}@{args.camera_fps} {args.camera_fourcc or 'driver-default'}, actual_capture={actual_capture_width:.0f}x{actual_capture_height:.0f}@{actual_capture_fps:.1f} {actual_fourcc}, video={args.video_width}x{args.video_height}@{args.video_fps}, mode={tracking_mode}. Use --preview for a debug window.")
+    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}, requested_capture={args.capture_width}x{args.capture_height}@{args.camera_fps} {args.camera_fourcc or 'driver-default'}, actual_capture={actual_capture_width:.0f}x{actual_capture_height:.0f}@{actual_capture_fps:.1f} {actual_fourcc}, video={args.video_width}x{args.video_height}@{args.video_fps}, mode={tracking_mode}, display={display_mode}. Use --preview for a debug window.")
     try:
         while cap.isOpened():
             frame_start = time.time()
@@ -441,7 +447,7 @@ def main():
                     score = category.score if category else 1.0
                     hand_id = label if label in ("Left", "Right") else f"Unknown-{index}"
                     active_ids.add(hand_id)
-                    display_landmark_json = display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand)
+                    display_landmark_json = display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand) if args.stable_display_landmarks else raw_display_landmarks(hand.landmark)
                     smoothed_landmarks, smoothed_points = smooth_landmarks(hand_id, hand.landmark, smooth_landmarks_by_hand)
                     hand_payload, raw = analyze_hand(smoothed_points, label, score, hand_id, neutral, smoothed_landmarks)
                     hand_payload["displayLandmarks"] = display_landmark_json
@@ -535,7 +541,7 @@ def main():
             elapsed = time.time() - diagnostics_start
             if elapsed >= 5.0:
                 bridge_fps = frame_counter / elapsed
-                print(f"Bridge diagnostics: fps={bridge_fps:.1f} processing={processing_ms:.1f}ms model_complexity={args.model_complexity} actual_capture={actual_capture_width:.0f}x{actual_capture_height:.0f}@{actual_capture_fps:.1f} {actual_fourcc} video={args.video_width}x{args.video_height}@{args.video_fps} mode={tracking_mode}")
+                print(f"Bridge diagnostics: fps={bridge_fps:.1f} processing={processing_ms:.1f}ms model_complexity={args.model_complexity} actual_capture={actual_capture_width:.0f}x{actual_capture_height:.0f}@{actual_capture_fps:.1f} {actual_fourcc} video={args.video_width}x{args.video_height}@{args.video_fps} mode={tracking_mode} display={display_mode}")
                 diagnostics_start = time.time()
                 frame_counter = 0
 
