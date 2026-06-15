@@ -352,7 +352,7 @@ numpy
 - 使用 OpenCV 采集摄像头。
 - 摄像头采集使用低缓冲设置，并由后台 latest-frame 线程持续读取摄像头；MediaPipe 主循环只处理最新帧，默认请求 `30 FPS`，减少摄像头驱动队列积压造成的手型延迟。
 - Windows DirectShow 默认请求 `MJPG` 摄像头格式，降低高分辨率采集时的 USB/驱动带宽压力；日志会输出实际采集到的分辨率、FPS 和 FOURCC，方便判断摄像头是否接受请求。
-- 采集/识别分辨率和 Unity 视频显示分辨率分离：默认 `--capture-width 960 --capture-height 720` 给 MediaPipe 提供更多手指关节像素细节，Unity 内嵌摄像头画面仍默认以 `--video-width 640 --video-height 480` 发送。
+- 采集/识别分辨率和 Unity 视频显示分辨率分离：默认请求 `--capture-width 1280 --capture-height 720` 给 MediaPipe 提供更多手指关节像素细节，并直接使用摄像头返回的实际帧做识别，避免二次 resize 拉伸手型；Unity 内嵌摄像头画面默认以 `--video-width 640 --video-height 360` 发送。
 - 使用 MediaPipe Hands 最多识别两只手，默认 `model_complexity=1`，优先保证手指关节和骨架形状精度。
 - MediaPipe 默认使用 `detect-every-frame` 模式逐帧检测手部，而不是长时间沿用 ROI tracking，减少快速弯曲手指时第一指节被旧姿态拖慢的现象。
 - 支持镜像画面，保证玩家看到的左右移动符合屏幕直觉。

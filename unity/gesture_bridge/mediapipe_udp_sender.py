@@ -309,11 +309,11 @@ def main():
     parser.add_argument("--no-preview", action="store_true", help="Deprecated compatibility flag. The bridge is headless unless --preview is set.")
     parser.add_argument("--video-host", default="127.0.0.1")
     parser.add_argument("--video-port", type=int, default=5006)
-    parser.add_argument("--capture-width", type=int, default=960, help="Camera capture and MediaPipe processing width.")
+    parser.add_argument("--capture-width", type=int, default=1280, help="Camera capture and MediaPipe processing width.")
     parser.add_argument("--capture-height", type=int, default=720, help="Camera capture and MediaPipe processing height.")
     parser.add_argument("--camera-fourcc", default="MJPG", help="Preferred DirectShow camera FOURCC. Use empty string to leave driver default.")
     parser.add_argument("--video-width", type=int, default=640)
-    parser.add_argument("--video-height", type=int, default=480)
+    parser.add_argument("--video-height", type=int, default=360)
     parser.add_argument("--camera-fps", type=int, default=30)
     parser.add_argument("--video-fps", type=float, default=18.0, help="JPEG camera stream frame rate. Gesture UDP still runs every processed frame.")
     parser.add_argument("--jpeg-quality", type=int, default=72)
@@ -377,8 +377,6 @@ def main():
             ok, frame, last_camera_sequence = camera.read_latest(last_camera_sequence)
             if not ok:
                 break
-
-            frame = cv2.resize(frame, (args.capture_width, args.capture_height), interpolation=cv2.INTER_AREA)
 
             if args.mirror:
                 frame = cv2.flip(frame, 1)
