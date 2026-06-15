@@ -21,9 +21,8 @@
 - 摄像头画面以内嵌背景形式显示在 Unity 窗口中，不打开独立 OpenCV 预览窗口。
 - 屏幕最前景实时显示 MediaPipe Hands 的 21 点手骨架。
 - 支持最多两只手，并保留 `Left` / `Right` handedness、识别置信度和手势特征。
-- Python 桥接会对 `Left` / `Right` 做跨帧空间匹配稳定，避免左手掌心朝屏幕捏合时因 MediaPipe 单帧错标或掉帧导致整只手在 Unity 中消失。
 - 校准界面只显示摄像头背景、手骨架和清晰提示，避免地图物体干扰。
-- 所有主要 UI 按钮支持左右手张掌独立悬停选择，按键手张开即可触发，另一只手状态不影响按钮进度；同时保留鼠标点击兜底。
+- 所有主要 UI 按钮支持左右手食指独立悬停选择，同时保留鼠标点击兜底。
 - 左上方 `Exit` / `Calibrate` 按钮放大并向屏幕内侧移动，降低边缘手势抖动和误触。
 - 校准完成后，左侧常驻 `Level Select` 选关栏，可随时进入或重进 Level 0、Level 1、Level 2、Level 3、Level 4。
 - `Start / Retry Camera` 可在自动桥接失败时手动重试。
@@ -91,17 +90,15 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 | 手势 | 用途 | 实现要点 |
 | --- | --- | --- |
-| 张掌悬停 | 选择 UI 按钮 | 任意一只手处于 open palm 并命中按钮区域即可开始计时，另一只手可自由移动或做其他姿势；保持约 `0.85s` 后触发，离开按钮即清空进度 |
+| 食指悬停 | 选择 UI 按钮 | 使用食指尖屏幕坐标命中按钮区域，保持约 `0.85s` 后触发；手指离开即清空进度 |
 | 张掌保持 | 校准、激活神印按钮 | Python 根据五指伸展状态判断 open palm；Unity 检测手掌是否位于目标区域并保持指定时长 |
 | 单手捏合 | 拖动物块、木箱、传送门钥匙 | Python 输出 pinch 状态和 pinch center；Unity 将 pinch center 映射到世界平面并移动目标物体 |
 | 双手捏合旋转 | 旋转教学物体、旋转空中桥 | Unity 计算两只手 pinch center 连线角度变化，将角度增量映射为物体或机关的 Y 轴旋转 |
 | 双手捏合拉合 | 合拢桥板机关 | Unity 记录双手初始距离，检测距离缩短比例并驱动桥板向中心吸附 |
 | 双手食指中指并拢 | 教学地图旋转和缩放 | Python 输出 index/middle landmarks；Unity 检测每只手 index 和 middle 距离，双手同时满足后进入地图控制 |
-| 气流指向手势 | 第 0 关教学、第 2 关临时产生气流 | 单手食指和中指并拢、拇指伸出、无名指和小指收起；Unity 用食指相对手腕的 X 方向判断左风或右风，并对短暂识别掉帧保留最后有效风向，手势稳定消失后气流关闭 |
+| 气流指向手势 | 第 0 关教学、第 2 关临时产生气流 | 单手食指和中指并拢、拇指伸出、无名指和小指收起；Unity 用食指相对手腕的 X 方向判断左风或右风，手势消失后气流关闭 |
 
 捏合与悬停均使用阈值范围判断，不要求指尖完全重合。捏合状态带有迟滞逻辑：进入捏合使用较小阈值，保持捏合使用较大阈值；Unity 优先使用 Python 输出的稳定 `pinch` 状态，并为双手捏合旋转、拉合等连续操作保留短暂双手 grace，减少临界点抖动或单帧丢手导致的频繁断开。
-
-桥接会把 pinch latch 绑定到稳定 hand id，而不是绑定到 MediaPipe 当帧原始 handedness。这样左手掌心朝向屏幕、拇指食指遮挡较多时，即使 MediaPipe handedness 短暂波动，左手捏合状态仍能连续保持；如果捏合中的手短暂丢检，桥接会比普通非捏合手保留更长的上一帧输出，防止捏住物体或双手旋转时突然断触。
 
 ## 关卡设计
 
@@ -249,11 +246,11 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - 放开钥匙且钥匙位于锁座附近时，钥匙会吸附到插槽上方，锁芯、Portal A 和 Portal B 都变为激活高亮。
 - 传送门激活后，小球会冻结物理，先在 Portal A 上升、缩小并淡出，再在 Portal B 上方渐显、落下；动画结束后恢复 Rigidbody 并清空速度。该传送流程由 Unity 自主更新驱动，不依赖手继续留在屏幕中。
 - 玩家捏着钥匙时如果手部追踪丢失，Unity 会按释放处理，并立即检查钥匙是否已经位于锁座范围内。
-- 气流手势由 `IndexMiddleTogether + thumbExtended + ring/pinky curled + !openPalm` 组成，并带有方向死区、短时间稳定确认和短暂掉帧保持，避免张掌误触发，也避免正确姿势保持不动时因为单帧抖动导致气流断开。
+- 气流手势由 `IndexMiddleTogether + thumbExtended + ring/pinky curled + !openPalm` 组成，并带有方向死区和短时间稳定确认，避免张掌或瞬时抖动误触发。
 - 气流只能在传送完成、进入气流阶段后由手势临时产生；钥匙尚未开锁时，风向手势不会改变风带状态。
 - Unity 根据食指尖相对手腕的水平偏移判断风向：向右为通关方向，向左会显示提示要求改为向右。
 - 气流带使用 `AirBeltTrigger`，在小球停留于触发区时以渐进强度施加水平方向加速度，并限制最大水平推速，让玩家有时间修正方向；风向反转时不会瞬移或清零速度，而是通过反向加速度让小球自然减速、掉头。
-- 气流带在关闭时隐藏实体触发器；保持有效气流手势后 Kenney 粒子贴图雾带和流线随风向滚动，HUD 同步显示 `Airflow: OFF / LEFT / RIGHT`；短暂识别丢帧时视觉和物理风向会继续保持，超过 grace 后才回到 `OFF`。
+- 气流带在关闭时隐藏实体触发器；保持有效气流手势后 Kenney 粒子贴图雾带和流线随风向滚动，HUD 同步显示 `Airflow: OFF / LEFT / RIGHT`。
 - 保持右风手势时，第二道挡门打开，HUD 显示右风提示；左风会显示纠正提示；松开或姿态不满足气流手势时，气流回到 `OFF`，已打开的挡门保持打开，避免突然卡住小球。
 
 ### Level 3: Creation & Erasure
@@ -301,7 +298,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 核心规则：
 
-- 双手捏合旋转镜子，镜子使用与普通双手旋转物体一致的“起始旋转 + 手势角度增量”算法，避免抽搐或瞬移；角度正确时反射光束由琥珀色变为青色，并打开第一道能量门。
+- 双手捏合旋转镜子，镜子角度正确时反射光束由琥珀色变为青色，并打开第一道能量门。
 - 光束使用透明有色细柱绘制，不再使用粒子贴图飘带或烟雾光晕，避免画面出现脏乱光纹。
 - 进入磁力阶段后，拇指向右会把蓝色磁极转到右侧并增强向右吸引，拇指向左会把蓝色磁极转到左侧并产生向左校正。
 - 磁力只在对应阶段影响银色小球；小球通过磁力门后进入终点段。
@@ -366,7 +363,7 @@ numpy
 - 使用 TCP 锁端口 `5007` 防止多个桥接实例同时占用摄像头。
 - 默认 headless 运行；只有手动传入 `--preview` 时才显示 OpenCV 调试窗口。
 - 如低配机器帧率不足，可手动传入 `--model-complexity 0` 回退到更快但关节精度较低的模型，或传入 `--track-roi` 使用 MediaPipe ROI tracking 换取更高帧率。
-- 可用 `--camera-fps` 调整摄像头目标帧率，用 `--capture-width` / `--capture-height` 调整 MediaPipe 处理分辨率；如果第一指节仍感觉慢，优先观察校准面板 `frame age`，再尝试 `--capture-width 848 --capture-height 480` 或 `--camera-fps 30` 对比实际摄像头模式。也可用 `--camera-fourcc` 调整 DirectShow 采集格式，用 `--video-width` / `--video-height` / `--video-fps` 调整 Unity 内嵌摄像头画面，或用 `--detection-confidence` / `--tracking-confidence` 调整 MediaPipe 置信度阈值；默认 detection confidence 为 `0.50`，给左手掌心朝屏幕捏合这类遮挡较强的姿势保留检测余量。桥接每 5 秒向 `gesture-bridge-runtime.log` 输出一次 FPS、处理耗时、实际采集格式、视频帧率、模型复杂度和 tracking 模式。
+- 可用 `--camera-fps` 调整摄像头目标帧率，用 `--capture-width` / `--capture-height` 调整 MediaPipe 处理分辨率；如果第一指节仍感觉慢，优先观察校准面板 `frame age`，再尝试 `--capture-width 848 --capture-height 480` 或 `--camera-fps 30` 对比实际摄像头模式。也可用 `--camera-fourcc` 调整 DirectShow 采集格式，用 `--video-width` / `--video-height` / `--video-fps` 调整 Unity 内嵌摄像头画面，或用 `--detection-confidence` / `--tracking-confidence` 调整 MediaPipe 置信度阈值；桥接每 5 秒向 `gesture-bridge-runtime.log` 输出一次 FPS、处理耗时、实际采集格式、视频帧率、模型复杂度和 tracking 模式。
 
 ### 手势数据字段
 
@@ -445,11 +442,9 @@ Unity 端职责：
 
 Python 对每个 hand id 的每个 landmark 输出同一套稳定后的交互/显示坐标：
 
-- `stable hand id`：MediaPipe 原始 `Left` / `Right` 只作为初始线索；桥接会根据掌心中心点与上一帧轨迹做空间匹配，得到稳定的 `Left` / `Right` ID。若某一帧左手掌心朝屏幕捏合时被错标成 `Right`，但位置仍接近上一帧左手轨迹，Unity 收到的仍是 `Left`。在还没有历史轨迹可匹配时，桥接会使用镜像摄像头画面的屏幕侧先验：屏幕左侧优先视为 `Left`，屏幕右侧优先视为 `Right`，避免左手一开始就以捏合姿势入画时被直接归到右手。检测短暂丢失时，普通手会在约 `0.34s` 内保留上一帧手势输出；若上一帧处于捏合状态，则保留窗口延长到约 `1.15s`，避免左手掌心朝屏幕捏合时因拇指食指遮挡导致骨架和捏合状态闪断。
 - `displayLandmarks`：骨架显示默认使用 `responsive-finger-current-frame`。它以 MediaPipe 当前帧 21 点为主体，只在指尖已经快速移动而 PIP / DIP 中间指节明显落后时，沿指尖运动方向做小幅补偿，再用当前帧骨长软约束避免手指链条明显压缩或拉长；最后经过更强的自适应显示死区压住静止时的高频微抖，让第一指节、指根和指尖更像真实手型同步变化；如需排查可传入 `--raw-display-landmarks` 直出原始点，如需更稳的展示可传入 `--stable-display-landmarks` 启用掌心锚点保形稳定。
 - `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用；默认与 `displayLandmarks` 完全同源，Unity 实际操作点、pinch center、食指坐标和屏幕上看到的骨架点保持一致。
 - MediaPipe Hands 默认使用 `model_complexity=1` 和逐帧检测模式，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型或 ROI tracking 造成的骨架形变不自然。
-- MediaPipe Hands 默认 `min_detection_confidence=0.50`，比早期更宽松，减少左手掌心朝屏幕捏合时因拇指食指互相遮挡而整手掉检的概率；后续仍由 stable hand id、pinch latch 和掉帧保持抑制误跳。
 - Unity UDP 接收器会丢弃 timestamp 倒退的旧手势包，并在校准界面显示 frame age / receive age，避免旧帧回灌造成骨架慢半拍却难以定位。
 
 默认 `displayLandmarks` 由 `ResponsiveFingerDisplayHand` 生成：Unity 绘制骨架时对这套显示点直绘，不再做单个指节限速；Python 仅对“指尖动得很快、中间指节明显没跟上”的帧做有限幅度的 PIP / DIP 补偿，并用当前帧 MCP、PIP、DIP、tip 骨段长度做多轮软约束，避免第一指节慢半拍造成的“折断感”或补偿后骨架明显变形。随后显示层使用基于掌宽的 deadband：目标点在几像素量级内抖动时保持上一显示位置，刚超过死区的小动作低增益跟随，大动作按运动幅度快速跟随。只有在左右两只手的食指线段彼此交叉或非常接近时，Python 才启用交叉专用稳定：先对两根食指 PIP / DIP 做轻量直线修正，再对 PIP、DIP、tip 使用更大的跨帧死区，小幅遮挡抖动会直接保持上一帧稳定位置；单手弯曲、握拳、捏合等普通动作不会触发这层处理。
