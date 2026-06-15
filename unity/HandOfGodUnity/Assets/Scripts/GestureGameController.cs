@@ -75,7 +75,7 @@ namespace HandOfGod.Gameplay
         {
             CreateBridgeObject,
             PlaceCreatedObject,
-            EraseSpringBlock,
+            EraseLockBlock,
             RunToGoal,
         }
 
@@ -148,7 +148,7 @@ namespace HandOfGod.Gameplay
         private const float Level3RoadBaseY = 0.28f;
         private const float Level3RoadSlope = -0.0735f;
         private const float Level3RoadThickness = 0.22f;
-        private const float Level3SpringPlatformThickness = 0.18f;
+        private const float Level3SlidePlatformThickness = 0.18f;
         private const float Level3SlideBridgeParkZ = 2.42f;
         private const float Level3SlideBridgeFinalZ = 0f;
         private const float Level3SlideBridgeCenterX = 1.15f;
@@ -156,7 +156,7 @@ namespace HandOfGod.Gameplay
         private static readonly Level3TransformOverride[] Level3SceneTransformOverrides =
         {
             new Level3TransformOverride("Kenney template-detail", new Vector3(4.45f, -0.287825f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(0.88f, 0.3f, 0.88f)),
-            new Level3TransformOverride("Level03 Create Erase", new Vector3(0f, 0f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
+            new Level3TransformOverride("Level03 Creation Erasure", new Vector3(0f, 0f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
             new Level3TransformOverride("level2 goal inner halo", new Vector3(4.45f, 0.072175f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1.1f, 1.1f, 1.1f)),
             new Level3TransformOverride("level2 goal outer halo", new Vector3(4.45f, -0.027825f, 0f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
             new Level3TransformOverride("Level2 Portal Accent Light", new Vector3(0.6f, 2.8f, -1.4f), new Quaternion(0f, 0f, 0f, 1f), new Vector3(1f, 1f, 1f)),
@@ -518,17 +518,17 @@ namespace HandOfGod.Gameplay
         private Renderer level3SpherePlateRenderer;
         private GameObject level3BridgePatch;
         private Renderer level3BridgePatchRenderer;
-        private GameObject level3SpringBlock;
-        private GameObject level3SpringBlockHalo;
-        private Renderer level3SpringBlockRenderer;
-        private Transform level3SpringPlatform;
-        private Renderer level3SpringPlatformRenderer;
-        private Transform level3SpringCore;
-        private float level3SpringReleaseStart = -1f;
+        private GameObject level3LockBlock;
+        private GameObject level3LockBlockHalo;
+        private Renderer level3LockBlockRenderer;
+        private Transform level3SlideBridge;
+        private Renderer level3SlideBridgeRenderer;
+        private Transform level3SlideBridgeCore;
+        private float level3SlideBridgeReleaseStart = -1f;
         private bool level3CubePlaced;
         private bool level3SpherePlaced;
         private bool level3BridgePlaced;
-        private bool level3SpringReleased;
+        private bool level3SlideBridgeReleased;
         private bool level3EraseRequiresGestureReset;
         private string level3HintMessage = "";
 
@@ -591,8 +591,7 @@ namespace HandOfGod.Gameplay
             DestroyNamed("Level00 Gesture Lab");
             DestroyNamed("Level01 First Path");
             DestroyNamed("Level02 Portal Airflow");
-            DestroyNamed("Level03 Creation Spring");
-            DestroyNamed("Level03 Create Erase");
+            DestroyNamed("Level03 Creation Erasure");
             DestroyNamed("Level04 Rotation Reflection");
             DestroyNamed("Level04 Mirror Magnet");
             BuildMaterials();
@@ -644,7 +643,7 @@ namespace HandOfGod.Gameplay
             }
             if (mode == GameMode.Level3)
             {
-                UpdateLevel3SpringAnimation();
+                UpdateLevel3SlideBridgeAnimation();
             }
             if (mode == GameMode.Level4)
             {
@@ -851,7 +850,7 @@ namespace HandOfGod.Gameplay
 
         private void DrawCalibration()
         {
-            var panel = new Rect(Screen.width / 2f - 250f, 34, 500, 252);
+            var panel = new Rect(Screen.width / 2f - 250f, 34, 500, 278);
             var title = mode == GameMode.CalibrationOpen ? "Calibration: Open Hand" : "Calibration: Pinch";
             var detail = mode == GameMode.CalibrationOpen
                 ? "Hold an open palm for 1 second."
@@ -865,8 +864,13 @@ namespace HandOfGod.Gameplay
             DrawProgressBar(progress, new Rect(panel.x + 24, panel.y + 112, 410, 18));
             var cameraStatus = cameraFrames != null && cameraFrames.HasFreshFrame ? "Camera image: live" : "Camera image: waiting";
             GUI.Label(new Rect(panel.x + 24, panel.y + 140, 450, 24), receiver != null && receiver.HasFreshFrame ? "Camera: tracking hand" : $"{bridgeStatus} | {cameraStatus}");
-            DrawUtilityButton("start-camera", "Start / Retry Camera", new Rect(panel.x + 24, panel.y + 178, 190, 34), SafeDwellSeconds, StartVisibleGestureBridge);
-            DrawHoverButton("skip", "Skip calibration", new Rect(panel.x + 236, panel.y + 178, 190, 34), SafeDwellSeconds, () =>
+            if (receiver != null && receiver.HasFreshFrame)
+            {
+                var frame = receiver.Latest;
+                GUI.Label(new Rect(panel.x + 24, panel.y + 164, 450, 24), $"Bridge: {frame.bridgeFps:0.0} FPS  |  processing {frame.processingMs:0.0} ms");
+            }
+            DrawUtilityButton("start-camera", "Start / Retry Camera", new Rect(panel.x + 24, panel.y + 204, 190, 34), SafeDwellSeconds, StartVisibleGestureBridge);
+            DrawHoverButton("skip", "Skip calibration", new Rect(panel.x + 236, panel.y + 204, 190, 34), SafeDwellSeconds, () =>
             {
                 pinchThreshold = 0.56f;
                 StartLevel(GameMode.Level0);
@@ -903,7 +907,7 @@ namespace HandOfGod.Gameplay
             DrawLevelSelectButton("select-level0", "Level 0: Tutorial", GameMode.Level0, new Rect(panel.x + 18f, panel.y + 44f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level1", "Level 1: Moving Path", GameMode.Level1, new Rect(panel.x + 18f, panel.y + 80f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level2", "Level 2: Portals", GameMode.Level2, new Rect(panel.x + 18f, panel.y + 116f, panel.width - 36f, 30f));
-            DrawLevelSelectButton("select-level3", "Level 3: Create & Erase", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 152f, panel.width - 36f, 30f));
+            DrawLevelSelectButton("select-level3", "Level 3: Creation & Erasure", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 152f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level4", "Level 4: Mirror & Magnet", GameMode.Level4, new Rect(panel.x + 18f, panel.y + 188f, panel.width - 36f, 30f));
         }
 
@@ -922,7 +926,7 @@ namespace HandOfGod.Gameplay
             DrawHoverButton("level0", "Level 0: Tutorial", new Rect(70, 172, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
             DrawHoverButton("level1", "Level 1: First Path", new Rect(70, 224, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             DrawHoverButton("level2", "Level 2: Portals & Airflow", new Rect(70, 276, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level2));
-            DrawHoverButton("level3", "Level 3: Create & Erase", new Rect(70, 328, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level3));
+            DrawHoverButton("level3", "Level 3: Creation & Erasure", new Rect(70, 328, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level3));
             DrawHoverButton("level4", "Level 4: Mirror & Magnet", new Rect(70, 380, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level4));
             DrawHoverButton("recalibrate", "Recalibrate", new Rect(70, 432, 260, 42), MenuDwellSeconds, ResetToCalibration);
         }
@@ -1095,7 +1099,7 @@ namespace HandOfGod.Gameplay
             DrawPanel(panel);
             var titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
             var objectiveStyle = new GUIStyle(GUI.skin.label) { fontSize = 17, wordWrap = true };
-            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 3: Create & Erase", titleStyle);
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 3: Creation & Erasure", titleStyle);
             GUI.Label(new Rect(panel.x + 28f, panel.y + 52f, panel.width - 56f, 48f), Level3ObjectiveText(), objectiveStyle);
             GUI.Label(new Rect(panel.x + 28f, panel.y + 104f, panel.width - 56f, 24f), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}" : "Ball speed: 0.00");
             if (!string.IsNullOrEmpty(level3HintMessage))
@@ -1698,10 +1702,10 @@ namespace HandOfGod.Gameplay
             return mode == GameMode.Level3;
         }
 
-        private bool CanEraseLevel3SpringBlock()
+        private bool CanEraseLevel3LockBlock()
         {
             return mode == GameMode.Level3
-                && (level3BridgePlaced || level3Stage == Level3Stage.EraseSpringBlock || level3Stage == Level3Stage.RunToGoal);
+                && (level3BridgePlaced || level3Stage == Level3Stage.EraseLockBlock || level3Stage == Level3Stage.RunToGoal);
         }
 
         private bool CanManipulateDrawnObjects()
@@ -1737,7 +1741,7 @@ namespace HandOfGod.Gameplay
                 interactionTarget = ScreenToWorldPlane((a.pinchX + b.pinchX) * 0.5f, (a.pinchY + b.pinchY) * 0.5f, 0.7f);
             }
             var hoverObject = FindNearestTutorialDrawnObject(interactionTarget, twoHandsPinching ? 1.55f : 0.78f);
-            var hoverCanMove = hoverObject != null && hoverObject != level3SpringBlock;
+            var hoverCanMove = hoverObject != null && hoverObject != level3LockBlock;
             if (tutorialDrawObjectHeld && (!isPinch || twoHandsPinching))
             {
                 tutorialDrawObjectHeld = false;
@@ -3013,7 +3017,7 @@ namespace HandOfGod.Gameplay
                 if (TutorialDrawHoldProgress() >= 1f)
                 {
                     var erasedObject = tutorialEraseTarget;
-                    var erasedSpringBlock = mode == GameMode.Level3 && erasedObject == level3SpringBlock;
+                    var erasedLockBlock = mode == GameMode.Level3 && erasedObject == level3LockBlock;
                     tutorialDrawnObjects.Remove(tutorialEraseTarget);
                     DestroyUnityObject(tutorialEraseTarget);
                     ClearTutorialEraseSelection(false);
@@ -3022,16 +3026,16 @@ namespace HandOfGod.Gameplay
                     {
                         tutorialStageSucceeded = true;
                     }
-                    else if (erasedSpringBlock)
+                    else if (erasedLockBlock)
                     {
-                        TriggerLevel3SpringRelease();
+                        TriggerLevel3SlideBridgeRelease();
                     }
                     if (mode == GameMode.Level3)
                     {
                         tutorialDrawErased = false;
                         level3EraseRequiresGestureReset = true;
                     }
-                    tutorialDrawMessage = erasedSpringBlock ? "Lock block erased. The sliding bridge is released." : "Object erased.";
+                    tutorialDrawMessage = erasedLockBlock ? "Lock block erased. The sliding bridge is released." : "Object erased.";
                     tutorialDrawMessageUntil = Time.time + 1.8f;
                     ResetTutorialDrawHold();
                 }
@@ -3122,7 +3126,7 @@ namespace HandOfGod.Gameplay
 
         private bool CanSelectTutorialDrawnObjectForErase(GameObject candidate)
         {
-            return candidate != null && (candidate != level3SpringBlock || CanEraseLevel3SpringBlock());
+            return candidate != null && (candidate != level3LockBlock || CanEraseLevel3LockBlock());
         }
 
         private bool TryGetTutorialDrawnObjectBounds(GameObject candidate, out Bounds bounds)
@@ -4129,17 +4133,17 @@ namespace HandOfGod.Gameplay
             return hand.score >= 0.35f && hand.pinchDistance < pinchThreshold;
         }
 
-        // -------------------- Level3: Create & Erase --------------------
+        // -------------------- Level3: Creation & Erasure --------------------
         private void BuildLevel3()
         {
-            levelRoot = new GameObject("Level03 Create Erase").transform;
+            levelRoot = new GameObject("Level03 Creation Erasure").transform;
             level3Stage = Level3Stage.CreateBridgeObject;
             level3CubePlaced = false;
             level3SpherePlaced = false;
             level3BridgePlaced = false;
-            level3SpringReleased = false;
+            level3SlideBridgeReleased = false;
             level3EraseRequiresGestureReset = false;
-            level3SpringReleaseStart = -1f;
+            level3SlideBridgeReleaseStart = -1f;
             level3HintMessage = "Create one cube and one sphere, then place each on the matching platform.";
             level1SuccessUntil = -1f;
             tutorialDrawCreated = false;
@@ -4182,7 +4186,7 @@ namespace HandOfGod.Gameplay
 
             startGate = CreateLevel2Gate("level3 creation gate", new Vector3(-2.82f, Level3RoadY(-2.82f) + 0.68f, 0f), 1.74f);
             bridgeGate = CreateLevel2Gate("level3 slide gate", new Vector3(0.78f, Level3RoadY(0.78f) + 0.68f, 0f), 1.74f);
-            BuildLevel3SpringDevice(1.10f);
+            BuildLevel3SlideBridgeDevice(1.10f);
             BuildLevel3Decorations();
 
             var ballObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -4211,23 +4215,23 @@ namespace HandOfGod.Gameplay
             ApplyLevel3SceneTransformOverrides();
         }
 
-        private void BuildLevel3SpringDevice(float x)
+        private void BuildLevel3SlideBridgeDevice(float x)
         {
-            var bridgeY = Level3SpringPlatformCenterY(Level3SlideBridgeCenterX);
-            var bridgeScale = new Vector3(Level3SlideBridgeWidth, Level3SpringPlatformThickness, 1.78f);
+            var bridgeY = Level3SlideBridgeCenterY(Level3SlideBridgeCenterX);
+            var bridgeScale = new Vector3(Level3SlideBridgeWidth, Level3SlidePlatformThickness, 1.78f);
             CreateBox("level3 sliding bridge parked slot", new Vector3(1.111f, -0.205f, 1.85f), new Vector3(1.26f, 0.035f, 3f), level2WallMaterial, levelRoot, Level3RoadRotation(), false);
             CreateBox("level3 sliding bridge left rail", new Vector3(0.541f, -0.135f, 1.863f), new Vector3(0.08f, 0.10f, 3f), level2TrimMaterial, levelRoot, Level3RoadRotation(), false);
             CreateBox("level3 sliding bridge right rail", new Vector3(1.741f, -0.195f, 1.866f), new Vector3(0.08f, 0.10f, 3f), level2TrimMaterial, levelRoot, Level3RoadRotation(), false);
 
             var platform = CreateBox("level3 side parked sliding bridge", new Vector3(Level3SlideBridgeCenterX, bridgeY, Level3SlideBridgeParkZ), bridgeScale, level2TrimMaterial, levelRoot, Level3RoadRotation(), true);
-            level3SpringPlatform = platform.transform;
-            level3SpringPlatformRenderer = platform.GetComponent<Renderer>();
+            level3SlideBridge = platform.transform;
+            level3SlideBridgeRenderer = platform.GetComponent<Renderer>();
 
             var blockScale = new Vector3(0.96f, 0.72f, 0.5f);
-            level3SpringBlock = CreateBox("level3 sliding bridge lock block", new Vector3(1.13f, 0.17f, 1.18f), blockScale, boxIdle, levelRoot, Level3RoadRotation(), true);
-            level3SpringBlockRenderer = level3SpringBlock.GetComponent<Renderer>();
-            level3SpringBlockHalo = null;
-            tutorialDrawnObjects.Add(level3SpringBlock);
+            level3LockBlock = CreateBox("level3 sliding bridge lock block", new Vector3(1.13f, 0.17f, 1.18f), blockScale, boxIdle, levelRoot, Level3RoadRotation(), true);
+            level3LockBlockRenderer = level3LockBlock.GetComponent<Renderer>();
+            level3LockBlockHalo = null;
+            tutorialDrawnObjects.Add(level3LockBlock);
         }
 
         private void BuildLevel3Decorations()
@@ -4241,7 +4245,7 @@ namespace HandOfGod.Gameplay
             for (var i = 0; i < slideChevronZ.Length; i++)
             {
                 var z = slideChevronZ[i];
-                var y = Level3SpringPlatformCenterY(Level3SlideBridgeCenterX) + 0.12f;
+                var y = Level3SlideBridgeCenterY(Level3SlideBridgeCenterX) + 0.12f;
                 CreateBox($"level3 slide path chevron upper {i}", new Vector3(Level3SlideBridgeCenterX - 0.16f, y, z), new Vector3(0.36f, 0.018f, 0.045f), level2PortalCoreMaterial, levelRoot, roadRotation * Quaternion.Euler(0f, 28f, 0f), false);
                 CreateBox($"level3 slide path chevron lower {i}", new Vector3(Level3SlideBridgeCenterX + 0.16f, y, z), new Vector3(0.36f, 0.018f, 0.045f), level2PortalCoreMaterial, levelRoot, roadRotation * Quaternion.Euler(0f, -28f, 0f), false);
             }
@@ -4324,9 +4328,9 @@ namespace HandOfGod.Gameplay
             return Quaternion.Euler(0f, 0f, Level3RoadAngleDegrees);
         }
 
-        private static float Level3SpringPlatformCenterY(float x)
+        private static float Level3SlideBridgeCenterY(float x)
         {
-            return Level3RoadY(x) + (Level3RoadThickness - Level3SpringPlatformThickness) * 0.5f * Mathf.Cos(Level3RoadAngleDegrees * Mathf.Deg2Rad);
+            return Level3RoadY(x) + (Level3RoadThickness - Level3SlidePlatformThickness) * 0.5f * Mathf.Cos(Level3RoadAngleDegrees * Mathf.Deg2Rad);
         }
 
         private void UpdateLevel3(GestureHandFrame hand)
@@ -4389,7 +4393,7 @@ namespace HandOfGod.Gameplay
                     tutorialDrawnObjects.RemoveAt(i);
                     continue;
                 }
-                if (obj == level3SpringBlock)
+                if (obj == level3LockBlock)
                 {
                     continue;
                 }
@@ -4431,49 +4435,49 @@ namespace HandOfGod.Gameplay
                     level3BridgePatchRenderer.sharedMaterial = tealGlow;
                 }
                 OpenGate(startGate);
-                AdvanceLevel3(Level3Stage.EraseSpringBlock);
+                AdvanceLevel3(Level3Stage.EraseLockBlock);
                 level3HintMessage = "Bridge is open. Erase the lock block to slide the side bridge into the gap.";
             }
         }
 
-        private void TriggerLevel3SpringRelease()
+        private void TriggerLevel3SlideBridgeRelease()
         {
-            if (level3SpringReleased)
+            if (level3SlideBridgeReleased)
             {
                 return;
             }
 
-            level3SpringReleased = true;
-            level3SpringBlock = null;
-            level3SpringBlockRenderer = null;
-            if (level3SpringBlockHalo != null)
+            level3SlideBridgeReleased = true;
+            level3LockBlock = null;
+            level3LockBlockRenderer = null;
+            if (level3LockBlockHalo != null)
             {
-                DestroyUnityObject(level3SpringBlockHalo);
-                level3SpringBlockHalo = null;
+                DestroyUnityObject(level3LockBlockHalo);
+                level3LockBlockHalo = null;
             }
-            level3SpringReleaseStart = Time.time;
-            if (level3SpringPlatformRenderer != null)
+            level3SlideBridgeReleaseStart = Time.time;
+            if (level3SlideBridgeRenderer != null)
             {
-                level3SpringPlatformRenderer.sharedMaterial = tealGlow;
+                level3SlideBridgeRenderer.sharedMaterial = tealGlow;
             }
             OpenGate(bridgeGate);
             level3HintMessage = "The side bridge is sliding into the road gap.";
         }
 
-        private void UpdateLevel3SpringAnimation()
+        private void UpdateLevel3SlideBridgeAnimation()
         {
-            if (!level3SpringReleased || level3SpringReleaseStart < 0f)
+            if (!level3SlideBridgeReleased || level3SlideBridgeReleaseStart < 0f)
             {
                 return;
             }
 
-            var t = Mathf.Clamp01((Time.time - level3SpringReleaseStart) / 0.85f);
+            var t = Mathf.Clamp01((Time.time - level3SlideBridgeReleaseStart) / 0.85f);
             var smooth = Mathf.SmoothStep(0f, 1f, t);
-            if (level3SpringPlatform != null)
+            if (level3SlideBridge != null)
             {
-                var y = Level3SpringPlatformCenterY(level3SpringPlatform.position.x);
+                var y = Level3SlideBridgeCenterY(level3SlideBridge.position.x);
                 var z = Mathf.Lerp(Level3SlideBridgeParkZ, Level3SlideBridgeFinalZ, smooth);
-                level3SpringPlatform.position = new Vector3(level3SpringPlatform.position.x, y, z);
+                level3SlideBridge.position = new Vector3(level3SlideBridge.position.x, y, z);
             }
             if (t >= 1f && level3Stage != Level3Stage.RunToGoal)
             {
@@ -4499,7 +4503,7 @@ namespace HandOfGod.Gameplay
             {
                 Level3Stage.CreateBridgeObject => "Create a cube and a sphere. Put each one on the matching marked platform.",
                 Level3Stage.PlaceCreatedObject => "Move or rotate the cube to the cube mark and the sphere to the sphere mark.",
-                Level3Stage.EraseSpringBlock => "Cross both index fingers over the lock block and hold for 2 seconds.",
+                Level3Stage.EraseLockBlock => "Cross both index fingers over the lock block and hold for 2 seconds.",
                 Level3Stage.RunToGoal => "The sliding bridge completed the road. Let the ball roll to the altar.",
                 _ => "",
             };
@@ -7039,17 +7043,17 @@ namespace HandOfGod.Gameplay
             level3SpherePlateRenderer = null;
             level3BridgePatch = null;
             level3BridgePatchRenderer = null;
-            level3SpringBlock = null;
-            level3SpringBlockHalo = null;
-            level3SpringBlockRenderer = null;
-            level3SpringPlatform = null;
-            level3SpringPlatformRenderer = null;
-            level3SpringCore = null;
-            level3SpringReleaseStart = -1f;
+            level3LockBlock = null;
+            level3LockBlockHalo = null;
+            level3LockBlockRenderer = null;
+            level3SlideBridge = null;
+            level3SlideBridgeRenderer = null;
+            level3SlideBridgeCore = null;
+            level3SlideBridgeReleaseStart = -1f;
             level3CubePlaced = false;
             level3SpherePlaced = false;
             level3BridgePlaced = false;
-            level3SpringReleased = false;
+            level3SlideBridgeReleased = false;
             level3EraseRequiresGestureReset = false;
             level3HintMessage = "";
         }
