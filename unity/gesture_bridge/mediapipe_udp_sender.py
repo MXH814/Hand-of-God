@@ -255,6 +255,7 @@ def main():
     parser.add_argument("--video-width", type=int, default=640)
     parser.add_argument("--video-height", type=int, default=480)
     parser.add_argument("--camera-fps", type=int, default=30)
+    parser.add_argument("--video-fps", type=float, default=18.0, help="JPEG camera stream frame rate. Gesture UDP still runs every processed frame.")
     parser.add_argument("--jpeg-quality", type=int, default=72)
     parser.add_argument("--lock-port", type=int, default=5007)
     parser.add_argument("--model-complexity", type=int, choices=(0, 1), default=1, help="MediaPipe Hands model complexity. 1 improves finger-joint fidelity; 0 is faster.")
@@ -296,9 +297,10 @@ def main():
     processing_ms = 0.0
     frame_counter = 0
     diagnostics_start = time.time()
+    next_video_send = 0.0
 
     tracking_mode = "roi-tracking" if args.track_roi else "detect-every-frame"
-    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}, camera_fps={args.camera_fps}, mode={tracking_mode}. Use --preview for a debug window.")
+    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}, camera_fps={args.camera_fps}, video_fps={args.video_fps}, mode={tracking_mode}. Use --preview for a debug window.")
     try:
         while cap.isOpened():
             frame_start = time.time()
@@ -398,13 +400,17 @@ def main():
             payload["processingMs"] = processing_ms
 
             sock.sendto(json.dumps(payload).encode("utf-8"), (args.host, args.port))
-            video.send_jpeg(frame, max(30, min(args.jpeg_quality, 95)))
+            now = time.time()
+            video_interval = 1.0 / max(args.video_fps, 1.0)
+            if now >= next_video_send:
+                video.send_jpeg(frame, max(30, min(args.jpeg_quality, 95)))
+                next_video_send = now + video_interval
             processing_ms = (time.time() - frame_start) * 1000.0
             frame_counter += 1
             elapsed = time.time() - diagnostics_start
             if elapsed >= 5.0:
                 bridge_fps = frame_counter / elapsed
-                print(f"Bridge diagnostics: fps={bridge_fps:.1f} processing={processing_ms:.1f}ms model_complexity={args.model_complexity} mode={tracking_mode}")
+                print(f"Bridge diagnostics: fps={bridge_fps:.1f} processing={processing_ms:.1f}ms model_complexity={args.model_complexity} video_fps={args.video_fps} mode={tracking_mode}")
                 diagnostics_start = time.time()
                 frame_counter = 0
 

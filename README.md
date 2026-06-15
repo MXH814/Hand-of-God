@@ -357,11 +357,11 @@ numpy
 - 输出 21 点 landmarks、左右手标签、识别分数、捏合中心、食指尖位置、掌宽、五指伸展、掌心姿态。
 - 通过 UDP `127.0.0.1:5005` 发送手势 JSON。
 - Unity 端 UDP receiver 使用较小 receive buffer，并在每次接收时丢弃积压旧 datagram、只解析最新帧，避免短暂卡顿后继续显示过时手型。
-- 通过 TCP `127.0.0.1:5006` 发送长度前缀 JPEG 摄像头帧。
+- 通过 TCP `127.0.0.1:5006` 发送长度前缀 JPEG 摄像头帧；默认 `--video-fps 18`，把摄像头画面帧率和手势 UDP 帧率分离，减少 JPEG 编码、TCP 传输和 Unity `LoadImage` 对实时手型的影响。
 - 使用 TCP 锁端口 `5007` 防止多个桥接实例同时占用摄像头。
 - 默认 headless 运行；只有手动传入 `--preview` 时才显示 OpenCV 调试窗口。
 - 如低配机器帧率不足，可手动传入 `--model-complexity 0` 回退到更快但关节精度较低的模型，或传入 `--track-roi` 使用 MediaPipe ROI tracking 换取更高帧率。
-- 可用 `--camera-fps` 调整摄像头目标帧率，也可用 `--detection-confidence` / `--tracking-confidence` 调整 MediaPipe 置信度阈值；桥接每 5 秒向 `gesture-bridge-runtime.log` 输出一次 FPS、处理耗时、模型复杂度和 tracking 模式。
+- 可用 `--camera-fps` 调整摄像头目标帧率，用 `--video-fps` 调整 Unity 内嵌摄像头画面帧率，也可用 `--detection-confidence` / `--tracking-confidence` 调整 MediaPipe 置信度阈值；桥接每 5 秒向 `gesture-bridge-runtime.log` 输出一次 FPS、处理耗时、视频帧率、模型复杂度和 tracking 模式。
 
 ### 手势数据字段
 
