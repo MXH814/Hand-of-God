@@ -191,15 +191,16 @@ class ResponsiveFingerDisplayHand:
 
     def _stabilize_display(self, target, palm_width):
         stabilized = self.displayed.copy()
-        jitter_radius = max(0.0012, palm_width * 0.012)
-        live_radius = max(jitter_radius * 4.0, palm_width * 0.055)
+        jitter_radius = max(0.0028, palm_width * 0.026)
+        live_radius = max(jitter_radius * 7.0, palm_width * 0.12)
         for index in range(len(target)):
             delta = target[index] - self.displayed[index]
             motion = float(np.linalg.norm(delta[:2]))
             if motion <= jitter_radius:
                 continue
 
-            alpha = min(1.0, 0.62 + ((motion - jitter_radius) / live_radius) * 0.38)
+            motion_scale = min(1.0, (motion - jitter_radius) / live_radius)
+            alpha = 0.18 + (motion_scale ** 1.4) * 0.82
             stabilized[index] = self.displayed[index] + delta * alpha
         return stabilized
 

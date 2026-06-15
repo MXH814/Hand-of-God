@@ -99,8 +99,8 @@ class ResponsiveFingerDisplayTests(unittest.TestCase):
         state = bridge.ResponsiveFingerDisplayHand(base)
         jittered = make_hand()
         for index, item in enumerate(jittered):
-            item.x += 0.00055 if index % 2 == 0 else -0.00055
-            item.y += -0.00045 if index % 2 == 0 else 0.00045
+            item.x += 0.00135 if index % 2 == 0 else -0.00135
+            item.y += -0.00110 if index % 2 == 0 else 0.00110
 
         output = state.update(jittered)
 
@@ -118,6 +118,21 @@ class ResponsiveFingerDisplayTests(unittest.TestCase):
 
         self.assertGreater(output[8]["y"], base[8].y + 0.025)
         self.assertGreater(output[7]["y"], base[7].y + 0.018)
+
+    def test_slow_real_motion_accumulates_past_display_deadband(self):
+        base = make_hand()
+        state = bridge.ResponsiveFingerDisplayHand(base)
+        output = None
+
+        for step in range(1, 11):
+            moved = make_hand()
+            moved[8] = landmark(0.45, base[8].y + step * 0.00070)
+            moved[7] = landmark(0.45, base[7].y + step * 0.00060)
+            output = state.update(moved)
+
+        self.assertIsNotNone(output)
+        self.assertGreater(output[8]["y"], base[8].y + 0.0035)
+        self.assertGreater(output[7]["y"], base[7].y + 0.0025)
 
 
 if __name__ == "__main__":
