@@ -34,6 +34,7 @@ STABLE_HAND_IDS = ("Left", "Right")
 HAND_ID_MATCH_MAX_DISTANCE = 0.30
 HAND_DROPOUT_GRACE_SECONDS = 0.34
 PINCH_DROPOUT_GRACE_SECONDS = 1.15
+HAND_SIDE_PRIOR_MARGIN = 0.12
 
 
 class LandmarkPoint:
@@ -413,6 +414,15 @@ def palm_center_from_landmarks(landmarks):
     return points.mean(axis=0)
 
 
+def mirrored_side_prior_hand_id(center, active_ids):
+    x = float(center[0])
+    if x < 0.5 - HAND_SIDE_PRIOR_MARGIN and "Left" not in active_ids:
+        return "Left"
+    if x > 0.5 + HAND_SIDE_PRIOR_MARGIN and "Right" not in active_ids:
+        return "Right"
+    return None
+
+
 def assign_stable_hand_id(raw_label, center, active_ids, stable_hand_tracks):
     candidates = []
     for hand_id in STABLE_HAND_IDS:
@@ -432,6 +442,10 @@ def assign_stable_hand_id(raw_label, center, active_ids, stable_hand_tracks):
     if candidates:
         candidates.sort(key=lambda item: item[0])
         return candidates[0][1]
+
+    side_prior = mirrored_side_prior_hand_id(center, active_ids)
+    if side_prior is not None:
+        return side_prior
 
     if raw_label in STABLE_HAND_IDS and raw_label not in active_ids:
         return raw_label
