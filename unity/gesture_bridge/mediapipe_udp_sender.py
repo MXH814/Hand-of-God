@@ -3,6 +3,7 @@ import json
 import os
 import socket
 import struct
+import threading
 import time
 
 import cv2
@@ -153,6 +154,54 @@ class VideoStreamClient:
             self.close()
 
 
+class LatestCameraCapture:
+    def __init__(self, cap):
+        self.cap = cap
+        self.condition = threading.Condition()
+        self.running = False
+        self.thread = None
+        self.frame = None
+        self.sequence = 0
+
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self._read_loop, name="LatestCameraCapture", daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        self.running = False
+        with self.condition:
+            self.condition.notify_all()
+        if self.thread is not None and self.thread.is_alive():
+            self.thread.join(timeout=1.0)
+        self.thread = None
+
+    def read_latest(self, last_sequence, timeout=1.0):
+        deadline = time.time() + timeout
+        with self.condition:
+            while self.running and self.sequence == last_sequence:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    return False, None, last_sequence
+                self.condition.wait(remaining)
+
+            if self.frame is None or self.sequence == last_sequence:
+                return False, None, last_sequence
+            return True, self.frame.copy(), self.sequence
+
+    def _read_loop(self):
+        while self.running and self.cap.isOpened():
+            ok, frame = self.cap.read()
+            if not ok:
+                time.sleep(0.005)
+                continue
+
+            with self.condition:
+                self.frame = frame
+                self.sequence += 1
+                self.condition.notify_all()
+
+
 def normalized_distance(a, b, scale):
     return float(np.linalg.norm(np.array([a.x - b.x, a.y - b.y, a.z - b.z])) / max(scale, 1e-5))
 
@@ -287,6 +336,8 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.video_width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.video_height)
     cap.set(cv2.CAP_PROP_FPS, args.camera_fps)
+    camera = LatestCameraCapture(cap)
+    camera.start()
     neutral = None
     last_raw = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
     pinch_latches = {}
@@ -297,13 +348,14 @@ def main():
     frame_counter = 0
     diagnostics_start = time.time()
     next_video_send = 0.0
+    last_camera_sequence = 0
 
     tracking_mode = "roi-tracking" if args.track_roi else "detect-every-frame"
     print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}, camera_fps={args.camera_fps}, video_fps={args.video_fps}, mode={tracking_mode}. Use --preview for a debug window.")
     try:
         while cap.isOpened():
             frame_start = time.time()
-            ok, frame = cap.read()
+            ok, frame, last_camera_sequence = camera.read_latest(last_camera_sequence)
             if not ok:
                 break
 
@@ -426,6 +478,7 @@ def main():
             else:
                 time.sleep(0.001)
     finally:
+        camera.stop()
         cap.release()
         video.close()
         hands_model.close()
