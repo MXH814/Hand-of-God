@@ -22,7 +22,7 @@
 - 屏幕最前景实时显示 MediaPipe Hands 的 21 点手骨架。
 - 支持最多两只手，并保留 `Left` / `Right` handedness、识别置信度和手势特征。
 - 校准界面只显示摄像头背景、手骨架和清晰提示，避免地图物体干扰。
-- 所有主要 UI 按钮支持左右手食指独立悬停选择，同时保留鼠标点击兜底。
+- 所有主要 UI 按钮支持左右手张掌独立悬停选择：只要正在按钮上的那只手是张开的即可触发，另一只手是否在屏幕中、是否捏合都不影响；同时保留鼠标点击兜底。
 - 左上方 `Exit` / `Calibrate` 按钮放大并向屏幕内侧移动，降低边缘手势抖动和误触。
 - 校准完成后，左侧常驻 `Level Select` 选关栏，可随时进入或重进 Level 0、Level 1、Level 2、Level 3、Level 4。
 - `Start / Retry Camera` 可在自动桥接失败时手动重试。
@@ -79,18 +79,18 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 校准阶段提供这些兜底能力：
 
 - `Start / Retry Camera`：重新启动摄像头桥接。
-- `Skip Calibration`：食指悬停跳过校准，用于课堂展示或无摄像头环境。
+- `Skip Calibration`：张掌悬停跳过校准，用于课堂展示或无摄像头环境。
 - `Exit`：退出游戏。
 - 鼠标点击：所有 UI 按钮仍可用鼠标触发。
 - 校准面板会在识别到手后显示桥接端 FPS、单帧处理耗时、实际采集分辨率、实际采集 FPS、FOURCC、手势帧龄、Unity 接收龄和显示骨架模式，方便判断摄像头、MediaPipe 与 Unity 显示链路是否处于低延迟状态。
 
-校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path`、`Level 2: Portals` 或 `Level 3: Creation & Erasure`；在关卡中选择当前关卡会重新开始该关。
+校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用张掌悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path`、`Level 2: Portals` 或 `Level 3: Creation & Erasure`；在关卡中选择当前关卡会重新开始该关。
 
 ## 手势与交互
 
 | 手势 | 用途 | 实现要点 |
 | --- | --- | --- |
-| 食指悬停 | 选择 UI 按钮 | 使用食指尖屏幕坐标命中按钮区域，保持约 `0.85s` 后触发；手指离开即清空进度 |
+| 张掌悬停 | 选择 UI 按钮 | 任意一只手处于 open palm 并命中按钮区域即可开始计时；另一只手可自由移动或做其他姿势，保持约 `0.85s` 后触发，离开按钮即清空进度 |
 | 张掌保持 | 校准、激活神印按钮 | Python 根据五指伸展状态判断 open palm；Unity 检测手掌是否位于目标区域并保持指定时长 |
 | 单手捏合 | 拖动物块、木箱、传送门钥匙 | Python 输出 pinch 状态和 pinch center；Unity 将 pinch center 映射到世界平面并移动目标物体 |
 | 双手捏合旋转 | 旋转教学物体、旋转空中桥 | Unity 计算两只手 pinch center 连线角度变化，将角度增量映射为物体或机关的 Y 轴旋转 |
@@ -599,7 +599,7 @@ cd "unity\gesture_bridge"
 
 - 张掌保持和捏合保持均可完成校准。
 - `Start / Retry Camera` 可重新启动桥接。
-- `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Next: Level 3`、`Restart`、`Tutorial` 都可用食指悬停触发。
+- `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Next: Level 3`、`Restart`、`Tutorial` 都可用张掌悬停触发；只要求按按钮的那只手张开，另一只手无所谓。
 - 校准完成后的左侧 `Level Select` 可随时选择 Level 0、Level 1、Level 2、Level 3、Level 4。
 - 第 0 关左侧 `Tutorial Steps` 可随时选择任意教学步骤。
 - 按钮尺寸和位置适合手势悬停，不需要把手移动到屏幕极边缘。

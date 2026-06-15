@@ -932,7 +932,7 @@ namespace HandOfGod.Gameplay
         {
             DrawPanel(new Rect(40, 40, 390, 456));
             GUI.Label(new Rect(70, 62, 300, 30), "Hand of God");
-            GUI.Label(new Rect(70, 92, 320, 24), "Hover your index finger over an option.");
+            GUI.Label(new Rect(70, 92, 320, 24), "Open your palm over an option.");
             DrawHoverButton("start", "Start Game", new Rect(70, 120, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             DrawHoverButton("level0", "Level 0: Tutorial", new Rect(70, 172, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
             DrawHoverButton("level1", "Level 1: First Path", new Rect(70, 224, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
@@ -6428,6 +6428,31 @@ namespace HandOfGod.Gameplay
             return pointers;
         }
 
+        private List<UiPointer> GetButtonPointers()
+        {
+            var pointers = new List<UiPointer>(2);
+            var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
+            if (frame.hands != null && frame.hands.Length > 0)
+            {
+                for (var i = 0; i < frame.hands.Length; i++)
+                {
+                    var hand = frame.hands[i];
+                    if (hand.score < 0.35f || !hand.openPalm)
+                    {
+                        continue;
+                    }
+
+                    var id = !string.IsNullOrEmpty(hand.id) ? hand.id : (!string.IsNullOrEmpty(hand.handedness) ? hand.handedness : $"hand-{i}");
+                    pointers.Add(new UiPointer(id, new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height), false));
+                }
+            }
+            else if (TryGetPrimaryHand(out var hand) && hand.openPalm)
+            {
+                pointers.Add(new UiPointer("primary", new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height), false));
+            }
+            return pointers;
+        }
+
         private void DrawCursor()
         {
             var pointers = GetUiPointers();
@@ -6453,7 +6478,7 @@ namespace HandOfGod.Gameplay
 
         private void DrawButtonCore(string key, string label, Rect rect, float dwellSeconds, System.Action action, bool allowMouseClick, int fontSize)
         {
-            var pointers = GetUiPointers();
+            var pointers = GetButtonPointers();
             var activeHoverIds = new List<string>(pointers.Count);
             var progress = 0f;
             foreach (var pointer in pointers)
