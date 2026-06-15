@@ -226,6 +226,8 @@ def neutral_payload():
         "palmPitch": 0.0,
         "palmYaw": 0.0,
         "confidence": 0.0,
+        "bridgeFps": 0.0,
+        "processingMs": 0.0,
         "pinch": False,
         "openPalm": False,
         "handCount": 0,
@@ -246,6 +248,7 @@ def main():
     parser.add_argument("--video-port", type=int, default=5006)
     parser.add_argument("--video-width", type=int, default=640)
     parser.add_argument("--video-height", type=int, default=480)
+    parser.add_argument("--camera-fps", type=int, default=30)
     parser.add_argument("--jpeg-quality", type=int, default=72)
     parser.add_argument("--lock-port", type=int, default=5007)
     parser.add_argument("--model-complexity", type=int, choices=(0, 1), default=1, help="MediaPipe Hands model complexity. 1 improves finger-joint fidelity; 0 is faster.")
@@ -265,17 +268,24 @@ def main():
     hands_model = mp.solutions.hands.Hands(max_num_hands=2, model_complexity=args.model_complexity, min_detection_confidence=0.65, min_tracking_confidence=0.65)
     drawing = mp.solutions.drawing_utils
     cap = cv2.VideoCapture(args.camera, cv2.CAP_DSHOW)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.video_width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.video_height)
+    cap.set(cv2.CAP_PROP_FPS, args.camera_fps)
     neutral = None
     last_raw = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
     pinch_latches = {}
     smooth_landmarks_by_hand = {}
     smooth_cursors = {}
+    bridge_fps = 0.0
+    processing_ms = 0.0
+    frame_counter = 0
+    diagnostics_start = time.time()
 
-    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}. Use --preview for a debug window.")
+    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}, camera_fps={args.camera_fps}. Use --preview for a debug window.")
     try:
         while cap.isOpened():
+            frame_start = time.time()
             ok, frame = cap.read()
             if not ok:
                 break
@@ -360,19 +370,31 @@ def main():
                     "palmPitch": primary["palmPitch"],
                     "palmYaw": primary["palmYaw"],
                     "confidence": primary["score"],
+                    "bridgeFps": bridge_fps,
+                    "processingMs": processing_ms,
                     "pinch": primary["pinch"],
                     "openPalm": primary["openPalm"],
                     "handCount": len(analyzed),
                     "hands": analyzed,
                     "timestamp": time.time(),
                 })
+            payload["bridgeFps"] = bridge_fps
+            payload["processingMs"] = processing_ms
 
             sock.sendto(json.dumps(payload).encode("utf-8"), (args.host, args.port))
             video.send_jpeg(frame, max(30, min(args.jpeg_quality, 95)))
+            processing_ms = (time.time() - frame_start) * 1000.0
+            frame_counter += 1
+            elapsed = time.time() - diagnostics_start
+            if elapsed >= 5.0:
+                bridge_fps = frame_counter / elapsed
+                print(f"Bridge diagnostics: fps={bridge_fps:.1f} processing={processing_ms:.1f}ms model_complexity={args.model_complexity}")
+                diagnostics_start = time.time()
+                frame_counter = 0
 
             if args.preview:
                 cv2.putText(frame, "C calibrate neutral | Q quit", (18, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (80, 240, 180), 2)
-                cv2.putText(frame, f"hands {payload['handCount']} pinch {payload['pinchDistance']:.2f}", (18, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (80, 240, 180), 2)
+                cv2.putText(frame, f"hands {payload['handCount']} pinch {payload['pinchDistance']:.2f} fps {bridge_fps:.1f}", (18, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (80, 240, 180), 2)
                 cv2.imshow("Hand of God Gesture Bridge", frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):

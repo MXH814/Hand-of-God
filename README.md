@@ -349,6 +349,7 @@ numpy
 桥接功能：
 
 - 使用 OpenCV 采集摄像头。
+- 摄像头采集使用低缓冲设置，并默认请求 `30 FPS`，减少摄像头队列积压造成的显示延迟。
 - 使用 MediaPipe Hands 最多识别两只手，默认 `model_complexity=1`，优先保证手指关节和骨架形状精度。
 - 支持镜像画面，保证玩家看到的左右移动符合屏幕直觉。
 - 输出 21 点 landmarks、左右手标签、识别分数、捏合中心、食指尖位置、掌宽、五指伸展、掌心姿态。
@@ -357,6 +358,7 @@ numpy
 - 使用 TCP 锁端口 `5007` 防止多个桥接实例同时占用摄像头。
 - 默认 headless 运行；只有手动传入 `--preview` 时才显示 OpenCV 调试窗口。
 - 如低配机器帧率不足，可手动传入 `--model-complexity 0` 回退到更快但关节精度较低的模型。
+- 可用 `--camera-fps` 调整摄像头目标帧率；桥接每 5 秒向 `gesture-bridge-runtime.log` 输出一次 FPS、处理耗时和模型复杂度。
 
 ### 手势数据字段
 
@@ -377,6 +379,8 @@ numpy
 - `palmPitch`
 - `palmYaw`
 - `confidence`
+- `bridgeFps`
+- `processingMs`
 
 每只手包含：
 

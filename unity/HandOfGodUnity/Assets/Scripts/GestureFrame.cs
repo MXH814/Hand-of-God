@@ -52,6 +52,8 @@ namespace HandOfGod.Gestures
         public float palmPitch;
         public float palmYaw;
         public float confidence;
+        public float bridgeFps;
+        public float processingMs;
         public bool pinch;
         public bool openPalm;
         public int handCount;
@@ -72,6 +74,8 @@ namespace HandOfGod.Gestures
             palmPitch = 0f,
             palmYaw = 0f,
             confidence = 0f,
+            bridgeFps = 0f,
+            processingMs = 0f,
             pinch = false,
             openPalm = false,
             handCount = 0,
@@ -96,6 +100,8 @@ namespace HandOfGod.Gestures
             frame.palmPitch = Mathf.Clamp(frame.palmPitch, -1f, 1f);
             frame.palmYaw = Mathf.Clamp(frame.palmYaw, -1f, 1f);
             frame.confidence = Mathf.Clamp01(frame.confidence);
+            frame.bridgeFps = Mathf.Max(0f, frame.bridgeFps);
+            frame.processingMs = Mathf.Max(0f, frame.processingMs);
             frame.hands ??= Array.Empty<GestureHandFrame>();
             for (var i = 0; i < frame.hands.Length; i++)
             {
