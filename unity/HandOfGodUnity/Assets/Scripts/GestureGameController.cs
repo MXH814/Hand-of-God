@@ -143,7 +143,7 @@ namespace HandOfGod.Gameplay
         private const float Level1RoadCenterY = 1f;
         private const float Level1RoadAngleDegrees = -8f;
         private const float Level1RotateBridgeStartYaw = 90f;
-        private const float TutorialDrawConfirmSeconds = 2f;
+        private const float TutorialDrawConfirmSeconds = 1f;
         private const float Level3RoadAngleDegrees = -4.2f;
         private const float Level3RoadBaseY = 0.28f;
         private const float Level3RoadSlope = -0.0735f;
@@ -918,7 +918,7 @@ namespace HandOfGod.Gameplay
             DrawLevelSelectButton("select-level0", "Level 0: Tutorial", GameMode.Level0, new Rect(panel.x + 18f, panel.y + 44f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level1", "Level 1: Moving Path", GameMode.Level1, new Rect(panel.x + 18f, panel.y + 80f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level2", "Level 2: Portals", GameMode.Level2, new Rect(panel.x + 18f, panel.y + 116f, panel.width - 36f, 30f));
-            DrawLevelSelectButton("select-level3", "Level 3: 创造和消除", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 152f, panel.width - 36f, 30f));
+            DrawLevelSelectButton("select-level3", "Level 3: Creation & Erasure", GameMode.Level3, new Rect(panel.x + 18f, panel.y + 152f, panel.width - 36f, 30f));
             DrawLevelSelectButton("select-level4", "Level 4: Mirror & Magnet", GameMode.Level4, new Rect(panel.x + 18f, panel.y + 188f, panel.width - 36f, 30f));
         }
 
@@ -937,7 +937,7 @@ namespace HandOfGod.Gameplay
             DrawHoverButton("level0", "Level 0: Tutorial", new Rect(70, 172, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level0));
             DrawHoverButton("level1", "Level 1: First Path", new Rect(70, 224, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level1));
             DrawHoverButton("level2", "Level 2: Portals & Airflow", new Rect(70, 276, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level2));
-            DrawHoverButton("level3", "Level 3: 创造和消除", new Rect(70, 328, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level3));
+            DrawHoverButton("level3", "Level 3: Creation & Erasure", new Rect(70, 328, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level3));
             DrawHoverButton("level4", "Level 4: Mirror & Magnet", new Rect(70, 380, 260, 42), MenuDwellSeconds, () => StartLevel(GameMode.Level4));
             DrawHoverButton("recalibrate", "Recalibrate", new Rect(70, 432, 260, 42), MenuDwellSeconds, ResetToCalibration);
         }
@@ -1089,7 +1089,7 @@ namespace HandOfGod.Gameplay
             }
             else if (lastLevel == GameMode.Level2)
             {
-                DrawHoverButton("pass-next", "Next: Level 3 创造和消除", new Rect(Screen.width / 2f - 95f, 222, 240, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level3), 20);
+                DrawHoverButton("pass-next", "Next: Level 3", new Rect(Screen.width / 2f - 95f, 222, 240, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level3), 20);
                 DrawHoverButton("pass-level0", "Tutorial", new Rect(Screen.width / 2f + 130f, 222, 150, 52), MenuDwellSeconds, () => StartLevel(GameMode.Level0), 20);
             }
             else if (lastLevel == GameMode.Level3)
@@ -1110,7 +1110,7 @@ namespace HandOfGod.Gameplay
             DrawPanel(panel);
             var titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
             var objectiveStyle = new GUIStyle(GUI.skin.label) { fontSize = 17, wordWrap = true };
-            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 3: 创造和消除", titleStyle);
+            GUI.Label(new Rect(panel.x + 28f, panel.y + 16f, panel.width - 56f, 30f), "Level 3: Creation & Erasure", titleStyle);
             GUI.Label(new Rect(panel.x + 28f, panel.y + 52f, panel.width - 56f, 48f), Level3ObjectiveText(), objectiveStyle);
             GUI.Label(new Rect(panel.x + 28f, panel.y + 104f, panel.width - 56f, 24f), levelBall != null ? $"Ball speed: {levelBall.Speed:0.00}" : "Ball speed: 0.00");
             if (!string.IsNullOrEmpty(level3HintMessage))
@@ -3769,8 +3769,8 @@ namespace HandOfGod.Gameplay
                 TutorialStage.PalmActivate => "Open one hand and hold it over the glowing seal until it lights up.",
                 TutorialStage.MapControl => "On each hand, keep index and middle fingertips close, with ring and pinky folded, then move both hands to adjust the map.",
                 TutorialStage.AirflowDirection => "Use one hand: extend your thumb, keep index and middle together, fold ring and pinky, then point left or right.",
-                TutorialStage.DrawCreate => "Touch both index fingertips for 2 seconds to start. Draw a circle, rectangle, or triangle with the right index fingertip, then touch both index fingertips again for 2 seconds to create.",
-                TutorialStage.DrawErase => "Cross both index fingers over a drawn object, keep it highlighted, and hold for 2 seconds to erase it.",
+                TutorialStage.DrawCreate => "Touch both index fingertips for 1 second to start. Draw a circle, rectangle, or triangle with the right index fingertip, then touch both index fingertips again for 1 second to create.",
+                TutorialStage.DrawErase => "Cross both index fingers deeply over a drawn object, keep it highlighted, and hold for 1 second to erase it.",
                 TutorialStage.MirrorRotate => "Pinch with both hands and rotate them until the mirror points at the glowing receiver.",
                 TutorialStage.MagnetPolarity => "Make a fist with only the thumb extended. Point it right, then left, to reverse the bar magnet twice.",
                 TutorialStage.Complete => "Hold over Next: Level 1 when ready.",
@@ -4154,7 +4154,7 @@ namespace HandOfGod.Gameplay
             return hand.score >= 0.35f && hand.pinchDistance < pinchThreshold;
         }
 
-        // -------------------- Level3: 创造和消除 --------------------
+        // -------------------- Level3: Creation & Erasure --------------------
         private void BuildLevel3()
         {
             levelRoot = new GameObject("Level03 Creation Erasure").transform;
@@ -4524,7 +4524,7 @@ namespace HandOfGod.Gameplay
             {
                 Level3Stage.CreateBridgeObject => "Create a cube and a sphere. Put each one on the matching marked platform.",
                 Level3Stage.PlaceCreatedObject => "Move or rotate the cube to the cube mark and the sphere to the sphere mark.",
-                Level3Stage.EraseLockBlock => "Cross both index fingers over the lock block and hold for 2 seconds.",
+                Level3Stage.EraseLockBlock => "Cross both index fingers deeply over the lock block and hold for 1 second.",
                 Level3Stage.RunToGoal => "The sliding bridge completed the road. Let the ball roll to the altar.",
                 _ => "",
             };
@@ -6196,14 +6196,12 @@ namespace HandOfGod.Gameplay
                 return false;
             }
 
-            var tipsClose = Vector2.Distance(leftTip, rightTip) < 0.16f;
-            var segmentsCross = TryGetSegmentsIntersection(leftMcp, leftTip, rightMcp, rightTip, out var intersection);
-            if (!tipsClose && !segmentsCross)
+            if (!TryGetDeepSegmentsIntersection(leftMcp, leftTip, rightMcp, rightTip, out var intersection))
             {
                 return false;
             }
 
-            crossPoint = segmentsCross ? intersection : (leftTip + rightTip) * 0.5f;
+            crossPoint = intersection;
             return true;
         }
 
@@ -6214,6 +6212,36 @@ namespace HandOfGod.Gameplay
 
         private static bool TryGetSegmentsIntersection(Vector2 a, Vector2 b, Vector2 c, Vector2 d, out Vector2 intersection)
         {
+            if (!TryGetSegmentsIntersectionFactors(a, b, c, d, out var t, out _, out intersection))
+            {
+                return false;
+            }
+
+            intersection = a + (b - a) * t;
+            return true;
+        }
+
+        private static bool TryGetDeepSegmentsIntersection(Vector2 a, Vector2 b, Vector2 c, Vector2 d, out Vector2 intersection)
+        {
+            if (!TryGetSegmentsIntersectionFactors(a, b, c, d, out var t, out var u, out intersection))
+            {
+                return false;
+            }
+
+            const float minCrossDepth = 0.22f;
+            if (t < minCrossDepth || t > 1f - minCrossDepth || u < minCrossDepth || u > 1f - minCrossDepth)
+            {
+                intersection = Vector2.zero;
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool TryGetSegmentsIntersectionFactors(Vector2 a, Vector2 b, Vector2 c, Vector2 d, out float t, out float u, out Vector2 intersection)
+        {
+            t = 0f;
+            u = 0f;
             var r = b - a;
             var s = d - c;
             var denominator = Cross2D(r, s);
@@ -6223,8 +6251,8 @@ namespace HandOfGod.Gameplay
                 return false;
             }
 
-            var u = Cross2D(c - a, r) / denominator;
-            var t = Cross2D(c - a, s) / denominator;
+            u = Cross2D(c - a, r) / denominator;
+            t = Cross2D(c - a, s) / denominator;
             if (t < 0f || t > 1f || u < 0f || u > 1f)
             {
                 intersection = Vector2.zero;
