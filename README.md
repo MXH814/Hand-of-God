@@ -101,7 +101,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 捏合与悬停均使用阈值范围判断，不要求指尖完全重合。捏合状态带有迟滞逻辑：进入捏合使用较小阈值，保持捏合使用较大阈值；Unity 优先使用 Python 输出的稳定 `pinch` 状态，并为双手捏合旋转、拉合等连续操作保留短暂双手 grace，减少临界点抖动或单帧丢手导致的频繁断开。
 
-桥接会把 pinch latch 绑定到稳定 hand id，而不是绑定到 MediaPipe 当帧原始 handedness。这样左手掌心朝向屏幕、拇指食指遮挡较多时，即使 MediaPipe handedness 短暂波动，左手捏合状态仍能连续保持。
+桥接会把 pinch latch 绑定到稳定 hand id，而不是绑定到 MediaPipe 当帧原始 handedness。这样左手掌心朝向屏幕、拇指食指遮挡较多时，即使 MediaPipe handedness 短暂波动，左手捏合状态仍能连续保持；如果捏合中的手短暂丢检，桥接会比普通非捏合手保留更长的上一帧输出，防止捏住物体或双手旋转时突然断触。
 
 ## 关卡设计
 
@@ -445,7 +445,7 @@ Unity 端职责：
 
 Python 对每个 hand id 的每个 landmark 输出同一套稳定后的交互/显示坐标：
 
-- `stable hand id`：MediaPipe 原始 `Left` / `Right` 只作为初始线索；桥接会根据掌心中心点与上一帧轨迹做空间匹配，得到稳定的 `Left` / `Right` ID。若某一帧左手掌心朝屏幕捏合时被错标成 `Right`，但位置仍接近上一帧左手轨迹，Unity 收到的仍是 `Left`。检测短暂丢失时，桥接会在约 `0.34s` 内保留上一帧手势输出，避免单帧掉手导致骨架和捏合状态闪断。
+- `stable hand id`：MediaPipe 原始 `Left` / `Right` 只作为初始线索；桥接会根据掌心中心点与上一帧轨迹做空间匹配，得到稳定的 `Left` / `Right` ID。若某一帧左手掌心朝屏幕捏合时被错标成 `Right`，但位置仍接近上一帧左手轨迹，Unity 收到的仍是 `Left`。检测短暂丢失时，普通手会在约 `0.34s` 内保留上一帧手势输出；若上一帧处于捏合状态，则保留窗口延长到约 `1.15s`，避免左手掌心朝屏幕捏合时因拇指食指遮挡导致骨架和捏合状态闪断。
 - `displayLandmarks`：骨架显示默认使用 `responsive-finger-current-frame`。它以 MediaPipe 当前帧 21 点为主体，只在指尖已经快速移动而 PIP / DIP 中间指节明显落后时，沿指尖运动方向做小幅补偿，再用当前帧骨长软约束避免手指链条明显压缩或拉长；最后经过更强的自适应显示死区压住静止时的高频微抖，让第一指节、指根和指尖更像真实手型同步变化；如需排查可传入 `--raw-display-landmarks` 直出原始点，如需更稳的展示可传入 `--stable-display-landmarks` 启用掌心锚点保形稳定。
 - `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用；默认与 `displayLandmarks` 完全同源，Unity 实际操作点、pinch center、食指坐标和屏幕上看到的骨架点保持一致。
 - MediaPipe Hands 默认使用 `model_complexity=1` 和逐帧检测模式，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型或 ROI tracking 造成的骨架形变不自然。

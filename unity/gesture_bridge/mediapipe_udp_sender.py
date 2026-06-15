@@ -33,6 +33,7 @@ FINGER_CHAIN_LANDMARKS = set(range(1, 21))
 STABLE_HAND_IDS = ("Left", "Right")
 HAND_ID_MATCH_MAX_DISTANCE = 0.30
 HAND_DROPOUT_GRACE_SECONDS = 0.34
+PINCH_DROPOUT_GRACE_SECONDS = 1.15
 
 
 class LandmarkPoint:
@@ -450,6 +451,13 @@ def update_stable_hand_track(stable_hand_tracks, hand_id, raw_label, center, han
     }
 
 
+def hand_track_grace_seconds(track):
+    payload = track.get("last_payload") if track else None
+    if payload and payload.get("pinch"):
+        return PINCH_DROPOUT_GRACE_SECONDS
+    return HAND_DROPOUT_GRACE_SECONDS
+
+
 def append_recently_lost_hands(analyzed, active_ids, stable_hand_tracks, now):
     for hand_id in STABLE_HAND_IDS:
         if hand_id in active_ids:
@@ -460,11 +468,13 @@ def append_recently_lost_hands(analyzed, active_ids, stable_hand_tracks, now):
             continue
 
         age = now - track["last_seen"]
-        if age > HAND_DROPOUT_GRACE_SECONDS:
+        grace = hand_track_grace_seconds(track)
+        if age > grace:
             continue
 
         payload = copy.deepcopy(track["last_payload"])
-        payload["score"] = float(max(0.35, payload.get("score", 0.0) * (1.0 - age / HAND_DROPOUT_GRACE_SECONDS * 0.35)))
+        decay = 0.22 if payload.get("pinch") else 0.35
+        payload["score"] = float(max(0.35, payload.get("score", 0.0) * (1.0 - age / grace * decay)))
         payload["heldFromPreviousFrame"] = True
         analyzed.append(payload)
 
@@ -853,7 +863,7 @@ def main():
             keep_ids = set(active_ids)
             current_time = time.time()
             for hand_id, track in list(stable_hand_tracks.items()):
-                if current_time - track["last_seen"] <= HAND_DROPOUT_GRACE_SECONDS:
+                if current_time - track["last_seen"] <= hand_track_grace_seconds(track):
                     keep_ids.add(hand_id)
                 else:
                     stable_hand_tracks.pop(hand_id, None)
