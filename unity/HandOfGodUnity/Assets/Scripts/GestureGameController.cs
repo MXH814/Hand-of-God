@@ -6543,14 +6543,18 @@ namespace HandOfGod.Gameplay
                 return cached;
             }
 
-            const float deadbandPixels = 1.25f;
+            const float jumpGuardPixels = 180f;
             for (var i = 0; i < landmarks.Length; i++)
             {
                 var current = LandmarkToScreen(landmarks[i]);
-                if (Vector2.Distance(cached[i], current) > deadbandPixels)
+                var delta = current - cached[i];
+                var distance = delta.magnitude;
+                if (distance > jumpGuardPixels)
                 {
-                    cached[i] = current;
+                    cached[i] += delta.normalized * jumpGuardPixels;
+                    continue;
                 }
+                cached[i] = current;
             }
             return cached;
         }
