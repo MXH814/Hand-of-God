@@ -203,6 +203,54 @@ class ResponsiveFingerDisplayTests(unittest.TestCase):
 
         self.assertLess(output_lateral, raw_lateral * 0.86)
 
+    def test_crossed_index_temporal_deadzone_freezes_small_occlusion_jitter(self):
+        left = make_hand()
+        right = make_hand()
+        left[6] = landmark(0.50, 0.42)
+        left[7] = landmark(0.40, 0.34)
+        right[6] = landmark(0.40, 0.42)
+        right[7] = landmark(0.50, 0.34)
+        states = {}
+        detections = [
+            {"label": "Left", "displayLandmarks": json_points(left)},
+            {"label": "Right", "displayLandmarks": json_points(right)},
+        ]
+        bridge.stabilize_crossed_index_fingers(detections, states)
+        stable_left = [dict(detections[0]["displayLandmarks"][index]) for index in (6, 7, 8)]
+
+        jittered_left = make_hand()
+        jittered_right = make_hand()
+        jittered_left[6] = landmark(0.512, 0.428)
+        jittered_left[7] = landmark(0.388, 0.331)
+        jittered_left[8] = landmark(0.461, 0.258)
+        jittered_right[6] = landmark(0.400, 0.420)
+        jittered_right[7] = landmark(0.500, 0.340)
+        jittered = [
+            {"label": "Left", "displayLandmarks": json_points(jittered_left)},
+            {"label": "Right", "displayLandmarks": json_points(jittered_right)},
+        ]
+
+        bridge.stabilize_crossed_index_fingers(jittered, states)
+
+        for offset, index in enumerate((6, 7, 8)):
+            self.assertAlmostEqual(jittered[0]["displayLandmarks"][index]["x"], stable_left[offset]["x"])
+            self.assertAlmostEqual(jittered[0]["displayLandmarks"][index]["y"], stable_left[offset]["y"])
+
+    def test_crossed_index_temporal_state_clears_after_uncrossing(self):
+        left = make_hand()
+        right = make_hand()
+        states = {}
+        detections = [
+            {"label": "Left", "displayLandmarks": json_points(left)},
+            {"label": "Right", "displayLandmarks": json_points(right)},
+        ]
+
+        bridge.stabilize_crossed_index_fingers(detections, states)
+        self.assertTrue(states)
+        bridge.stabilize_crossed_index_fingers([{"label": "Left", "displayLandmarks": json_points(left)}], states)
+
+        self.assertFalse(states)
+
     def test_bent_index_is_not_changed_without_left_right_crossing(self):
         bent = make_hand()
         bent[6] = landmark(0.45, 0.45)

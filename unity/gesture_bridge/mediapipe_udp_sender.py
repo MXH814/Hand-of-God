@@ -287,25 +287,35 @@ def landmark_points_from_json(landmarks):
     return [LandmarkPoint(point["x"], point["y"], point["z"]) for point in landmarks]
 
 
-def stabilize_crossed_index_fingers(detections):
+def stabilize_crossed_index_fingers(detections, cross_index_states=None):
     by_label = {item["label"]: item for item in detections if item["label"] in ("Left", "Right")}
     if "Left" not in by_label or "Right" not in by_label:
+        clear_cross_index_states(cross_index_states)
         return
 
     left = by_label["Left"]["displayLandmarks"]
     right = by_label["Right"]["displayLandmarks"]
     if len(left) < 21 or len(right) < 21:
+        clear_cross_index_states(cross_index_states)
         return
 
     left_width = normalized_distance_json(left[5], left[17], 1.0)
     right_width = normalized_distance_json(right[5], right[17], 1.0)
     palm_width = max((left_width + right_width) * 0.5, 0.055)
     crossing_distance = segment_distance_2d(left[5], left[8], right[5], right[8])
-    if crossing_distance > max(0.018, palm_width * 0.16):
+    if crossing_distance > max(0.028, palm_width * 0.24):
+        clear_cross_index_states(cross_index_states)
         return
 
     stabilize_crossed_index_chain(left, palm_width)
     stabilize_crossed_index_chain(right, palm_width)
+    stabilize_crossed_index_temporal_deadzone("Left", left, palm_width, cross_index_states)
+    stabilize_crossed_index_temporal_deadzone("Right", right, palm_width, cross_index_states)
+
+
+def clear_cross_index_states(cross_index_states):
+    if cross_index_states is not None:
+        cross_index_states.clear()
 
 
 def stabilize_crossed_index_chain(landmarks, palm_width):
@@ -352,10 +362,44 @@ def stabilize_crossed_index_chain(landmarks, palm_width):
     blend_landmark_json(landmarks[dip], dip_target, blend)
 
 
+def stabilize_crossed_index_temporal_deadzone(label, landmarks, palm_width, cross_index_states):
+    if cross_index_states is None:
+        return
+
+    state = cross_index_states.setdefault(label, {})
+    deadzone = max(0.035, palm_width * 0.32)
+    live_radius = max(deadzone * 2.4, palm_width * 0.70)
+    for index in (6, 7, 8):
+        current = np.array([landmarks[index]["x"], landmarks[index]["y"], landmarks[index]["z"]], dtype=np.float32)
+        previous = state.get(index)
+        if previous is None:
+            state[index] = current
+            continue
+
+        delta = current - previous
+        motion = float(np.linalg.norm(delta[:2]))
+        if motion <= deadzone:
+            write_landmark_json(landmarks[index], previous)
+            continue
+
+        motion_scale = min(1.0, (motion - deadzone) / live_radius)
+        live_delta = delta * ((motion - deadzone) / motion)
+        alpha = 0.28 + motion_scale * 0.62
+        updated = previous + live_delta * alpha
+        state[index] = updated
+        write_landmark_json(landmarks[index], updated)
+
+
 def blend_landmark_json(landmark, target, blend):
     landmark["x"] = float(landmark["x"] * (1.0 - blend) + target[0] * blend)
     landmark["y"] = float(landmark["y"] * (1.0 - blend) + target[1] * blend)
     landmark["z"] = float(landmark["z"] * (1.0 - blend) + target[2] * blend)
+
+
+def write_landmark_json(landmark, point):
+    landmark["x"] = float(point[0])
+    landmark["y"] = float(point[1])
+    landmark["z"] = float(point[2])
 
 
 def normalized_distance_json(a, b, scale):
@@ -648,6 +692,7 @@ def main():
     last_raw = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
     pinch_latches = {}
     display_landmarks_by_hand = {}
+    cross_index_states = {}
     bridge_fps = 0.0
     processing_ms = 0.0
     frame_counter = 0
@@ -706,7 +751,7 @@ def main():
                     if args.preview:
                         drawing.draw_landmarks(frame, hand, mp.solutions.hands.HAND_CONNECTIONS)
 
-                stabilize_crossed_index_fingers(detections)
+                stabilize_crossed_index_fingers(detections, cross_index_states)
                 for detection in detections:
                     label = detection["label"]
                     score = detection["score"]
@@ -729,6 +774,7 @@ def main():
             for hand_id in stale_ids:
                 display_landmarks_by_hand.pop(hand_id, None)
                 pinch_latches.pop(hand_id, None)
+                cross_index_states.pop(hand_id, None)
 
             if analyzed:
                 primary = sorted(analyzed, key=lambda h: (h["pinch"], h["score"]), reverse=True)[0]
