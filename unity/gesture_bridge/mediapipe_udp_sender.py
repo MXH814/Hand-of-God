@@ -18,6 +18,9 @@ FINGERS = {
     "pinky": (20, 18, 17),
 }
 
+PALM_LANDMARKS = {0, 5, 9, 13, 17}
+FINGERTIP_LANDMARKS = {4, 8, 12, 16, 20}
+
 
 class LandmarkPoint:
     def __init__(self, x, y, z):
@@ -42,14 +45,27 @@ class SmoothedPoint:
         displacement = float(np.linalg.norm(np.array([dx, dy, dz])))
         speed = displacement / dt
         edge = max(abs(x - 0.5), abs(y - 0.5)) * 2.0
-        alpha = 0.09 + min(speed * 0.0075, 0.12) - max(edge - 0.60, 0.0) * 0.12
-        if index in (4, 8, 12, 16, 20):
-            alpha *= 0.62
-        if displacement < 0.006:
-            alpha *= 0.35
-        if displacement < 0.0025:
-            alpha *= 0.28
-        alpha = max(0.026, min(0.22, alpha))
+
+        is_palm_anchor = index in PALM_LANDMARKS
+        is_fingertip = index in FINGERTIP_LANDMARKS
+        if is_palm_anchor:
+            alpha = 0.11 + min(speed * 0.010, 0.13)
+            max_alpha = 0.30
+            min_alpha = 0.045
+        else:
+            alpha = 0.18 + min(speed * 0.018, 0.20)
+            max_alpha = 0.40
+            min_alpha = 0.060
+
+        if is_fingertip:
+            alpha *= 0.92
+        alpha -= max(edge - 0.68, 0.0) * 0.08
+        if displacement < 0.0015:
+            alpha *= 0.50
+        elif displacement < 0.0035:
+            alpha *= 0.72
+
+        alpha = max(min_alpha, min(max_alpha, alpha))
         self.x += dx * alpha
         self.y += dy * alpha
         self.z += dz * alpha
@@ -287,16 +303,16 @@ def main():
                         and not hand_payload["ringExtended"]
                         and not hand_payload["pinkyExtended"]
                     )
-                    pinch_alpha = 0.30 if latched else 0.14
+                    pinch_alpha = 0.40 if latched else 0.22
                     previous = smooth_cursors.get(hand_id, (hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"]))
                     index_motion = float(np.linalg.norm(np.array([
                         hand_payload["indexX"] - previous[2],
                         hand_payload["indexY"] - previous[3],
                     ])))
                     if index_only:
-                        index_alpha = 0.045 if index_motion < 0.035 else 0.075
+                        index_alpha = 0.12 if index_motion < 0.025 else 0.22
                     else:
-                        index_alpha = 0.18
+                        index_alpha = 0.28
                     smoothed = (
                         previous[0] * (1.0 - pinch_alpha) + hand_payload["pinchX"] * pinch_alpha,
                         previous[1] * (1.0 - pinch_alpha) + hand_payload["pinchY"] * pinch_alpha,
