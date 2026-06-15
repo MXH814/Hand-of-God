@@ -165,6 +165,7 @@ class ResponsiveFingerDisplayHand:
 
             corrected[pip] += self._limited(pip_correction, max(finger_span * 0.28, palm_width * 0.08))
             corrected[dip] += self._limited(dip_correction, max(finger_span * 0.38, palm_width * 0.12))
+            self._soft_preserve_finger_chain(raw_points, corrected, (mcp, pip, dip, tip))
 
         self.previous = raw_points
         return [{"x": float(point[0]), "y": float(point[1]), "z": float(point[2])} for point in corrected]
@@ -183,6 +184,43 @@ class ResponsiveFingerDisplayHand:
         if magnitude <= limit or magnitude <= 1e-6:
             return vector
         return vector * (limit / magnitude)
+
+    @staticmethod
+    def _soft_preserve_finger_chain(raw_points, corrected, chain):
+        mcp, pip, dip, tip = chain
+        raw_lengths = [
+            float(np.linalg.norm(raw_points[pip] - raw_points[mcp])),
+            float(np.linalg.norm(raw_points[dip] - raw_points[pip])),
+            float(np.linalg.norm(raw_points[tip] - raw_points[dip])),
+        ]
+        if min(raw_lengths) <= 1e-5:
+            return
+
+        segments = ((mcp, pip, raw_lengths[0]), (pip, dip, raw_lengths[1]), (dip, tip, raw_lengths[2]))
+        movable = {pip, dip}
+        for _ in range(5):
+            for a, b, raw_length in segments:
+                vector = corrected[b] - corrected[a]
+                length = float(np.linalg.norm(vector))
+                if length <= 1e-5:
+                    vector = raw_points[b] - raw_points[a]
+                    length = max(float(np.linalg.norm(vector)), 1e-5)
+                min_length = raw_length * 0.78
+                max_length = raw_length * 1.32
+                target = min(max_length, max(min_length, length))
+                if abs(target - length) <= raw_length * 0.015:
+                    continue
+
+                adjustment = vector / length * (target - length)
+                a_movable = a in movable
+                b_movable = b in movable
+                if a_movable and b_movable:
+                    corrected[a] -= adjustment * 0.5
+                    corrected[b] += adjustment * 0.5
+                elif a_movable:
+                    corrected[a] -= adjustment
+                elif b_movable:
+                    corrected[b] += adjustment
 
 
 def smooth_landmarks(hand_id, landmarks, smooth_points):
