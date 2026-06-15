@@ -6498,14 +6498,15 @@ namespace HandOfGod.Gameplay
 
             foreach (var hand in frame.hands)
             {
-                var displayLandmarks = hand.displayLandmarks != null && hand.displayLandmarks.Length >= 21
-                    ? hand.displayLandmarks
-                    : hand.landmarks;
-                if (displayLandmarks == null || displayLandmarks.Length < 21)
+                var hasRawDisplayLandmarks = hand.displayLandmarks != null && hand.displayLandmarks.Length >= 21;
+                var skeletonLandmarks = hasRawDisplayLandmarks ? hand.displayLandmarks : hand.landmarks;
+                if (skeletonLandmarks == null || skeletonLandmarks.Length < 21)
                 {
                     continue;
                 }
-                var screenPoints = DisplayLandmarksToScreenPoints(hand, displayLandmarks);
+                var screenPoints = hasRawDisplayLandmarks
+                    ? LandmarksToScreenPoints(skeletonLandmarks)
+                    : GuardedLandmarksToScreenPoints(hand, skeletonLandmarks);
 
                 var baseColor = string.Equals(hand.handedness, "Left", System.StringComparison.OrdinalIgnoreCase)
                     ? new Color(0.20f, 0.74f, 1f, 0.96f)
@@ -6533,7 +6534,17 @@ namespace HandOfGod.Gameplay
             }
         }
 
-        private Vector2[] DisplayLandmarksToScreenPoints(GestureHandFrame hand, GestureLandmark[] landmarks)
+        private static Vector2[] LandmarksToScreenPoints(GestureLandmark[] landmarks)
+        {
+            var points = new Vector2[landmarks.Length];
+            for (var i = 0; i < landmarks.Length; i++)
+            {
+                points[i] = LandmarkToScreen(landmarks[i]);
+            }
+            return points;
+        }
+
+        private Vector2[] GuardedLandmarksToScreenPoints(GestureHandFrame hand, GestureLandmark[] landmarks)
         {
             var key = !string.IsNullOrEmpty(hand.id) ? hand.id : (!string.IsNullOrEmpty(hand.handedness) ? hand.handedness : "primary");
             if (!skeletonScreenCache.TryGetValue(key, out var cached) || cached.Length != landmarks.Length)
