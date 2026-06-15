@@ -428,7 +428,7 @@ Unity 端职责：
 Python 对每个 hand id 的每个 landmark 同时维护两套输出：
 
 - `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用，优先稳定。
-- `displayLandmarks`：骨架显示用 landmarks，只负责 Unity 前景 21 点骨架，优先实时手型。
+- `displayLandmarks`：骨架显示用原始 landmarks，只负责 Unity 前景 21 点骨架，优先实时手型。
 
 控制用 `landmarks` 新点到来时，根据点位移动速度和屏幕边缘程度计算动态 `alpha`：
 
@@ -439,7 +439,7 @@ Python 对每个 hand id 的每个 landmark 同时维护两套输出：
 - 真实弯曲、伸直动作不再被小位移平滑拖慢，避免第一指节滞后造成的“折断感”。
 - `alpha` 被限制在稳定范围内，避免过度延迟或过度跳变。
 - 手势分析使用控制用 landmarks，避免交互点和手势状态受原始抖动影响。
-- `displayLandmarks` 使用更小 deadband 和接近实时的跟随系数，真实弯曲动作会快速同步到骨架显示；UI 和机关判定不直接依赖这套显示点。
+- `displayLandmarks` 直接使用原始 MediaPipe 点；Unity 绘制骨架前只加约 1 像素屏幕死区，真实弯曲动作会立即同步到骨架显示；UI 和机关判定不直接依赖这套显示点。
 
 ### Cursor EMA 平滑
 

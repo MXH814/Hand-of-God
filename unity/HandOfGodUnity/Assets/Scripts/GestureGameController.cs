@@ -306,6 +306,7 @@ namespace HandOfGod.Gameplay
         private float pinchSampleSum;
         private int pinchSampleCount;
         private readonly Dictionary<string, float> hoverStartsByPointer = new Dictionary<string, float>();
+        private readonly Dictionary<string, Vector2[]> skeletonScreenCache = new Dictionary<string, Vector2[]>();
         private GameObject labObject;
         private Rigidbody labBody;
         private Renderer labRenderer;
@@ -6483,6 +6484,7 @@ namespace HandOfGod.Gameplay
             var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
             if (frame.hands == null || frame.hands.Length == 0)
             {
+                skeletonScreenCache.Clear();
                 var message = launchedBridge
                     ? "Waiting for camera hand tracking..."
                     : bridgeStatus;
@@ -6499,6 +6501,7 @@ namespace HandOfGod.Gameplay
                 {
                     continue;
                 }
+                var screenPoints = DisplayLandmarksToScreenPoints(hand, displayLandmarks);
 
                 var baseColor = string.Equals(hand.handedness, "Left", System.StringComparison.OrdinalIgnoreCase)
                     ? new Color(0.20f, 0.74f, 1f, 0.96f)
@@ -6506,24 +6509,50 @@ namespace HandOfGod.Gameplay
                 var pinchColor = IsPinching(hand) ? new Color(0.12f, 1f, 0.85f, 1f) : baseColor;
                 for (var i = 0; i < HandConnectionPairs.Length; i += 2)
                 {
-                    var a = LandmarkToScreen(displayLandmarks[HandConnectionPairs[i]]);
-                    var b = LandmarkToScreen(displayLandmarks[HandConnectionPairs[i + 1]]);
+                    var a = screenPoints[HandConnectionPairs[i]];
+                    var b = screenPoints[HandConnectionPairs[i + 1]];
                     DrawLine(a, b, pinchColor, 3f);
                 }
 
-                for (var i = 0; i < displayLandmarks.Length; i++)
+                for (var i = 0; i < screenPoints.Length; i++)
                 {
-                    var point = LandmarkToScreen(displayLandmarks[i]);
+                    var point = screenPoints[i];
                     var radius = i == 4 || i == 8 ? 5f : 3.5f;
                     GUI.color = i == 4 || i == 8 ? Color.cyan : baseColor;
                     GUI.DrawTexture(new Rect(point.x - radius, point.y - radius, radius * 2f, radius * 2f), Texture2D.whiteTexture);
                 }
                 var label = $"{hand.handedness} {hand.score:0.00}";
-                var labelPoint = LandmarkToScreen(displayLandmarks[0]);
+                var labelPoint = screenPoints[0];
                 GUI.color = baseColor;
                 GUI.Label(new Rect(labelPoint.x + 8f, labelPoint.y - 10f, 110f, 22f), label);
                 GUI.color = Color.white;
             }
+        }
+
+        private Vector2[] DisplayLandmarksToScreenPoints(GestureHandFrame hand, GestureLandmark[] landmarks)
+        {
+            var key = !string.IsNullOrEmpty(hand.id) ? hand.id : (!string.IsNullOrEmpty(hand.handedness) ? hand.handedness : "primary");
+            if (!skeletonScreenCache.TryGetValue(key, out var cached) || cached.Length != landmarks.Length)
+            {
+                cached = new Vector2[landmarks.Length];
+                for (var i = 0; i < landmarks.Length; i++)
+                {
+                    cached[i] = LandmarkToScreen(landmarks[i]);
+                }
+                skeletonScreenCache[key] = cached;
+                return cached;
+            }
+
+            const float deadbandPixels = 1.25f;
+            for (var i = 0; i < landmarks.Length; i++)
+            {
+                var current = LandmarkToScreen(landmarks[i]);
+                if (Vector2.Distance(cached[i], current) > deadbandPixels)
+                {
+                    cached[i] = current;
+                }
+            }
+            return cached;
         }
 
         private static Vector2 LandmarkToScreen(GestureLandmark landmark)
