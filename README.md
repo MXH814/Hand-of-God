@@ -350,9 +350,9 @@ numpy
 桥接功能：
 
 - 使用 OpenCV 采集摄像头。
-- 摄像头采集使用低缓冲设置，并由后台 latest-frame 线程持续读取摄像头；MediaPipe 主循环只处理最新帧，默认请求 `30 FPS`，减少摄像头驱动队列积压造成的手型延迟。
+- 摄像头采集使用低缓冲设置，并由后台 latest-frame 线程持续读取摄像头；MediaPipe 主循环只处理最新帧，默认请求 `60 FPS`，减少摄像头驱动队列积压造成的手型延迟；如果摄像头不支持会自动回落到驱动实际模式。
 - Windows DirectShow 默认请求 `MJPG` 摄像头格式，降低高分辨率采集时的 USB/驱动带宽压力；日志会输出实际采集到的分辨率、FPS 和 FOURCC，方便判断摄像头是否接受请求。
-- 采集/识别分辨率和 Unity 视频显示分辨率分离：默认请求 `--capture-width 1280 --capture-height 720` 给 MediaPipe 提供更多手指关节像素细节，并直接使用摄像头返回的实际帧做识别，避免二次 resize 拉伸手型；Unity 内嵌摄像头画面默认以 `--video-width 640 --video-height 360` 发送。
+- 采集/识别分辨率和 Unity 视频显示分辨率分离：默认请求 `--capture-width 960 --capture-height 540`，在保留手指关节细节的同时降低 MediaPipe 推理延迟，并直接使用摄像头返回的实际帧做识别，避免二次 resize 拉伸手型；Unity 内嵌摄像头画面默认以 `--video-width 640 --video-height 360` 发送。
 - 使用 MediaPipe Hands 最多识别两只手，默认 `model_complexity=1`，优先保证手指关节和骨架形状精度。
 - MediaPipe 默认使用 `detect-every-frame` 模式逐帧检测手部，而不是长时间沿用 ROI tracking，减少快速弯曲手指时第一指节被旧姿态拖慢的现象。
 - 支持镜像画面，保证玩家看到的左右移动符合屏幕直觉。
@@ -363,7 +363,7 @@ numpy
 - 使用 TCP 锁端口 `5007` 防止多个桥接实例同时占用摄像头。
 - 默认 headless 运行；只有手动传入 `--preview` 时才显示 OpenCV 调试窗口。
 - 如低配机器帧率不足，可手动传入 `--model-complexity 0` 回退到更快但关节精度较低的模型，或传入 `--track-roi` 使用 MediaPipe ROI tracking 换取更高帧率。
-- 可用 `--camera-fps` 调整摄像头目标帧率，用 `--capture-width` / `--capture-height` 调整 MediaPipe 处理分辨率，用 `--camera-fourcc` 调整 DirectShow 采集格式，用 `--video-width` / `--video-height` / `--video-fps` 调整 Unity 内嵌摄像头画面，也可用 `--detection-confidence` / `--tracking-confidence` 调整 MediaPipe 置信度阈值；桥接每 5 秒向 `gesture-bridge-runtime.log` 输出一次 FPS、处理耗时、实际采集格式、视频帧率、模型复杂度和 tracking 模式。
+- 可用 `--camera-fps` 调整摄像头目标帧率，用 `--capture-width` / `--capture-height` 调整 MediaPipe 处理分辨率；如果第一指节仍感觉慢，优先观察校准面板 `frame age`，再尝试 `--capture-width 848 --capture-height 480` 或 `--camera-fps 30` 对比实际摄像头模式。也可用 `--camera-fourcc` 调整 DirectShow 采集格式，用 `--video-width` / `--video-height` / `--video-fps` 调整 Unity 内嵌摄像头画面，或用 `--detection-confidence` / `--tracking-confidence` 调整 MediaPipe 置信度阈值；桥接每 5 秒向 `gesture-bridge-runtime.log` 输出一次 FPS、处理耗时、实际采集格式、视频帧率、模型复杂度和 tracking 模式。
 
 ### 手势数据字段
 
