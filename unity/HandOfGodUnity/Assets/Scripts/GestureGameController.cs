@@ -6437,7 +6437,7 @@ namespace HandOfGod.Gameplay
                 for (var i = 0; i < frame.hands.Length; i++)
                 {
                     var hand = frame.hands[i];
-                    if (hand.score < 0.35f || !hand.openPalm)
+                    if (!IsButtonPressHand(hand))
                     {
                         continue;
                     }
@@ -6446,11 +6446,26 @@ namespace HandOfGod.Gameplay
                     pointers.Add(new UiPointer(id, new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height), false));
                 }
             }
-            else if (TryGetPrimaryHand(out var hand) && hand.openPalm)
+            else if (TryGetPrimaryHand(out var hand) && IsButtonPressHand(hand))
             {
                 pointers.Add(new UiPointer("primary", new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height), false));
             }
             return pointers;
+        }
+
+        private bool IsButtonPressHand(GestureHandFrame hand)
+        {
+            if (hand.score < 0.25f || IsPinching(hand))
+            {
+                return false;
+            }
+
+            if (hand.openPalm)
+            {
+                return true;
+            }
+
+            return hand.indexExtended && hand.middleExtended && hand.ringExtended && hand.pinkyExtended;
         }
 
         private void DrawCursor()
