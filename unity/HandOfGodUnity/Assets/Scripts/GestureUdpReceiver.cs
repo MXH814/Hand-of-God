@@ -73,10 +73,15 @@ namespace HandOfGod.Gestures
             try
             {
                 client = new UdpClient(port);
+                client.Client.ReceiveBufferSize = 32768;
                 var endpoint = new IPEndPoint(IPAddress.Any, port);
                 while (running)
                 {
                     var bytes = client.Receive(ref endpoint);
+                    while (client.Available > 0)
+                    {
+                        bytes = client.Receive(ref endpoint);
+                    }
                     var json = Encoding.UTF8.GetString(bytes);
                     var frame = GestureFrameUtility.Clamp(JsonUtility.FromJson<GestureFrame>(json));
                     lock (gate)
