@@ -104,24 +104,27 @@ class ResponsiveDisplayPoint:
         speed = displacement / dt
         is_finger = index in FINGER_CHAIN_LANDMARKS
 
-        deadband = 0.00016 if is_finger else 0.00055
+        deadband = 0.00018 if is_finger else 0.00055
         if displacement <= deadband:
             self.last_time = now
             return self.x, self.y, self.z
 
-        velocity_alpha = 0.62 if is_finger else 0.38
+        if is_finger:
+            live_motion = (displacement - deadband) / displacement
+            self.x += raw_dx * live_motion
+            self.y += raw_dy * live_motion
+            self.z += raw_dz * live_motion
+            self.last_time = now
+            return self.x, self.y, self.z
+
+        velocity_alpha = 0.38
         self.vx = self.vx * (1.0 - velocity_alpha) + (raw_dx / dt) * velocity_alpha
         self.vy = self.vy * (1.0 - velocity_alpha) + (raw_dy / dt) * velocity_alpha
         self.vz = self.vz * (1.0 - velocity_alpha) + (raw_dz / dt) * velocity_alpha
 
-        if is_finger:
-            alpha = 0.80 + min(speed * 0.045, 0.17)
-            lead_seconds = 0.014 + min(speed * 0.018, 0.014)
-            max_lead = 0.016
-        else:
-            alpha = 0.54 + min(speed * 0.030, 0.18)
-            lead_seconds = 0.006 + min(speed * 0.010, 0.006)
-            max_lead = 0.008
+        alpha = 0.54 + min(speed * 0.030, 0.18)
+        lead_seconds = 0.006 + min(speed * 0.010, 0.006)
+        max_lead = 0.008
 
         alpha = max(0.50, min(0.97, alpha))
         lead = np.array([self.vx * lead_seconds, self.vy * lead_seconds, self.vz * lead_seconds])
