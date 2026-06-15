@@ -248,6 +248,7 @@ def main():
     parser.add_argument("--video-height", type=int, default=480)
     parser.add_argument("--jpeg-quality", type=int, default=72)
     parser.add_argument("--lock-port", type=int, default=5007)
+    parser.add_argument("--model-complexity", type=int, choices=(0, 1), default=1, help="MediaPipe Hands model complexity. 1 improves finger-joint fidelity; 0 is faster.")
     args = parser.parse_args()
 
     lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -261,7 +262,7 @@ def main():
     os.environ.setdefault("GLOG_minloglevel", "1")
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     video = VideoStreamClient(args.video_host, args.video_port)
-    hands_model = mp.solutions.hands.Hands(max_num_hands=2, model_complexity=0, min_detection_confidence=0.65, min_tracking_confidence=0.65)
+    hands_model = mp.solutions.hands.Hands(max_num_hands=2, model_complexity=args.model_complexity, min_detection_confidence=0.65, min_tracking_confidence=0.65)
     drawing = mp.solutions.drawing_utils
     cap = cv2.VideoCapture(args.camera, cv2.CAP_DSHOW)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.video_width)
@@ -272,7 +273,7 @@ def main():
     smooth_landmarks_by_hand = {}
     smooth_cursors = {}
 
-    print("Hand of God bridge: headless camera tracking started. Use --preview for a debug window.")
+    print(f"Hand of God bridge: headless camera tracking started with MediaPipe model_complexity={args.model_complexity}. Use --preview for a debug window.")
     try:
         while cap.isOpened():
             ok, frame = cap.read()
