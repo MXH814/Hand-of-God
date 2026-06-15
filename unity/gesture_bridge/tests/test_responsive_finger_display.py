@@ -52,6 +52,18 @@ def segment_length(seq, a, b):
     return math.dist(point(seq, a), point(seq, b))
 
 
+def line_distance(seq, index, start, end):
+    px, py, _ = point(seq, index)
+    ax, ay, _ = point(seq, start)
+    bx, by, _ = point(seq, end)
+    dx = bx - ax
+    dy = by - ay
+    length = math.hypot(dx, dy)
+    if length <= 1e-6:
+        return math.hypot(px - ax, py - ay)
+    return abs(dy * px - dx * py + bx * ay - by * ax) / length
+
+
 class ResponsiveFingerDisplayTests(unittest.TestCase):
     def test_lagging_inner_joints_follow_fast_tip_motion(self):
         base = make_hand()
@@ -158,6 +170,31 @@ class ResponsiveFingerDisplayTests(unittest.TestCase):
         self.assertIsNotNone(output)
         self.assertGreater(output[8]["y"], base[8].y + 0.002)
         self.assertGreater(output[7]["y"], base[7].y + 0.0015)
+
+    def test_extended_crossed_finger_keeps_inner_joints_straight(self):
+        base = make_hand()
+        state = bridge.ResponsiveFingerDisplayHand(base)
+        crossed = make_hand()
+        crossed[6] = landmark(0.515, 0.42)
+        crossed[7] = landmark(0.385, 0.34)
+
+        output = state.update(crossed)
+
+        raw_lateral = max(line_distance(crossed, 6, 5, 8), line_distance(crossed, 7, 5, 8))
+        output_lateral = max(line_distance(output, 6, 5, 8), line_distance(output, 7, 5, 8))
+        self.assertLess(output_lateral, raw_lateral * 0.72)
+
+    def test_curled_finger_is_not_forced_straight(self):
+        base = make_hand()
+        state = bridge.ResponsiveFingerDisplayHand(base)
+        curled = make_hand()
+        curled[6] = landmark(0.45, 0.45)
+        curled[7] = landmark(0.53, 0.45)
+        curled[8] = landmark(0.53, 0.52)
+
+        output = state.update(curled)
+
+        self.assertGreater(line_distance(output, 7, 5, 8), 0.045)
 
 
 if __name__ == "__main__":

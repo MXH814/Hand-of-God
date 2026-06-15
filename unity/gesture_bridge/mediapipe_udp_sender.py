@@ -169,6 +169,9 @@ class ResponsiveFingerDisplayHand:
             corrected[dip] += self._limited(dip_correction, max(finger_span * 0.38, palm_width * 0.12))
             self._soft_preserve_finger_chain(raw_points, corrected, (mcp, pip, dip, tip))
 
+        for chain in DISPLAY_FINGER_CHAINS[1:]:
+            self._straighten_extended_finger(raw_points, corrected, chain, palm_width)
+
         stabilized = self._stabilize_display(corrected, palm_width)
         self.previous = raw_points
         self.displayed = stabilized
@@ -246,6 +249,50 @@ class ResponsiveFingerDisplayHand:
                     corrected[a] -= adjustment
                 elif b_movable:
                     corrected[b] += adjustment
+
+    @staticmethod
+    def _straighten_extended_finger(raw_points, corrected, chain, palm_width):
+        mcp, pip, dip, tip = chain
+        base = corrected[mcp]
+        end = corrected[tip]
+        line = end - base
+        direct = float(np.linalg.norm(line[:2]))
+        if direct <= max(0.018, palm_width * 0.20):
+            return
+
+        raw_lengths = [
+            float(np.linalg.norm(raw_points[pip][:2] - raw_points[mcp][:2])),
+            float(np.linalg.norm(raw_points[dip][:2] - raw_points[pip][:2])),
+            float(np.linalg.norm(raw_points[tip][:2] - raw_points[dip][:2])),
+        ]
+        total = sum(raw_lengths)
+        if total <= 1e-5:
+            return
+
+        straightness = direct / total
+        if straightness < 0.62:
+            return
+
+        direction = line / max(float(np.linalg.norm(line)), 1e-5)
+        pip_target = base + direction * (direct * raw_lengths[0] / total)
+        dip_target = base + direction * (direct * (raw_lengths[0] + raw_lengths[1]) / total)
+
+        pip_lateral = float(np.linalg.norm((corrected[pip] - pip_target)[:2]))
+        dip_lateral = float(np.linalg.norm((corrected[dip] - dip_target)[:2]))
+        lateral = max(pip_lateral, dip_lateral)
+        lateral_start = palm_width * 0.018
+        lateral_full = palm_width * 0.16
+        if lateral <= lateral_start:
+            return
+
+        straight_blend = min(1.0, max(0.0, (straightness - 0.62) / 0.28))
+        lateral_blend = min(1.0, max(0.0, (lateral - lateral_start) / max(lateral_full - lateral_start, 1e-5)))
+        blend = straight_blend * lateral_blend
+        if blend <= 0.0:
+            return
+
+        corrected[pip] = corrected[pip] * (1.0 - blend) + pip_target * blend
+        corrected[dip] = corrected[dip] * (1.0 - blend) + dip_target * blend
 
 
 def smooth_landmarks(hand_id, landmarks, smooth_points):
