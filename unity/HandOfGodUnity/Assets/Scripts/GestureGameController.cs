@@ -6479,34 +6479,29 @@ namespace HandOfGod.Gameplay
         private void DrawButtonCore(string key, string label, Rect rect, float dwellSeconds, System.Action action, bool allowMouseClick, int fontSize)
         {
             var pointers = GetButtonPointers();
-            var activeHoverIds = new List<string>(pointers.Count);
             var progress = 0f;
+            var hovering = false;
             foreach (var pointer in pointers)
             {
-                var hoverId = $"{key}|{pointer.Id}";
                 if (rect.Contains(pointer.Position))
                 {
-                    activeHoverIds.Add(hoverId);
-                    if (!hoverStartsByPointer.ContainsKey(hoverId))
-                    {
-                        hoverStartsByPointer[hoverId] = Time.time;
-                    }
-                    progress = Mathf.Max(progress, Mathf.Clamp01((Time.time - hoverStartsByPointer[hoverId]) / dwellSeconds));
+                    hovering = true;
+                    break;
                 }
             }
 
-            var prefix = key + "|";
-            var staleHoverIds = new List<string>();
-            foreach (var entry in hoverStartsByPointer)
+            if (hovering)
             {
-                if (entry.Key.StartsWith(prefix) && !activeHoverIds.Contains(entry.Key))
+                if (!hoverStartsByPointer.ContainsKey(key))
                 {
-                    staleHoverIds.Add(entry.Key);
+                    RemoveHoverStartsForKey(key);
+                    hoverStartsByPointer[key] = Time.time;
                 }
+                progress = Mathf.Clamp01((Time.time - hoverStartsByPointer[key]) / dwellSeconds);
             }
-            foreach (var hoverId in staleHoverIds)
+            else
             {
-                hoverStartsByPointer.Remove(hoverId);
+                RemoveHoverStartsForKey(key);
             }
 
             var style = fontSize > 0
@@ -6539,7 +6534,7 @@ namespace HandOfGod.Gameplay
             var removeIds = new List<string>();
             foreach (var entry in hoverStartsByPointer)
             {
-                if (entry.Key.StartsWith(prefix))
+                if (entry.Key == key || entry.Key.StartsWith(prefix))
                 {
                     removeIds.Add(entry.Key);
                 }
