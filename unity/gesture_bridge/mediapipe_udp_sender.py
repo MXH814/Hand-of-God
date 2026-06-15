@@ -746,7 +746,7 @@ def main():
     parser.add_argument("--track-roi", action="store_true", help="Use MediaPipe ROI tracking between detections. Faster, but fast finger-bend changes can feel less immediate.")
     parser.add_argument("--raw-display-landmarks", action="store_true", help="Send raw MediaPipe landmarks for the Unity skeleton overlay without finger-joint responsiveness correction.")
     parser.add_argument("--stable-display-landmarks", action="store_true", help="Apply light palm-anchor stabilization to display landmarks. Overrides the default responsive current-frame display mode.")
-    parser.add_argument("--detection-confidence", type=float, default=0.60)
+    parser.add_argument("--detection-confidence", type=float, default=0.50)
     parser.add_argument("--tracking-confidence", type=float, default=0.82)
     args = parser.parse_args()
 
