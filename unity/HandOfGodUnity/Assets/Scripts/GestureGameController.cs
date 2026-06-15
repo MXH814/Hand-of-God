@@ -6547,18 +6547,31 @@ namespace HandOfGod.Gameplay
                 return cached;
             }
 
-            const float jumpGuardPixels = 180f;
+            var currentPoints = new Vector2[landmarks.Length];
+            var currentCentroid = Vector2.zero;
+            var cachedCentroid = Vector2.zero;
             for (var i = 0; i < landmarks.Length; i++)
             {
-                var current = LandmarkToScreen(landmarks[i]);
-                var delta = current - cached[i];
-                var distance = delta.magnitude;
-                if (distance > jumpGuardPixels)
-                {
-                    cached[i] += delta.normalized * jumpGuardPixels;
-                    continue;
-                }
-                cached[i] = current;
+                currentPoints[i] = LandmarkToScreen(landmarks[i]);
+                currentCentroid += currentPoints[i];
+                cachedCentroid += cached[i];
+            }
+
+            currentCentroid /= landmarks.Length;
+            cachedCentroid /= landmarks.Length;
+            var centroidDelta = currentCentroid - cachedCentroid;
+            var centroidDistance = centroidDelta.magnitude;
+            var jumpGuardPixels = Mathf.Max(180f, Mathf.Min(Screen.width, Screen.height) * 0.16f);
+            var guardedCentroid = currentCentroid;
+            if (centroidDistance > jumpGuardPixels)
+            {
+                guardedCentroid = cachedCentroid + centroidDelta.normalized * jumpGuardPixels;
+            }
+
+            var centroidOffset = guardedCentroid - currentCentroid;
+            for (var i = 0; i < currentPoints.Length; i++)
+            {
+                cached[i] = currentPoints[i] + centroidOffset;
             }
             return cached;
         }
