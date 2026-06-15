@@ -19,6 +19,14 @@ FINGERS = {
     "pinky": (20, 18, 17),
 }
 
+DISPLAY_FINGER_CHAINS = (
+    (1, 2, 3, 4),
+    (5, 6, 7, 8),
+    (9, 10, 11, 12),
+    (13, 14, 15, 16),
+    (17, 18, 19, 20),
+)
+
 WRIST_LANDMARKS = {0}
 FINGER_CHAIN_LANDMARKS = set(range(1, 21))
 
@@ -122,6 +130,61 @@ class ResponsiveDisplayHand:
         return points.mean(axis=0)
 
 
+class ResponsiveFingerDisplayHand:
+    def __init__(self, landmarks):
+        self.previous = self._points(landmarks)
+
+    def update(self, landmarks):
+        raw_points = self._points(landmarks)
+        corrected = raw_points.copy()
+        palm_width = max(float(np.linalg.norm(raw_points[5][:2] - raw_points[17][:2])), 0.055)
+        palm_shift = float(np.linalg.norm(self._palm_center(raw_points)[:2] - self._palm_center(self.previous)[:2]))
+        if palm_shift > palm_width * 1.6:
+            self.previous = raw_points
+            return [{"x": float(point[0]), "y": float(point[1]), "z": float(point[2])} for point in corrected]
+
+        for mcp, pip, dip, tip in DISPLAY_FINGER_CHAINS:
+            tip_delta = raw_points[tip] - self.previous[tip]
+            tip_motion = float(np.linalg.norm(tip_delta[:2]))
+            if tip_motion < 0.0015:
+                continue
+
+            finger_span = max(float(np.linalg.norm(raw_points[tip][:2] - raw_points[mcp][:2])), 0.018)
+            responsiveness = min(1.0, (tip_motion - 0.0015) / 0.010)
+
+            pip_delta = raw_points[pip] - self.previous[pip]
+            dip_delta = raw_points[dip] - self.previous[dip]
+
+            pip_motion = float(np.linalg.norm(pip_delta[:2]))
+            dip_motion = float(np.linalg.norm(dip_delta[:2]))
+            pip_lag = max(0.0, (tip_motion - pip_motion) / max(tip_motion, 1e-5))
+            dip_lag = max(0.0, (tip_motion - dip_motion) / max(tip_motion, 1e-5))
+
+            pip_correction = (tip_delta - pip_delta) * (0.42 * pip_lag * responsiveness)
+            dip_correction = (tip_delta - dip_delta) * (0.66 * dip_lag * responsiveness)
+
+            corrected[pip] += self._limited(pip_correction, max(finger_span * 0.28, palm_width * 0.08))
+            corrected[dip] += self._limited(dip_correction, max(finger_span * 0.38, palm_width * 0.12))
+
+        self.previous = raw_points
+        return [{"x": float(point[0]), "y": float(point[1]), "z": float(point[2])} for point in corrected]
+
+    @staticmethod
+    def _points(landmarks):
+        return np.array([[float(point.x), float(point.y), float(point.z)] for point in landmarks], dtype=np.float32)
+
+    @staticmethod
+    def _palm_center(points):
+        return points[[0, 5, 9, 17]].mean(axis=0)
+
+    @staticmethod
+    def _limited(vector, limit):
+        magnitude = float(np.linalg.norm(vector[:2]))
+        if magnitude <= limit or magnitude <= 1e-6:
+            return vector
+        return vector * (limit / magnitude)
+
+
 def smooth_landmarks(hand_id, landmarks, smooth_points):
     slots = smooth_points.setdefault(hand_id, {})
     smoothed_json = []
@@ -141,6 +204,14 @@ def display_landmarks(hand_id, landmarks, display_points):
     state = display_points.get(hand_id)
     if state is None:
         state = ResponsiveDisplayHand(landmarks)
+        display_points[hand_id] = state
+    return state.update(landmarks)
+
+
+def responsive_finger_display_landmarks(hand_id, landmarks, display_points):
+    state = display_points.get(hand_id)
+    if state is None or not isinstance(state, ResponsiveFingerDisplayHand):
+        state = ResponsiveFingerDisplayHand(landmarks)
         display_points[hand_id] = state
     return state.update(landmarks)
 
@@ -371,7 +442,8 @@ def main():
     parser.add_argument("--lock-port", type=int, default=5007)
     parser.add_argument("--model-complexity", type=int, choices=(0, 1), default=1, help="MediaPipe Hands model complexity. 1 improves finger-joint fidelity; 0 is faster.")
     parser.add_argument("--track-roi", action="store_true", help="Use MediaPipe ROI tracking between detections. Faster, but fast finger-bend changes can feel less immediate.")
-    parser.add_argument("--stable-display-landmarks", action="store_true", help="Apply light palm-anchor stabilization to display landmarks. Default is raw current-frame display for minimum finger-joint latency.")
+    parser.add_argument("--raw-display-landmarks", action="store_true", help="Send raw MediaPipe landmarks for the Unity skeleton overlay without finger-joint responsiveness correction.")
+    parser.add_argument("--stable-display-landmarks", action="store_true", help="Apply light palm-anchor stabilization to display landmarks. Overrides the default responsive current-frame display mode.")
     parser.add_argument("--detection-confidence", type=float, default=0.60)
     parser.add_argument("--tracking-confidence", type=float, default=0.82)
     args = parser.parse_args()
@@ -419,7 +491,12 @@ def main():
     last_camera_sequence = 0
 
     tracking_mode = "roi-tracking" if args.track_roi else "detect-every-frame"
-    display_mode = "stable-palm-anchor" if args.stable_display_landmarks else "raw-current-frame"
+    if args.stable_display_landmarks:
+        display_mode = "stable-palm-anchor"
+    elif args.raw_display_landmarks:
+        display_mode = "raw-current-frame"
+    else:
+        display_mode = "responsive-finger-current-frame"
     actual_capture_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
     actual_capture_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
     actual_capture_fps = cap.get(cv2.CAP_PROP_FPS)
@@ -448,7 +525,12 @@ def main():
                     score = category.score if category else 1.0
                     hand_id = label if label in ("Left", "Right") else f"Unknown-{index}"
                     active_ids.add(hand_id)
-                    display_landmark_json = display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand) if args.stable_display_landmarks else raw_display_landmarks(hand.landmark)
+                    if args.stable_display_landmarks:
+                        display_landmark_json = display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand)
+                    elif args.raw_display_landmarks:
+                        display_landmark_json = raw_display_landmarks(hand.landmark)
+                    else:
+                        display_landmark_json = responsive_finger_display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand)
                     smoothed_landmarks, smoothed_points = smooth_landmarks(hand_id, hand.landmark, smooth_landmarks_by_hand)
                     hand_payload, raw = analyze_hand(smoothed_points, label, score, hand_id, neutral, smoothed_landmarks)
                     hand_payload["displayLandmarks"] = display_landmark_json
