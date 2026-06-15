@@ -84,62 +84,42 @@ class SmoothedPoint:
         return self.x, self.y, self.z
 
 
-class ResponsiveDisplayPoint:
-    def __init__(self, x, y, z):
-        self.x = float(x)
-        self.y = float(y)
-        self.z = float(z)
-        self.vx = 0.0
-        self.vy = 0.0
-        self.vz = 0.0
+class ResponsiveDisplayHand:
+    def __init__(self, landmarks):
+        anchor = self._palm_anchor(landmarks)
+        self.anchor = anchor
         self.last_time = time.time()
 
-    def update(self, x, y, z, index=-1):
+    def update(self, landmarks):
+        raw_points = np.array([[float(point.x), float(point.y), float(point.z)] for point in landmarks], dtype=np.float32)
+        raw_anchor = self._palm_anchor(landmarks)
         now = time.time()
         dt = max(now - self.last_time, 1e-3)
-        raw_dx = float(x) - self.x
-        raw_dy = float(y) - self.y
-        raw_dz = float(z) - self.z
-        displacement = float(np.linalg.norm(np.array([raw_dx, raw_dy, raw_dz])))
+        delta = raw_anchor - self.anchor
+        displacement = float(np.linalg.norm(delta))
         speed = displacement / dt
-        is_finger = index in FINGER_CHAIN_LANDMARKS
 
-        deadband = 0.00018 if is_finger else 0.00055
-        if displacement <= deadband:
-            self.last_time = now
-            return self.x, self.y, self.z
-
-        if is_finger:
+        deadband = 0.00022
+        if displacement > deadband:
             live_motion = (displacement - deadband) / displacement
-            self.x += raw_dx * live_motion
-            self.y += raw_dy * live_motion
-            self.z += raw_dz * live_motion
-            self.last_time = now
-            return self.x, self.y, self.z
+            delta *= live_motion
+            alpha = max(0.72, min(0.96, 0.84 + speed * 0.024))
+            self.anchor += delta * alpha
 
-        velocity_alpha = 0.38
-        self.vx = self.vx * (1.0 - velocity_alpha) + (raw_dx / dt) * velocity_alpha
-        self.vy = self.vy * (1.0 - velocity_alpha) + (raw_dy / dt) * velocity_alpha
-        self.vz = self.vz * (1.0 - velocity_alpha) + (raw_dz / dt) * velocity_alpha
-
-        alpha = 0.54 + min(speed * 0.030, 0.18)
-        lead_seconds = 0.006 + min(speed * 0.010, 0.006)
-        max_lead = 0.008
-
-        alpha = max(0.50, min(0.97, alpha))
-        lead = np.array([self.vx * lead_seconds, self.vy * lead_seconds, self.vz * lead_seconds])
-        lead_norm = float(np.linalg.norm(lead))
-        if lead_norm > max_lead:
-            lead *= max_lead / lead_norm
-
-        target_x = float(x) + float(lead[0])
-        target_y = float(y) + float(lead[1])
-        target_z = float(z) + float(lead[2])
-        self.x += (target_x - self.x) * alpha
-        self.y += (target_y - self.y) * alpha
-        self.z += (target_z - self.z) * alpha
         self.last_time = now
-        return self.x, self.y, self.z
+
+        shape_offsets = raw_points - raw_anchor
+        display_points = self.anchor + shape_offsets
+        return [{"x": float(point[0]), "y": float(point[1]), "z": float(point[2])} for point in display_points]
+
+    @staticmethod
+    def _palm_anchor(landmarks):
+        if len(landmarks) >= 18:
+            palm_indices = (0, 5, 9, 17)
+        else:
+            palm_indices = (0,)
+        points = np.array([[float(landmarks[i].x), float(landmarks[i].y), float(landmarks[i].z)] for i in palm_indices], dtype=np.float32)
+        return points.mean(axis=0)
 
 
 def smooth_landmarks(hand_id, landmarks, smooth_points):
@@ -158,16 +138,11 @@ def smooth_landmarks(hand_id, landmarks, smooth_points):
 
 
 def display_landmarks(hand_id, landmarks, display_points):
-    slots = display_points.setdefault(hand_id, {})
-    display_json = []
-    for index, point in enumerate(landmarks):
-        slot = slots.get(index)
-        if slot is None:
-            slot = ResponsiveDisplayPoint(point.x, point.y, point.z)
-            slots[index] = slot
-        x, y, z = slot.update(point.x, point.y, point.z, index)
-        display_json.append({"x": float(x), "y": float(y), "z": float(z)})
-    return display_json
+    state = display_points.get(hand_id)
+    if state is None:
+        state = ResponsiveDisplayHand(landmarks)
+        display_points[hand_id] = state
+    return state.update(landmarks)
 
 
 class VideoStreamClient:
