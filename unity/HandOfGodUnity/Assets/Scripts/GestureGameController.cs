@@ -370,7 +370,7 @@ namespace HandOfGod.Gameplay
         private Transform tutorialAirflowArrow;
         private float tutorialBridgeStartDistance;
         private float tutorialMirrorStartAngle;
-        private float tutorialMirrorStartYaw;
+        private Quaternion tutorialMirrorStartRotation = Quaternion.identity;
         private bool tutorialMirrorHeld;
         private float tutorialPalmStart = -1f;
         private float twoHandStartDistance;
@@ -461,8 +461,10 @@ namespace HandOfGod.Gameplay
         private Vector3 level2TeleportEndPosition;
         private int pendingAirDirection;
         private float pendingAirDirectionStart = -1f;
+        private float lastAirflowGestureTime = -10f;
         private const float AirflowDirectionDeadZone = 0.045f;
         private const float AirflowDirectionHoldSeconds = 0.25f;
+        private const float AirflowDropoutGraceSeconds = 0.42f;
         private float levelStartTime = -10f;
         private GestureHandFrame lastTwoPinchA;
         private GestureHandFrame lastTwoPinchB;
@@ -486,7 +488,7 @@ namespace HandOfGod.Gameplay
         private Material level4SouthMaterial;
         private int level4MagnetPolarity;
         private float level4RotateStartAngle;
-        private float level4MirrorStartYaw;
+        private Quaternion level4MirrorStartRotation = Quaternion.identity;
         private bool level4MirrorHeld;
         private bool level4LightSolved;
         private bool level4BackstopRaised;
@@ -661,7 +663,7 @@ namespace HandOfGod.Gameplay
                     ReleaseLevel2KeyIfTrackingLost();
                     pendingAirDirection = 0;
                     pendingAirDirectionStart = -1f;
-                    SetAirBeltDirection(0);
+                    ClearAirflowAfterGrace();
                 }
                 else if (mode == GameMode.Level4)
                 {
@@ -1842,7 +1844,8 @@ namespace HandOfGod.Gameplay
             tutorialBridgeStartDistance = 0f;
             tutorialMirrorHeld = false;
             tutorialMirrorStartAngle = 0f;
-            tutorialMirrorStartYaw = 0f;
+            tutorialMirrorStartRotation = Quaternion.identity;
+            lastAirflowGestureTime = -10f;
             ResetTutorialMagnetFlipGesture();
             ResetTwoHandPinchGrace();
             twoHandStartDistance = 0f;
@@ -1979,7 +1982,16 @@ namespace HandOfGod.Gameplay
                 if (direction != 0)
                 {
                     tutorialAirflowDirected = true;
+                    lastAirflowGestureTime = Time.time;
                 }
+                else if (tutorialAirflowPreviewDirection != 0 && Time.time - lastAirflowGestureTime <= AirflowDropoutGraceSeconds)
+                {
+                    direction = tutorialAirflowPreviewDirection;
+                }
+            }
+            else if (tutorialAirflowPreviewDirection != 0 && Time.time - lastAirflowGestureTime <= AirflowDropoutGraceSeconds)
+            {
+                direction = tutorialAirflowPreviewDirection;
             }
 
             tutorialAirflowPreviewDirection = direction;
@@ -3417,16 +3429,17 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
-            var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX) * Mathf.Rad2Deg;
+            var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX);
             if (!tutorialMirrorHeld)
             {
                 tutorialMirrorHeld = true;
                 tutorialMirrorStartAngle = angle;
-                tutorialMirrorStartYaw = NormalizeYaw(tutorialMirrorProp.eulerAngles.y);
+                tutorialMirrorStartRotation = YawOnly(tutorialMirrorProp.rotation);
             }
 
-            var delta = Mathf.DeltaAngle(tutorialMirrorStartAngle, angle);
-            var yaw = Mathf.Clamp(tutorialMirrorStartYaw + delta, -60f, 60f);
+            var deltaDegrees = Mathf.DeltaAngle(tutorialMirrorStartAngle * Mathf.Rad2Deg, angle * Mathf.Rad2Deg);
+            var targetRotation = tutorialMirrorStartRotation * Quaternion.Euler(0f, deltaDegrees, 0f);
+            var yaw = Mathf.Clamp(NormalizeYaw(targetRotation.eulerAngles.y), -60f, 60f);
             tutorialMirrorProp.rotation = Quaternion.Euler(0f, yaw, 0f);
             var targetPosition = new Vector3(1.22f, 0.42f, 0.52f);
             var aligned = Mathf.Abs(Mathf.DeltaAngle(yaw, Level4MirrorTargetYaw)) < 10f;
@@ -4544,6 +4557,7 @@ namespace HandOfGod.Gameplay
             level2Teleporting = false;
             pendingAirDirection = 0;
             pendingAirDirectionStart = -1f;
+            lastAirflowGestureTime = -10f;
             level2HintMessage = "";
             ConfigureLevel2CameraAndLights();
             
@@ -5084,18 +5098,22 @@ namespace HandOfGod.Gameplay
                 {
                     pendingAirDirection = candidateDir;
                     pendingAirDirectionStart = Time.time;
-                    SetAirBeltDirection(0);
                 }
                 else if (Time.time - pendingAirDirectionStart >= AirflowDirectionHoldSeconds)
                 {
                     SetAirBeltDirection(candidateDir);
+                    lastAirflowGestureTime = Time.time;
+                }
+                else if (airBeltDirection != null && airBeltDirection.Length > 0 && airBeltDirection[0] == candidateDir)
+                {
+                    lastAirflowGestureTime = Time.time;
                 }
             }
             else
             {
                 pendingAirDirection = 0;
                 pendingAirDirectionStart = -1f;
-                SetAirBeltDirection(0);
+                ClearAirflowAfterGrace();
             }
 
         }
@@ -5112,7 +5130,7 @@ namespace HandOfGod.Gameplay
             var airflowUnlocked = level1Stage == Level1Stage.JoinBridge || level1Stage == Level1Stage.RunToGoal;
             if (airflowUnlocked && (!TryGetAirflowDirectionCandidate(frame, out var currentAirflowDirection) || currentAirflowDirection == 0))
             {
-                SetAirBeltDirection(0);
+                ClearAirflowAfterGrace();
             }
             if (level2Teleporting)
             {
@@ -5445,6 +5463,17 @@ namespace HandOfGod.Gameplay
             UpdateAirBeltVisuals();
         }
 
+        private void ClearAirflowAfterGrace()
+        {
+            var currentDirection = airBeltDirection != null && airBeltDirection.Length > 0 ? airBeltDirection[0] : 0;
+            if (currentDirection != 0 && Time.time - lastAirflowGestureTime <= AirflowDropoutGraceSeconds)
+            {
+                return;
+            }
+
+            SetAirBeltDirection(0);
+        }
+
         private void UpdateAirBeltVisuals()
         {
             if (airBelts == null || airBelts.Length == 0 || airBelts[0] == null)
@@ -5672,7 +5701,6 @@ namespace HandOfGod.Gameplay
             level4Mirror = mirrorObject.transform;
             level4MirrorRenderer = mirrorObject.GetComponent<Renderer>();
             CreateTorus("level4 mirror pivot ring", level4Mirror.position + new Vector3(0f, -0.31f, 0f), 0.36f, 0.024f, tealGlow, levelRoot);
-            level4MirrorStartYaw = level4Mirror.eulerAngles.y;
 
             level4LightGate = CreateLevel2Gate("level4 light energy gate", new Vector3(Level4LightGateX, Level4RoadY(Level4LightGateX) + 0.66f, 0f), 1.92f);
             level4DoorRenderer = level4LightGate.transform.Find("level4 light energy gate cyan lock core")?.GetComponent<Renderer>();
@@ -5859,16 +5887,17 @@ namespace HandOfGod.Gameplay
 
             if (level4Stage == Level4Stage.LightGuide && TryGetTwoPinchingHands(out var a, out var b))
             {
-                var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX) * Mathf.Rad2Deg;
+                var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX);
                 if (!level4MirrorHeld)
                 {
                     level4MirrorHeld = true;
                     level4RotateStartAngle = angle;
-                    level4MirrorStartYaw = NormalizeYaw(level4Mirror.eulerAngles.y);
+                    level4MirrorStartRotation = YawOnly(level4Mirror.rotation);
                 }
 
-                var delta = Mathf.DeltaAngle(level4RotateStartAngle, angle);
-                var yaw = Mathf.Clamp(level4MirrorStartYaw + delta, -68f, 68f);
+                var deltaDegrees = Mathf.DeltaAngle(level4RotateStartAngle * Mathf.Rad2Deg, angle * Mathf.Rad2Deg);
+                var targetRotation = level4MirrorStartRotation * Quaternion.Euler(0f, deltaDegrees, 0f);
+                var yaw = Mathf.Clamp(NormalizeYaw(targetRotation.eulerAngles.y), -68f, 68f);
                 level4Mirror.rotation = Quaternion.Euler(0f, yaw, 0f);
                 if (level4MirrorRenderer != null) level4MirrorRenderer.sharedMaterial = boxHeldMaterial;
             }
@@ -6428,6 +6457,31 @@ namespace HandOfGod.Gameplay
             return pointers;
         }
 
+        private List<UiPointer> GetButtonPointers()
+        {
+            var pointers = new List<UiPointer>(2);
+            var frame = receiver != null && receiver.HasFreshFrame ? receiver.Latest : GestureFrame.Neutral;
+            if (frame.hands != null && frame.hands.Length > 0)
+            {
+                for (var i = 0; i < frame.hands.Length; i++)
+                {
+                    var hand = frame.hands[i];
+                    if (hand.score < 0.35f || !hand.openPalm)
+                    {
+                        continue;
+                    }
+
+                    var id = !string.IsNullOrEmpty(hand.id) ? hand.id : (!string.IsNullOrEmpty(hand.handedness) ? hand.handedness : $"hand-{i}");
+                    pointers.Add(new UiPointer(id, new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height), false));
+                }
+            }
+            else if (TryGetPrimaryHand(out var hand) && hand.openPalm)
+            {
+                pointers.Add(new UiPointer("primary", new Vector2(hand.indexX * Screen.width, hand.indexY * Screen.height), false));
+            }
+            return pointers;
+        }
+
         private void DrawCursor()
         {
             var pointers = GetUiPointers();
@@ -6453,7 +6507,7 @@ namespace HandOfGod.Gameplay
 
         private void DrawButtonCore(string key, string label, Rect rect, float dwellSeconds, System.Action action, bool allowMouseClick, int fontSize)
         {
-            var pointers = GetUiPointers();
+            var pointers = GetButtonPointers();
             var activeHoverIds = new List<string>(pointers.Count);
             var progress = 0f;
             foreach (var pointer in pointers)
@@ -7202,6 +7256,7 @@ namespace HandOfGod.Gameplay
             level2TeleportEndPosition = Vector3.zero;
             pendingAirDirection = 0;
             pendingAirDirectionStart = -1f;
+            lastAirflowGestureTime = -10f;
             level2HintMessage = "";
             lastPinchState = false;
             lastKeyInRange = false;
@@ -7219,7 +7274,7 @@ namespace HandOfGod.Gameplay
             level4MagnetBackstop = null;
             level4MagnetPolarity = 0;
             level4RotateStartAngle = 0f;
-            level4MirrorStartYaw = 0f;
+            level4MirrorStartRotation = Quaternion.identity;
             level4MirrorHeld = false;
             level4LightSolved = false;
             level4BackstopRaised = false;
