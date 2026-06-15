@@ -103,7 +103,7 @@ class ResponsiveDisplayHand:
         if displacement > deadband:
             live_motion = (displacement - deadband) / displacement
             delta *= live_motion
-            alpha = max(0.72, min(0.96, 0.84 + speed * 0.024))
+            alpha = 0.86 if speed < 0.055 else 1.0
             self.anchor += delta * alpha
 
         self.last_time = now

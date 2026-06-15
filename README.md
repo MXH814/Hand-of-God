@@ -442,7 +442,7 @@ Unity 端职责：
 Python 对每个 hand id 的每个 landmark 同时维护两套输出：
 
 - `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用；手指链条优先实时，腕部和 cursor 优先稳定。
-- `displayLandmarks`：骨架显示用保形 landmarks，只负责 Unity 前景 21 点骨架；Python 只对掌心锚点做轻量稳定，手指相对掌心的形状完全来自当前 MediaPipe 帧，保持实时手型。
+- `displayLandmarks`：骨架显示用保形 landmarks，只负责 Unity 前景 21 点骨架；Python 只在掌心锚点低速微动时做轻量稳定，正常运动时直接跟随，手指相对掌心的形状完全来自当前 MediaPipe 帧，保持实时手型。
 - MediaPipe Hands 默认使用 `model_complexity=1` 和逐帧检测模式，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型或 ROI tracking 造成的骨架形变不自然。
 - Unity UDP 接收器会丢弃 timestamp 倒退的旧手势包，并在校准界面显示 frame age / receive age，避免旧帧回灌造成骨架慢半拍却难以定位。
 
