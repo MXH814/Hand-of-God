@@ -191,8 +191,8 @@ class ResponsiveFingerDisplayHand:
 
     def _stabilize_display(self, target, palm_width):
         stabilized = self.displayed.copy()
-        jitter_radius = max(0.0028, palm_width * 0.026)
-        live_radius = max(jitter_radius * 7.0, palm_width * 0.12)
+        jitter_radius = max(0.0038, palm_width * 0.034)
+        live_radius = max(jitter_radius * 5.5, palm_width * 0.105)
         for index in range(len(target)):
             delta = target[index] - self.displayed[index]
             motion = float(np.linalg.norm(delta[:2]))
@@ -200,8 +200,10 @@ class ResponsiveFingerDisplayHand:
                 continue
 
             motion_scale = min(1.0, (motion - jitter_radius) / live_radius)
-            alpha = 0.18 + (motion_scale ** 1.4) * 0.82
-            stabilized[index] = self.displayed[index] + delta * alpha
+            alpha = 0.36 + (motion_scale ** 1.2) * 0.64
+            effective_deadzone = jitter_radius * (1.0 - motion_scale)
+            deadzone_delta = delta * ((motion - effective_deadzone) / motion)
+            stabilized[index] = self.displayed[index] + deadzone_delta * alpha
         return stabilized
 
     @staticmethod
@@ -279,6 +281,10 @@ def responsive_finger_display_landmarks(hand_id, landmarks, display_points):
 
 def raw_display_landmarks(landmarks):
     return [{"x": float(point.x), "y": float(point.y), "z": float(point.z)} for point in landmarks]
+
+
+def landmark_points_from_json(landmarks):
+    return [LandmarkPoint(point["x"], point["y"], point["z"]) for point in landmarks]
 
 
 class VideoStreamClient:
@@ -541,9 +547,7 @@ def main():
     neutral = None
     last_raw = {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
     pinch_latches = {}
-    smooth_landmarks_by_hand = {}
     display_landmarks_by_hand = {}
-    smooth_cursors = {}
     bridge_fps = 0.0
     processing_ms = 0.0
     frame_counter = 0
@@ -592,8 +596,8 @@ def main():
                         display_landmark_json = raw_display_landmarks(hand.landmark)
                     else:
                         display_landmark_json = responsive_finger_display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand)
-                    smoothed_landmarks, smoothed_points = smooth_landmarks(hand_id, hand.landmark, smooth_landmarks_by_hand)
-                    hand_payload, raw = analyze_hand(smoothed_points, label, score, hand_id, neutral, smoothed_landmarks)
+                    interaction_points = landmark_points_from_json(display_landmark_json)
+                    hand_payload, raw = analyze_hand(interaction_points, label, score, hand_id, neutral, display_landmark_json)
                     hand_payload["displayLandmarks"] = display_landmark_json
                     last_raw = raw
 
@@ -602,41 +606,14 @@ def main():
                     latched = distance < (0.92 if latched else 0.72)
                     pinch_latches[hand_id] = latched
 
-                    index_only = (
-                        hand_payload["indexExtended"]
-                        and not hand_payload["middleExtended"]
-                        and not hand_payload["ringExtended"]
-                        and not hand_payload["pinkyExtended"]
-                    )
-                    pinch_alpha = 0.82 if latched else 0.68
-                    previous = smooth_cursors.get(hand_id, (hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"]))
-                    index_motion = float(np.linalg.norm(np.array([
-                        hand_payload["indexX"] - previous[2],
-                        hand_payload["indexY"] - previous[3],
-                    ])))
-                    if index_only:
-                        index_alpha = 0.76 if index_motion < 0.003 else (0.90 if index_motion < 0.014 else 0.96)
-                    else:
-                        index_alpha = 0.90
-                    smoothed = (
-                        previous[0] * (1.0 - pinch_alpha) + hand_payload["pinchX"] * pinch_alpha,
-                        previous[1] * (1.0 - pinch_alpha) + hand_payload["pinchY"] * pinch_alpha,
-                        previous[2] * (1.0 - index_alpha) + hand_payload["indexX"] * index_alpha,
-                        previous[3] * (1.0 - index_alpha) + hand_payload["indexY"] * index_alpha,
-                    )
-                    smooth_cursors[hand_id] = smoothed
-
                     hand_payload["pinch"] = latched
                     hand_payload["openPalm"] = hand_payload["openPalm"] and not latched
-                    hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"] = smoothed
                     analyzed.append(hand_payload)
                     if args.preview:
                         drawing.draw_landmarks(frame, hand, mp.solutions.hands.HAND_CONNECTIONS)
-            stale_ids = [hand_id for hand_id in smooth_landmarks_by_hand if hand_id not in active_ids]
+            stale_ids = [hand_id for hand_id in set(display_landmarks_by_hand) | set(pinch_latches) if hand_id not in active_ids]
             for hand_id in stale_ids:
-                smooth_landmarks_by_hand.pop(hand_id, None)
                 display_landmarks_by_hand.pop(hand_id, None)
-                smooth_cursors.pop(hand_id, None)
                 pinch_latches.pop(hand_id, None)
 
             if analyzed:

@@ -107,6 +107,31 @@ class ResponsiveFingerDisplayTests(unittest.TestCase):
         self.assertLess(math.dist(point(output, 8), point(base, 8)), 0.0002)
         self.assertLess(math.dist(point(output, 6), point(base, 6)), 0.0002)
 
+    def test_near_threshold_jitter_moves_only_the_excess_distance(self):
+        base = make_hand()
+        state = bridge.ResponsiveFingerDisplayHand(base)
+        jittered = make_hand()
+        jittered[8] = landmark(base[8].x + 0.0032, base[8].y)
+
+        output = state.update(jittered)
+
+        self.assertLess(math.dist(point(output, 8), point(base, 8)), 0.00035)
+
+    def test_interaction_analysis_uses_display_deadband_coordinates(self):
+        base = make_hand()
+        state = bridge.ResponsiveFingerDisplayHand(base)
+        jittered = make_hand()
+        jittered[8] = landmark(base[8].x + 0.0015, base[8].y - 0.0012)
+
+        display_output = state.update(jittered)
+        interaction_points = bridge.landmark_points_from_json(display_output)
+        payload, _ = bridge.analyze_hand(interaction_points, "Right", 1.0, "Right", None, display_output)
+
+        self.assertEqual(payload["landmarks"], display_output)
+        self.assertAlmostEqual(payload["indexX"], display_output[8]["x"])
+        self.assertAlmostEqual(payload["indexY"], display_output[8]["y"])
+        self.assertLess(math.dist((payload["indexX"], payload["indexY"], 0.0), point(base, 8)), 0.0003)
+
     def test_real_finger_motion_escapes_display_deadband(self):
         base = make_hand()
         state = bridge.ResponsiveFingerDisplayHand(base)
@@ -131,8 +156,8 @@ class ResponsiveFingerDisplayTests(unittest.TestCase):
             output = state.update(moved)
 
         self.assertIsNotNone(output)
-        self.assertGreater(output[8]["y"], base[8].y + 0.0035)
-        self.assertGreater(output[7]["y"], base[7].y + 0.0025)
+        self.assertGreater(output[8]["y"], base[8].y + 0.002)
+        self.assertGreater(output[7]["y"], base[7].y + 0.0015)
 
 
 if __name__ == "__main__":

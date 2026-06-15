@@ -464,6 +464,10 @@ namespace HandOfGod.Gameplay
         private const float AirflowDirectionDeadZone = 0.045f;
         private const float AirflowDirectionHoldSeconds = 0.25f;
         private float levelStartTime = -10f;
+        private GestureHandFrame lastTwoPinchA;
+        private GestureHandFrame lastTwoPinchB;
+        private float lastTwoPinchTime = -10f;
+        private const float TwoHandPinchGraceSeconds = 0.24f;
 
         // Level4: Mirror & magnet mechanics
         private Level4Stage level4Stage;
@@ -1264,6 +1268,7 @@ namespace HandOfGod.Gameplay
             tutorialMagnetPreviewPolarity = 0;
             tutorialMagnetReversalCount = 0;
             ResetTutorialMagnetFlipGesture();
+            ResetTwoHandPinchGrace();
             tutorialPalmStart = -1f;
             tutorialDrawState = TutorialDrawState.WaitingStart;
             tutorialDrawHoldStart = -1f;
@@ -1837,6 +1842,7 @@ namespace HandOfGod.Gameplay
             tutorialMirrorStartAngle = 0f;
             tutorialMirrorStartYaw = 0f;
             ResetTutorialMagnetFlipGesture();
+            ResetTwoHandPinchGrace();
             twoHandStartDistance = 0f;
             twoFingerMapStartDistance = 0f;
             tutorialDrawObjectHeld = false;
@@ -4137,6 +4143,14 @@ namespace HandOfGod.Gameplay
 
         private bool IsPinching(GestureHandFrame hand)
         {
+            if (hand.score < 0.25f)
+            {
+                return false;
+            }
+            if (hand.pinch)
+            {
+                return true;
+            }
             return hand.score >= 0.35f && hand.pinchDistance < pinchThreshold;
         }
 
@@ -6355,12 +6369,25 @@ namespace HandOfGod.Gameplay
             b = default;
             if (frame.hands == null || frame.hands.Length < 2)
             {
+                if (Time.time - lastTwoPinchTime <= TwoHandPinchGraceSeconds)
+                {
+                    a = lastTwoPinchA;
+                    b = lastTwoPinchB;
+                    return true;
+                }
                 return false;
             }
 
             a = frame.hands[0];
             b = frame.hands[1];
-            return IsPinching(a) && IsPinching(b);
+            if (IsPinching(a) && IsPinching(b))
+            {
+                lastTwoPinchA = a;
+                lastTwoPinchB = b;
+                lastTwoPinchTime = Time.time;
+                return true;
+            }
+            return false;
         }
 
         private List<UiPointer> GetUiPointers()
@@ -7087,6 +7114,13 @@ namespace HandOfGod.Gameplay
             level3SlideBridgeReleased = false;
             level3EraseRequiresGestureReset = false;
             level3HintMessage = "";
+        }
+
+        private void ResetTwoHandPinchGrace()
+        {
+            lastTwoPinchA = default;
+            lastTwoPinchB = default;
+            lastTwoPinchTime = -10f;
         }
 
         private void ResetLevel2RuntimeReferences()

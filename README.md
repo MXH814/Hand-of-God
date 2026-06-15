@@ -98,7 +98,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 | 双手食指中指并拢 | 教学地图旋转和缩放 | Python 输出 index/middle landmarks；Unity 检测每只手 index 和 middle 距离，双手同时满足后进入地图控制 |
 | 气流指向手势 | 第 0 关教学、第 2 关临时产生气流 | 单手食指和中指并拢、拇指伸出、无名指和小指收起；Unity 用食指相对手腕的 X 方向判断左风或右风，手势消失后气流关闭 |
 
-捏合与悬停均使用阈值范围判断，不要求指尖完全重合。捏合状态带有迟滞逻辑：进入捏合使用较小阈值，保持捏合使用较大阈值，从而减少临界点抖动导致的频繁断开。
+捏合与悬停均使用阈值范围判断，不要求指尖完全重合。捏合状态带有迟滞逻辑：进入捏合使用较小阈值，保持捏合使用较大阈值；Unity 优先使用 Python 输出的稳定 `pinch` 状态，并为双手捏合旋转、拉合等连续操作保留短暂双手 grace，减少临界点抖动或单帧丢手导致的频繁断开。
 
 ## 关卡设计
 
@@ -321,7 +321,7 @@ Camera
 Python MediaPipe Bridge
   ├─ MediaPipe Hands: 21 点手部 landmarks、handedness、score
   ├─ Gesture analysis: pinch、open palm、finger extended、palm pose
-  ├─ Smoothing: landmarks 速度感知平滑、pinch/index cursor EMA
+  ├─ Smoothing: displayLandmarks / landmarks 同源死区稳定、pinch 迟滞
   ├─ UDP 5005: gesture JSON
   └─ TCP 5006: JPEG camera frames
        │
@@ -440,33 +440,20 @@ Unity 端职责：
 
 ### Landmark 平滑
 
-Python 对每个 hand id 的每个 landmark 同时维护两套输出：
+Python 对每个 hand id 的每个 landmark 输出同一套稳定后的交互/显示坐标：
 
-- `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用；手指链条优先实时，腕部和 cursor 优先稳定。
-- `displayLandmarks`：骨架显示默认使用 `responsive-finger-current-frame`。它以 MediaPipe 当前帧 21 点为主体，只在指尖已经快速移动而 PIP / DIP 中间指节明显落后时，沿指尖运动方向做小幅补偿，再用当前帧骨长软约束避免手指链条明显压缩或拉长；最后经过很小的显示死区压住静止时的高频微抖，让第一指节、指根和指尖更像真实手型同步变化；如需排查可传入 `--raw-display-landmarks` 直出原始点，如需更稳的展示可传入 `--stable-display-landmarks` 启用掌心锚点保形稳定。
+- `displayLandmarks`：骨架显示默认使用 `responsive-finger-current-frame`。它以 MediaPipe 当前帧 21 点为主体，只在指尖已经快速移动而 PIP / DIP 中间指节明显落后时，沿指尖运动方向做小幅补偿，再用当前帧骨长软约束避免手指链条明显压缩或拉长；最后经过更强的自适应显示死区压住静止时的高频微抖，让第一指节、指根和指尖更像真实手型同步变化；如需排查可传入 `--raw-display-landmarks` 直出原始点，如需更稳的展示可传入 `--stable-display-landmarks` 启用掌心锚点保形稳定。
+- `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用；默认与 `displayLandmarks` 完全同源，Unity 实际操作点、pinch center、食指坐标和屏幕上看到的骨架点保持一致。
 - MediaPipe Hands 默认使用 `model_complexity=1` 和逐帧检测模式，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型或 ROI tracking 造成的骨架形变不自然。
 - Unity UDP 接收器会丢弃 timestamp 倒退的旧手势包，并在校准界面显示 frame age / receive age，避免旧帧回灌造成骨架慢半拍却难以定位。
 
-控制用 `landmarks` 分为手指链条和腕部两条路径：
+默认 `displayLandmarks` 由 `ResponsiveFingerDisplayHand` 生成：Unity 绘制骨架时对这套显示点直绘，不再做单个指节限速；Python 仅对“指尖动得很快、中间指节明显没跟上”的帧做有限幅度的 PIP / DIP 补偿，并用当前帧 MCP、PIP、DIP、tip 骨段长度做多轮软约束，避免第一指节慢半拍造成的“折断感”或补偿后骨架明显变形。随后显示层使用基于掌宽的 deadband：目标点在几像素量级内抖动时保持上一显示位置，刚超过死区的小动作低增益跟随，大动作按运动幅度快速跟随。
 
-- 手指链条 landmarks（1-20）直接使用当前 MediaPipe 点，不做 deadband、插值或 alpha 平滑，避免第一指节、指根和指尖跟随过慢。
-- 腕部 landmark（0）根据点位移动速度和屏幕边缘程度计算动态 `alpha`，保留更强稳定性，减少整只手在边缘区域的低频晃动。
-- 靠近画面边缘时降低 `alpha`，减少边缘识别抖动。
-- 交互用 cursor（`pinchX` / `indexX` 等）仍使用独立 EMA 和手势迟滞来抑制 UI 悬停抖动；手指关节本身不再被这层 cursor 平滑拖慢。
-- 真实弯曲、伸直动作不再被小位移平滑拖慢，避免第一指节滞后造成的“折断感”。
-- 腕部 `alpha` 被限制在稳定范围内，避免过度延迟或过度跳变。
-- 手势分析使用控制用 landmarks；手指姿态读取 raw 当前帧，交互点和手势开关再通过 cursor EMA、迟滞阈值和保持时间抑制抖动。
-- 默认 `displayLandmarks` 由 `ResponsiveFingerDisplayHand` 生成：Unity 绘制骨架时对这套显示点直绘当前帧，不再做缓存插值或单个指节限速；Python 仅对“指尖动得很快、中间指节明显没跟上”的帧做有限幅度的 PIP / DIP 补偿，并用当前帧 MCP、PIP、DIP、tip 骨段长度做多轮软约束，避免第一指节慢半拍造成的“折断感”或补偿后骨架明显变形。随后显示层使用基于掌宽的 deadband：目标点在几像素量级内抖动时保持上一显示位置，刚超过死区的小动作低增益跟随，大动作按运动幅度快速跟随。`--raw-display-landmarks` 可直出 MediaPipe 原始点；`--stable-display-landmarks` 可选启用 `ResponsiveDisplayHand`：先用 wrist、index MCP、middle MCP、pinky MCP 计算掌心锚点，只对这个锚点做轻量稳定，再把当前帧 21 点相对掌心的偏移原样加回稳定锚点。只有缺少 display landmarks、退回控制用 landmarks 时，Unity 才对整只手的单帧异常位移做整体保护；UI 和机关判定不直接依赖这套显示点。
+### 交互坐标稳定
 
-### Cursor EMA 平滑
+Python 手势分析直接使用稳定后的 `displayLandmarks` 作为 `landmarks`，并由这套点计算 `pinchX`、`pinchY`、`indexX`、`indexY`、手指伸展状态和气流方向。这样静止时的真实操作点不会绕过骨架死区继续高频抖动，玩家看到的手指位置就是拖拽、旋转、悬停命中的实际位置。
 
-Python 对 `pinchX`、`pinchY`、`indexX`、`indexY` 使用指数移动平均：
-
-```text
-smoothed = previous * 0.72 + current * 0.28
-```
-
-实际运行时会根据姿态动态调整平滑强度：捏合拖动物体时使用更高 pinch center 响应速度；只伸出食指且其他手指弯曲时，对极低幅抖动保留过滤，但正常小动作和快速移动都会使用更高更新系数跟随，减少 UI 悬停抖动的同时避免指尖和指节滞后。骨架显示优先保持实时手型，UI 悬停稳定性主要由 cursor EMA 承担。
+`--raw-display-landmarks` 会让显示和交互同时使用 MediaPipe 原始点，方便排查识别原始输出；`--stable-display-landmarks` 会让显示和交互同时使用掌心锚点保形稳定点。Unity 侧在缺少 display landmarks 时仍保留整只手单帧异常位移保护。
 
 ### 捏合检测
 
