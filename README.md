@@ -21,6 +21,7 @@
 - 摄像头画面以内嵌背景形式显示在 Unity 窗口中，不打开独立 OpenCV 预览窗口。
 - 屏幕最前景实时显示 MediaPipe Hands 的 21 点手骨架。
 - 支持最多两只手，并保留 `Left` / `Right` handedness、识别置信度和手势特征。
+- Python 桥接会对 `Left` / `Right` 做跨帧空间匹配稳定，避免左手掌心朝屏幕捏合时因 MediaPipe 单帧错标或掉帧导致整只手在 Unity 中消失。
 - 校准界面只显示摄像头背景、手骨架和清晰提示，避免地图物体干扰。
 - 所有主要 UI 按钮支持左右手张掌独立悬停选择，按键手张开即可触发，另一只手状态不影响按钮进度；同时保留鼠标点击兜底。
 - 左上方 `Exit` / `Calibrate` 按钮放大并向屏幕内侧移动，降低边缘手势抖动和误触。
@@ -99,6 +100,8 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 | 气流指向手势 | 第 0 关教学、第 2 关临时产生气流 | 单手食指和中指并拢、拇指伸出、无名指和小指收起；Unity 用食指相对手腕的 X 方向判断左风或右风，并对短暂识别掉帧保留最后有效风向，手势稳定消失后气流关闭 |
 
 捏合与悬停均使用阈值范围判断，不要求指尖完全重合。捏合状态带有迟滞逻辑：进入捏合使用较小阈值，保持捏合使用较大阈值；Unity 优先使用 Python 输出的稳定 `pinch` 状态，并为双手捏合旋转、拉合等连续操作保留短暂双手 grace，减少临界点抖动或单帧丢手导致的频繁断开。
+
+桥接会把 pinch latch 绑定到稳定 hand id，而不是绑定到 MediaPipe 当帧原始 handedness。这样左手掌心朝向屏幕、拇指食指遮挡较多时，即使 MediaPipe handedness 短暂波动，左手捏合状态仍能连续保持。
 
 ## 关卡设计
 
@@ -442,6 +445,7 @@ Unity 端职责：
 
 Python 对每个 hand id 的每个 landmark 输出同一套稳定后的交互/显示坐标：
 
+- `stable hand id`：MediaPipe 原始 `Left` / `Right` 只作为初始线索；桥接会根据掌心中心点与上一帧轨迹做空间匹配，得到稳定的 `Left` / `Right` ID。若某一帧左手掌心朝屏幕捏合时被错标成 `Right`，但位置仍接近上一帧左手轨迹，Unity 收到的仍是 `Left`。检测短暂丢失时，桥接会在约 `0.34s` 内保留上一帧手势输出，避免单帧掉手导致骨架和捏合状态闪断。
 - `displayLandmarks`：骨架显示默认使用 `responsive-finger-current-frame`。它以 MediaPipe 当前帧 21 点为主体，只在指尖已经快速移动而 PIP / DIP 中间指节明显落后时，沿指尖运动方向做小幅补偿，再用当前帧骨长软约束避免手指链条明显压缩或拉长；最后经过更强的自适应显示死区压住静止时的高频微抖，让第一指节、指根和指尖更像真实手型同步变化；如需排查可传入 `--raw-display-landmarks` 直出原始点，如需更稳的展示可传入 `--stable-display-landmarks` 启用掌心锚点保形稳定。
 - `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用；默认与 `displayLandmarks` 完全同源，Unity 实际操作点、pinch center、食指坐标和屏幕上看到的骨架点保持一致。
 - MediaPipe Hands 默认使用 `model_complexity=1` 和逐帧检测模式，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型或 ROI tracking 造成的骨架形变不自然。

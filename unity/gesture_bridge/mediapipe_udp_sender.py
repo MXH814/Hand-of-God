@@ -1,4 +1,5 @@
 import argparse
+import copy
 import json
 import os
 import socket
@@ -29,6 +30,9 @@ DISPLAY_FINGER_CHAINS = (
 
 WRIST_LANDMARKS = {0}
 FINGER_CHAIN_LANDMARKS = set(range(1, 21))
+STABLE_HAND_IDS = ("Left", "Right")
+HAND_ID_MATCH_MAX_DISTANCE = 0.30
+HAND_DROPOUT_GRACE_SECONDS = 0.34
 
 
 class LandmarkPoint:
@@ -402,6 +406,69 @@ def write_landmark_json(landmark, point):
     landmark["z"] = float(point[2])
 
 
+def palm_center_from_landmarks(landmarks):
+    indices = (0, 5, 9, 17) if len(landmarks) >= 18 else (0,)
+    points = np.array([[float(landmarks[i].x), float(landmarks[i].y)] for i in indices], dtype=np.float32)
+    return points.mean(axis=0)
+
+
+def assign_stable_hand_id(raw_label, center, active_ids, stable_hand_tracks):
+    candidates = []
+    for hand_id in STABLE_HAND_IDS:
+        if hand_id in active_ids:
+            continue
+        track = stable_hand_tracks.get(hand_id)
+        if not track:
+            continue
+
+        distance = float(np.linalg.norm(center - track["center"]))
+        if distance > HAND_ID_MATCH_MAX_DISTANCE:
+            continue
+
+        label_penalty = 0.0 if raw_label == hand_id else 0.045
+        candidates.append((distance + label_penalty, hand_id))
+
+    if candidates:
+        candidates.sort(key=lambda item: item[0])
+        return candidates[0][1]
+
+    if raw_label in STABLE_HAND_IDS and raw_label not in active_ids:
+        return raw_label
+
+    return f"Unknown-{len(active_ids)}"
+
+
+def update_stable_hand_track(stable_hand_tracks, hand_id, raw_label, center, hand_payload, now):
+    if hand_id not in STABLE_HAND_IDS:
+        return
+
+    stable_hand_tracks[hand_id] = {
+        "center": center,
+        "raw_label": raw_label,
+        "last_seen": now,
+        "last_payload": copy.deepcopy(hand_payload),
+    }
+
+
+def append_recently_lost_hands(analyzed, active_ids, stable_hand_tracks, now):
+    for hand_id in STABLE_HAND_IDS:
+        if hand_id in active_ids:
+            continue
+
+        track = stable_hand_tracks.get(hand_id)
+        if not track:
+            continue
+
+        age = now - track["last_seen"]
+        if age > HAND_DROPOUT_GRACE_SECONDS:
+            continue
+
+        payload = copy.deepcopy(track["last_payload"])
+        payload["score"] = float(max(0.35, payload.get("score", 0.0) * (1.0 - age / HAND_DROPOUT_GRACE_SECONDS * 0.35)))
+        payload["heldFromPreviousFrame"] = True
+        analyzed.append(payload)
+
+
 def normalized_distance_json(a, b, scale):
     dx = float(a["x"]) - float(b["x"])
     dy = float(a["y"]) - float(b["y"])
@@ -693,6 +760,7 @@ def main():
     pinch_latches = {}
     display_landmarks_by_hand = {}
     cross_index_states = {}
+    stable_hand_tracks = {}
     bridge_fps = 0.0
     processing_ms = 0.0
     frame_counter = 0
@@ -728,13 +796,15 @@ def main():
 
             active_ids = set()
             if result.multi_hand_landmarks:
+                now = time.time()
                 handedness_list = result.multi_handedness or []
                 detections = []
                 for index, hand in enumerate(result.multi_hand_landmarks[:2]):
                     category = handedness_list[index].classification[0] if index < len(handedness_list) else None
                     label = category.label if category else "Unknown"
                     score = category.score if category else 1.0
-                    hand_id = label if label in ("Left", "Right") else f"Unknown-{index}"
+                    center = palm_center_from_landmarks(hand.landmark)
+                    hand_id = assign_stable_hand_id(label, center, active_ids, stable_hand_tracks)
                     active_ids.add(hand_id)
                     if args.stable_display_landmarks:
                         display_landmark_json = display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand)
@@ -743,9 +813,11 @@ def main():
                     else:
                         display_landmark_json = responsive_finger_display_landmarks(hand_id, hand.landmark, display_landmarks_by_hand)
                     detections.append({
-                        "label": label,
+                        "label": hand_id if hand_id in STABLE_HAND_IDS else label,
+                        "raw_label": label,
                         "score": score,
                         "hand_id": hand_id,
+                        "center": center,
                         "displayLandmarks": display_landmark_json,
                     })
                     if args.preview:
@@ -754,12 +826,15 @@ def main():
                 stabilize_crossed_index_fingers(detections, cross_index_states)
                 for detection in detections:
                     label = detection["label"]
+                    raw_label = detection.get("raw_label", label)
                     score = detection["score"]
                     hand_id = detection["hand_id"]
                     display_landmark_json = detection["displayLandmarks"]
                     interaction_points = landmark_points_from_json(display_landmark_json)
-                    hand_payload, raw = analyze_hand(interaction_points, label, score, hand_id, neutral, display_landmark_json)
+                    stable_label = hand_id if hand_id in STABLE_HAND_IDS else label
+                    hand_payload, raw = analyze_hand(interaction_points, stable_label, score, hand_id, neutral, display_landmark_json)
                     hand_payload["displayLandmarks"] = display_landmark_json
+                    hand_payload["rawHandedness"] = raw_label
                     last_raw = raw
 
                     distance = raw["pinchDistance"]
@@ -769,8 +844,20 @@ def main():
 
                     hand_payload["pinch"] = latched
                     hand_payload["openPalm"] = hand_payload["openPalm"] and not latched
+                    update_stable_hand_track(stable_hand_tracks, hand_id, raw_label, detection["center"], hand_payload, now)
                     analyzed.append(hand_payload)
-            stale_ids = [hand_id for hand_id in set(display_landmarks_by_hand) | set(pinch_latches) if hand_id not in active_ids]
+                append_recently_lost_hands(analyzed, active_ids, stable_hand_tracks, now)
+            else:
+                append_recently_lost_hands(analyzed, active_ids, stable_hand_tracks, time.time())
+
+            keep_ids = set(active_ids)
+            current_time = time.time()
+            for hand_id, track in list(stable_hand_tracks.items()):
+                if current_time - track["last_seen"] <= HAND_DROPOUT_GRACE_SECONDS:
+                    keep_ids.add(hand_id)
+                else:
+                    stable_hand_tracks.pop(hand_id, None)
+            stale_ids = [hand_id for hand_id in set(display_landmarks_by_hand) | set(pinch_latches) if hand_id not in keep_ids]
             for hand_id in stale_ids:
                 display_landmarks_by_hand.pop(hand_id, None)
                 pinch_latches.pop(hand_id, None)
