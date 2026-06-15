@@ -50,7 +50,7 @@ class SmoothedPoint:
         is_wrist_anchor = index in WRIST_LANDMARKS
         is_fingertip = index in FINGERTIP_LANDMARKS
         is_finger_chain = index in FINGER_CHAIN_LANDMARKS
-        deadband = 0.00065 if is_wrist_anchor else 0.00018
+        deadband = 0.00065 if is_wrist_anchor else 0.00008
         if displacement <= deadband:
             self.last_time = now
             return self.x, self.y, self.z
@@ -64,16 +64,16 @@ class SmoothedPoint:
             max_alpha = 0.55
             min_alpha = 0.10
         elif is_finger_chain:
-            alpha = 0.86 + min(speed * 0.040, 0.12)
-            max_alpha = 0.98
-            min_alpha = 0.55
+            alpha = 0.94 + min(speed * 0.030, 0.06)
+            max_alpha = 1.0
+            min_alpha = 0.82
         else:
             alpha = 0.70 + min(speed * 0.035, 0.18)
             max_alpha = 0.92
             min_alpha = 0.35
 
         if is_fingertip:
-            alpha = max(alpha, 0.90)
+            alpha = max(alpha, 0.96)
         alpha -= max(edge - 0.78, 0.0) * (0.06 if is_wrist_anchor else 0.018)
 
         alpha = max(min_alpha, min(max_alpha, alpha))
@@ -341,16 +341,16 @@ def main():
                         and not hand_payload["ringExtended"]
                         and not hand_payload["pinkyExtended"]
                     )
-                    pinch_alpha = 0.65 if latched else 0.45
+                    pinch_alpha = 0.82 if latched else 0.68
                     previous = smooth_cursors.get(hand_id, (hand_payload["pinchX"], hand_payload["pinchY"], hand_payload["indexX"], hand_payload["indexY"]))
                     index_motion = float(np.linalg.norm(np.array([
                         hand_payload["indexX"] - previous[2],
                         hand_payload["indexY"] - previous[3],
                     ])))
                     if index_only:
-                        index_alpha = 0.38 if index_motion < 0.006 else (0.58 if index_motion < 0.018 else 0.72)
+                        index_alpha = 0.62 if index_motion < 0.004 else (0.82 if index_motion < 0.014 else 0.92)
                     else:
-                        index_alpha = 0.68
+                        index_alpha = 0.84
                     smoothed = (
                         previous[0] * (1.0 - pinch_alpha) + hand_payload["pinchX"] * pinch_alpha,
                         previous[1] * (1.0 - pinch_alpha) + hand_payload["pinchY"] * pinch_alpha,
