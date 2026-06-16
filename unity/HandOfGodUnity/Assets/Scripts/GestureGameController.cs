@@ -370,7 +370,7 @@ namespace HandOfGod.Gameplay
         private Transform tutorialAirflowArrow;
         private float tutorialBridgeStartDistance;
         private float tutorialMirrorStartAngle;
-        private float tutorialMirrorStartYaw;
+        private Quaternion tutorialMirrorStartRotation;
         private bool tutorialMirrorHeld;
         private float tutorialPalmStart = -1f;
         private float twoHandStartDistance;
@@ -486,7 +486,7 @@ namespace HandOfGod.Gameplay
         private Material level4SouthMaterial;
         private int level4MagnetPolarity;
         private float level4RotateStartAngle;
-        private float level4MirrorStartYaw;
+        private Quaternion level4MirrorStartRotation;
         private bool level4MirrorHeld;
         private bool level4LightSolved;
         private bool level4BackstopRaised;
@@ -1856,7 +1856,7 @@ namespace HandOfGod.Gameplay
             tutorialBridgeStartDistance = 0f;
             tutorialMirrorHeld = false;
             tutorialMirrorStartAngle = 0f;
-            tutorialMirrorStartYaw = 0f;
+            tutorialMirrorStartRotation = Quaternion.identity;
             ResetTutorialMagnetFlipGesture();
             ResetTwoHandPinchGrace();
             twoHandStartDistance = 0f;
@@ -3431,17 +3431,15 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
-            var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX) * Mathf.Rad2Deg;
+            var angle = ContinuousTwoHandAngleRadians(a, b, tutorialMirrorStartAngle, tutorialMirrorHeld);
             if (!tutorialMirrorHeld)
             {
                 tutorialMirrorHeld = true;
                 tutorialMirrorStartAngle = angle;
-                tutorialMirrorStartYaw = NormalizeYaw(tutorialMirrorProp.eulerAngles.y);
+                tutorialMirrorStartRotation = YawOnly(tutorialMirrorProp.rotation);
             }
 
-            var delta = Mathf.DeltaAngle(tutorialMirrorStartAngle, angle);
-            var yaw = Mathf.Clamp(tutorialMirrorStartYaw + delta, -60f, 60f);
-            tutorialMirrorProp.rotation = Quaternion.Euler(0f, yaw, 0f);
+            tutorialMirrorProp.rotation = TwoHandDeltaYawRotation(tutorialMirrorStartRotation, tutorialMirrorStartAngle, angle, -60f, 60f, out var yaw);
             var targetPosition = new Vector3(1.22f, 0.42f, 0.52f);
             var aligned = Mathf.Abs(Mathf.DeltaAngle(yaw, Level4MirrorTargetYaw)) < 10f;
             var reflectedEnd = aligned ? targetPosition : tutorialMirrorProp.position + Quaternion.Euler(0f, yaw, 0f) * Vector3.right * 1.70f;
@@ -5686,7 +5684,7 @@ namespace HandOfGod.Gameplay
             level4Mirror = mirrorObject.transform;
             level4MirrorRenderer = mirrorObject.GetComponent<Renderer>();
             CreateTorus("level4 mirror pivot ring", level4Mirror.position + new Vector3(0f, -0.31f, 0f), 0.36f, 0.024f, tealGlow, levelRoot);
-            level4MirrorStartYaw = level4Mirror.eulerAngles.y;
+            level4MirrorStartRotation = YawOnly(level4Mirror.rotation);
 
             level4LightGate = CreateLevel2Gate("level4 light energy gate", new Vector3(Level4LightGateX, Level4RoadY(Level4LightGateX) + 0.66f, 0f), 1.92f);
             level4DoorRenderer = level4LightGate.transform.Find("level4 light energy gate cyan lock core")?.GetComponent<Renderer>();
@@ -5871,19 +5869,17 @@ namespace HandOfGod.Gameplay
                 return;
             }
 
-            if (level4Stage == Level4Stage.LightGuide && TryGetTwoPinchingHands(out var a, out var b))
+            if (level4Stage == Level4Stage.LightGuide && level4Mirror != null && TryGetTwoPinchingHands(out var a, out var b))
             {
-                var angle = Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX) * Mathf.Rad2Deg;
+                var angle = ContinuousTwoHandAngleRadians(a, b, level4RotateStartAngle, level4MirrorHeld);
                 if (!level4MirrorHeld)
                 {
                     level4MirrorHeld = true;
                     level4RotateStartAngle = angle;
-                    level4MirrorStartYaw = NormalizeYaw(level4Mirror.eulerAngles.y);
+                    level4MirrorStartRotation = YawOnly(level4Mirror.rotation);
                 }
 
-                var delta = Mathf.DeltaAngle(level4RotateStartAngle, angle);
-                var yaw = Mathf.Clamp(level4MirrorStartYaw + delta, -68f, 68f);
-                level4Mirror.rotation = Quaternion.Euler(0f, yaw, 0f);
+                level4Mirror.rotation = TwoHandDeltaYawRotation(level4MirrorStartRotation, level4RotateStartAngle, angle, -68f, 68f, out _);
                 if (level4MirrorRenderer != null) level4MirrorRenderer.sharedMaterial = boxHeldMaterial;
             }
             else
@@ -6090,6 +6086,35 @@ namespace HandOfGod.Gameplay
         private static float NormalizeYaw(float yaw)
         {
             return Mathf.DeltaAngle(0f, yaw);
+        }
+
+        private static float TwoHandPinchAngleRadians(GestureHandFrame a, GestureHandFrame b)
+        {
+            return Mathf.Atan2(b.pinchY - a.pinchY, b.pinchX - a.pinchX);
+        }
+
+        private static float ContinuousTwoHandAngleRadians(GestureHandFrame a, GestureHandFrame b, float referenceAngleRadians, bool hasReference)
+        {
+            var angle = TwoHandPinchAngleRadians(a, b);
+            if (!hasReference)
+            {
+                return angle;
+            }
+
+            var referenceDegrees = referenceAngleRadians * Mathf.Rad2Deg;
+            var angleDegrees = angle * Mathf.Rad2Deg;
+            var flippedDegrees = angleDegrees + 180f;
+            return Mathf.Abs(Mathf.DeltaAngle(referenceDegrees, flippedDegrees)) < Mathf.Abs(Mathf.DeltaAngle(referenceDegrees, angleDegrees))
+                ? angle + Mathf.PI
+                : angle;
+        }
+
+        private static Quaternion TwoHandDeltaYawRotation(Quaternion startRotation, float startAngleRadians, float currentAngleRadians, float minYaw, float maxYaw, out float yaw)
+        {
+            var deltaDegrees = Mathf.DeltaAngle(startAngleRadians * Mathf.Rad2Deg, currentAngleRadians * Mathf.Rad2Deg);
+            var candidate = startRotation * Quaternion.Euler(0f, deltaDegrees, 0f);
+            yaw = Mathf.Clamp(NormalizeYaw(candidate.eulerAngles.y), minYaw, maxYaw);
+            return Quaternion.Euler(0f, yaw, 0f);
         }
 
         private static float Level4RoadY(float x)
@@ -7233,7 +7258,7 @@ namespace HandOfGod.Gameplay
             level4MagnetBackstop = null;
             level4MagnetPolarity = 0;
             level4RotateStartAngle = 0f;
-            level4MirrorStartYaw = 0f;
+            level4MirrorStartRotation = Quaternion.identity;
             level4MirrorHeld = false;
             level4LightSolved = false;
             level4BackstopRaised = false;
