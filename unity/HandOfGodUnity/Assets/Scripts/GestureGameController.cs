@@ -143,9 +143,6 @@ namespace HandOfGod.Gameplay
         private const float Level1RoadCenterY = 1f;
         private const float Level1RoadAngleDegrees = -8f;
         private const float Level1RotateBridgeStartYaw = 90f;
-        private const float MechanismGatePhysicalThickness = 0.46f;
-        private const float MechanismGateVisualDepth = 0.18f;
-        private const float MechanismGateColliderHeight = 1.26f;
         private const float TutorialDrawConfirmSeconds = 1f;
         private const float Level3RoadAngleDegrees = -4.2f;
         private const float Level3RoadBaseY = 0.28f;
@@ -4097,16 +4094,16 @@ namespace HandOfGod.Gameplay
             gateRoot.transform.SetPositionAndRotation(new Vector3(x, RoadY(x) + 0.66f, 0f), Quaternion.Euler(0f, 0f, Level1RoadAngleDegrees));
             var collider = gateRoot.AddComponent<BoxCollider>();
             collider.center = Vector3.zero;
-            collider.size = new Vector3(MechanismGatePhysicalThickness, MechanismGateColliderHeight, 1.92f);
+            collider.size = new Vector3(0.18f, 1.12f, 1.82f);
 
             for (var i = 0; i < 6; i++)
             {
                 var z = Mathf.Lerp(-0.68f, 0.68f, i / 5f);
-                CreateBox($"{name} dungeon bar {i}", gateRoot.transform.TransformPoint(new Vector3(0f, 0.02f, z)), new Vector3(MechanismGateVisualDepth, 0.84f, 0.055f), level2WallMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
+                CreateBox($"{name} dungeon bar {i}", gateRoot.transform.TransformPoint(new Vector3(0f, 0.02f, z)), new Vector3(0.10f, 0.84f, 0.045f), level2WallMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
             }
             CreateBox(name + " cyan lock core", gateRoot.transform.TransformPoint(new Vector3(0f, 0.08f, 0f)), new Vector3(0.13f, 0.22f, 0.22f), level2PortalCoreMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
-            CreateBox(name + " brass lintel", gateRoot.transform.TransformPoint(new Vector3(0f, 0.36f, 0f)), new Vector3(MechanismGateVisualDepth, 0.08f, 1.92f), level2TrimMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
-            CreateBox(name + " brass lower rail", gateRoot.transform.TransformPoint(new Vector3(0f, -0.28f, 0f)), new Vector3(MechanismGateVisualDepth, 0.08f, 1.92f), level2TrimMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
+            CreateBox(name + " brass lintel", gateRoot.transform.TransformPoint(new Vector3(0f, 0.36f, 0f)), new Vector3(0.16f, 0.08f, 1.82f), level2TrimMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
+            CreateBox(name + " brass lower rail", gateRoot.transform.TransformPoint(new Vector3(0f, -0.28f, 0f)), new Vector3(0.16f, 0.08f, 1.82f), level2TrimMaterial, gateRoot.transform, gateRoot.transform.rotation, false);
             return gateRoot;
         }
 
@@ -4998,16 +4995,16 @@ namespace HandOfGod.Gameplay
             gateRoot.transform.position = position;
             var collider = gateRoot.AddComponent<BoxCollider>();
             collider.center = Vector3.zero;
-            collider.size = new Vector3(MechanismGatePhysicalThickness, MechanismGateColliderHeight, width + 0.10f);
+            collider.size = new Vector3(0.18f, 1.18f, width);
 
             for (var i = 0; i < 7; i++)
             {
                 var z = Mathf.Lerp(-width * 0.40f, width * 0.40f, i / 6f);
-                CreateBox($"{name} metal bar {i}", position + new Vector3(0f, 0.02f, z), new Vector3(MechanismGateVisualDepth, 0.86f, 0.055f), level2WallMaterial, gateRoot.transform, Quaternion.identity, false);
+                CreateBox($"{name} metal bar {i}", position + new Vector3(0f, 0.02f, z), new Vector3(0.10f, 0.86f, 0.045f), level2WallMaterial, gateRoot.transform, Quaternion.identity, false);
             }
             CreateBox(name + " cyan lock core", position + new Vector3(0f, 0.08f, 0f), new Vector3(0.13f, 0.22f, 0.22f), level2PortalCoreMaterial, gateRoot.transform, Quaternion.identity, false);
-            CreateBox(name + " glow lintel", position + new Vector3(0f, 0.36f, 0f), new Vector3(MechanismGateVisualDepth, 0.08f, width), level2TrimMaterial, gateRoot.transform, Quaternion.identity, false);
-            CreateBox(name + " lower rail", position + new Vector3(0f, -0.28f, 0f), new Vector3(MechanismGateVisualDepth, 0.08f, width), level2TrimMaterial, gateRoot.transform, Quaternion.identity, false);
+            CreateBox(name + " glow lintel", position + new Vector3(0f, 0.36f, 0f), new Vector3(0.16f, 0.08f, width), level2TrimMaterial, gateRoot.transform, Quaternion.identity, false);
+            CreateBox(name + " lower rail", position + new Vector3(0f, -0.28f, 0f), new Vector3(0.16f, 0.08f, width), level2TrimMaterial, gateRoot.transform, Quaternion.identity, false);
             return gateRoot;
         }
 
