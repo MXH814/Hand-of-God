@@ -3,6 +3,7 @@ dist/
 .vite/
 .cache/
 .DS_Store
+*.lnk
 *.log
 coverage/
 tmp/
