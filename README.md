@@ -84,7 +84,7 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 - 鼠标点击：所有 UI 按钮仍可用鼠标触发。
 - 校准面板会在识别到手后显示桥接端 FPS、单帧处理耗时、实际采集分辨率、实际采集 FPS、FOURCC、手势帧龄、Unity 接收龄和显示骨架模式，方便判断摄像头、MediaPipe 与 Unity 显示链路是否处于低延迟状态。
 
-校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path`、`Level 2: Portals` 或 `Level 3: Creation & Erasure`；在关卡中选择当前关卡会重新开始该关。
+校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path`、`Level 2: Portals`、`Level 3: Creation & Erasure` 或 `Level 4: Mirror & Magnet`；在关卡中选择当前关卡会重新开始该关。Level 0 到 Level 4 运行期间顶部全局区域会常驻 `Restart`，可在任意时刻立即重开当前关。
 
 ## 手势与交互
 
@@ -599,7 +599,7 @@ cd "unity\gesture_bridge"
 
 - 张掌保持和捏合保持均可完成校准。
 - `Start / Retry Camera` 可重新启动桥接。
-- `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Next: Level 3`、`Restart`、`Tutorial` 都可用食指悬停触发。
+- `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Next: Level 3`、`Restart`、`Tutorial` 都可用食指悬停触发；`Restart` 在 Level 0 到 Level 4 运行期间始终可用，不需要等到通关后。
 - 校准完成后的左侧 `Level Select` 可随时选择 Level 0、Level 1、Level 2、Level 3、Level 4。
 - 第 0 关左侧 `Tutorial Steps` 可随时选择任意教学步骤。
 - 按钮尺寸和位置适合手势悬停，不需要把手移动到屏幕极边缘。

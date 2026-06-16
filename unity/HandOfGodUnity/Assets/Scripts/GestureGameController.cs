@@ -894,8 +894,22 @@ namespace HandOfGod.Gameplay
             DrawUtilityButton("global-exit", "Exit", exitRect, SafeDwellSeconds, QuitGame);
             if (mode != GameMode.CalibrationOpen && mode != GameMode.CalibrationPinch)
             {
-                DrawUtilityButton("global-recalibrate", "Calibrate", new Rect(exitRect.xMax + 18, exitRect.y, 132, 46), MenuDwellSeconds, ResetToCalibration);
+                var calibrateRect = new Rect(exitRect.xMax + 18, exitRect.y, 132, 46);
+                DrawUtilityButton("global-recalibrate", "Calibrate", calibrateRect, MenuDwellSeconds, ResetToCalibration);
+                if (IsActiveLevelMode(mode))
+                {
+                    DrawUtilityButton("global-restart", "Restart", new Rect(calibrateRect.xMax + 18, exitRect.y, 132, 46), MenuDwellSeconds, () => StartLevel(mode));
+                }
             }
+        }
+
+        private static bool IsActiveLevelMode(GameMode gameMode)
+        {
+            return gameMode == GameMode.Level0
+                || gameMode == GameMode.Level1
+                || gameMode == GameMode.Level2
+                || gameMode == GameMode.Level3
+                || gameMode == GameMode.Level4;
         }
 
         private void DrawLevelSelectSidebar()
