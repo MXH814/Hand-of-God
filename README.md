@@ -1,701 +1,38 @@
 # Hand of God
 
-**Hand of God** 是同济大学用户交互技术 HCI 期末项目。项目以“无需鼠标键盘，直接用手操控物理世界”为核心体验：玩家在 Unity 游戏窗口中看到实时摄像头画面和 21 点手部骨架，通过捏合、双手旋转、双手拉合、张掌悬停、气流指向等手势完成校准、教学和机关解谜关卡。
-
-项目由 Unity 游戏端和 Python MediaPipe 手势桥接端组成。Python 负责摄像头采集、MediaPipe Hands 识别和数据平滑；Unity 负责摄像头画面显示、手骨架叠加、校准流程、教学关、关卡机关、物理小球、UI 和桥接进程生命周期管理。
-
-## 项目信息
-
-- 游戏名称：`Hand of God`
-- Unity 工程：`unity/HandOfGodUnity`
-- 手势桥接：`unity/gesture_bridge`
-- Unity 版本：Unity 6.4，项目使用 `E:\Unity\Hub\Editor\6000.4.10f1`
-- Python 运行环境：`E:\Unity\HandOfGodGestureBridge\.venv`
-- 仓库：`MXH814/hci-gesture-game`
-- 主分支：`main`
-- 支持平台：Windows
-
-## 核心功能
-
-- Unity 启动后自动进入校准界面，并自动尝试启动隐藏的 Python 摄像头桥接。
-- 摄像头画面以内嵌背景形式显示在 Unity 窗口中，不打开独立 OpenCV 预览窗口。
-- 屏幕最前景实时显示 MediaPipe Hands 的 21 点手骨架。
-- 支持最多两只手，并保留 `Left` / `Right` handedness、识别置信度和手势特征。
-- 校准界面只显示摄像头背景、手骨架和清晰提示，避免地图物体干扰。
-- 所有主要 UI 按钮支持左右手食指独立悬停选择，同时保留鼠标点击兜底。
-- 左上方 `Exit` / `Calibrate` 按钮放大并向屏幕内侧移动，降低边缘手势抖动和误触。
-- 校准完成后，左侧常驻 `Level Select` 选关栏，可随时进入或重进 Level 0、Level 1、Level 2、Level 3、Level 4。
-- `Start / Retry Camera` 可在自动桥接失败时手动重试。
-- Python 桥接使用本地锁端口 `5007` 保证单实例运行。
-- Unity 退出时会关闭由 Unity 启动的桥接进程，释放摄像头。
-- 第 0 关提供完整手势教学，新增手势都会在教学关中练习或在正式关卡中给出 HUD 提示。
-- 第 1 关提供分段机关解谜路线，使用清障、合桥、旋转空中桥和张掌激活终点等机关。
-- 第 2 关提供传送门与气流机关路线，使用钥匙放置、传送门激活和气流方向控制。
-- 第 3 关 `Creation & Erasure` 提供绘制创造、物体摆放、深交叉消除锁块和侧向滑桥机关。
-- 第 4 关 `Mirror & Magnet` 提供镜面光路和磁力极性机关，光束使用透明有色细柱表现。
-- 小球到达终点后立即停止并隐藏，显示醒目的 `PASS`。
-- 小球掉落或离开安全路径后重置当前关卡机关状态。
-
-## 运行方式
-
-先构建 Windows 可执行文件：
-
-```powershell
-.\Build-HandOfGod.bat
-```
-
-构建成功后，通过根目录启动脚本运行：
-
-```text
-Play-HandOfGod.bat
-```
-
-也可以双击桌面快捷方式：
-
-```text
-Hand of God
-```
-
-启动脚本会准备 Python 环境和依赖，然后运行：
-
-```text
-unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
-```
-
-第一次运行时会在英文路径 `E:\Unity\HandOfGodGestureBridge\.venv` 创建 Python 虚拟环境并安装依赖，耗时可能较长。该路径用于规避 MediaPipe 原生模型资源在中文路径下加载不稳定的问题；Unity 项目本身仍保留在当前中文目录中。
-
-## 本机路径配置
-
-根目录下的两个 `.bat` 脚本包含本机路径配置。如果 Unity 或桥接虚拟环境保存在不同位置，需要先用文本编辑器修改脚本顶部的变量。
-
-`Build-HandOfGod.bat`：
-
-```bat
-set "UNITY_EXE=E:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com"
-set "LOG=E:\Unity\hand-of-god-build.log"
-```
-
-- `UNITY_EXE` 必须指向当前电脑 Unity 6.4 Editor 目录下的 `Unity.com`。如果 Unity Hub 安装在其他盘，常见路径类似 `D:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com` 或 `C:\Program Files\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com`。
-- `LOG` 是构建日志输出位置，可以改到任意英文路径或可写目录。
-- `UNITY_PROJECT` 会自动使用仓库内的 `unity\HandOfGodUnity`，通常不需要修改。
-
-`Play-HandOfGod.bat`：
-
-```bat
-set "BRIDGE_RUNTIME=E:\Unity\HandOfGodGestureBridge"
-```
-
-- `BRIDGE_RUNTIME` 是 Python MediaPipe 桥接虚拟环境所在目录，脚本会在其下创建 `.venv`。
-- 建议继续使用纯英文路径，例如 `D:\Unity\HandOfGodGestureBridge`，避免 MediaPipe 原生资源在中文路径下加载不稳定。
-- 如果改了 `BRIDGE_RUNTIME`，第一次运行会重新创建虚拟环境并按 `unity\gesture_bridge\requirements.txt` 安装依赖。
-
-## 启动与校准流程
-
-1. 启动 Unity 游戏。
-2. Unity 自动进入校准界面。
-3. Unity 自动尝试隐藏启动 Python MediaPipe 桥接。
-4. 摄像头画面显示在 Unity 背景层。
-5. 前景显示实时 21 点手骨架和左右手标签。
-6. 玩家张开手掌保持约 1 秒。
-7. 玩家用拇指和食指捏合保持约 1 秒。
-8. Unity 根据校准结果生成本次游戏的捏合阈值。
-9. 校准完成后直接进入第 0 关教学。
-
-校准阶段提供这些兜底能力：
-
-- `Start / Retry Camera`：重新启动摄像头桥接。
-- `Skip Calibration`：食指悬停跳过校准，用于课堂展示或无摄像头环境。
-- `Exit`：退出游戏。
-- 鼠标点击：所有 UI 按钮仍可用鼠标触发。
-- 校准面板会在识别到手后显示桥接端 FPS、单帧处理耗时、实际采集分辨率、实际采集 FPS、FOURCC、手势帧龄、Unity 接收龄和显示骨架模式，方便判断摄像头、MediaPipe 与 Unity 显示链路是否处于低延迟状态。
-
-校准完成后，游戏界面左侧会显示 `Level Select` 选关栏。玩家可以用食指悬停直接进入 `Level 0: Tutorial`、`Level 1: Moving Path`、`Level 2: Portals`、`Level 3: Creation & Erasure` 或 `Level 4: Mirror & Magnet`；在关卡中选择当前关卡会重新开始该关。Level 0 到 Level 4 运行期间顶部全局区域会常驻 `Restart`，可在任意时刻立即重开当前关。
-
-## 手势与交互
-
-| 手势 | 用途 | 实现要点 |
-| --- | --- | --- |
-| 食指悬停 | 选择 UI 按钮 | 使用食指尖屏幕坐标命中按钮区域，保持约 `0.85s` 后触发；手指离开即清空进度 |
-| 张掌保持 | 校准、激活神印按钮 | Python 根据五指伸展状态判断 open palm；Unity 检测手掌是否位于目标区域并保持指定时长 |
-| 单手捏合 | 拖动物块、木箱、传送门钥匙 | Python 输出 pinch 状态和 pinch center；Unity 将 pinch center 映射到世界平面并移动目标物体 |
-| 双手捏合旋转 | 旋转教学物体、旋转空中桥 | Unity 计算两只手 pinch center 连线角度变化，将角度增量映射为物体或机关的 Y 轴旋转 |
-| 双手捏合拉合 | 合拢桥板机关 | Unity 记录双手初始距离，检测距离缩短比例并驱动桥板向中心吸附 |
-| 双手食指中指并拢 | 教学地图旋转和缩放 | Python 输出 index/middle landmarks；Unity 检测每只手 index 和 middle 距离，双手同时满足后进入地图控制 |
-| 气流指向手势 | 第 0 关教学、第 2 关临时产生气流 | 单手食指和中指并拢、拇指伸出、无名指和小指收起；Unity 用食指相对手腕的 X 方向判断左风或右风，手势消失后气流关闭 |
-
-捏合与悬停均使用阈值范围判断，不要求指尖完全重合。捏合状态带有迟滞逻辑：进入捏合使用较小阈值，保持捏合使用较大阈值；Unity 优先使用 Python 输出的稳定 `pinch` 状态，并为双手捏合旋转、拉合等连续操作保留短暂双手 grace，减少临界点抖动或单帧丢手导致的频繁断开。
-
-## 关卡设计
-
-### Level 0: Gesture Tutorial
-
-第 0 关是完整教学关，目标是让玩家在进入正式关卡前理解核心手势。教学提示显示在画面中上方，成功后显示醒目的 `SUCCESS`，玩家再通过大号 `Continue` 按钮进入下一步；最后一个教学步骤完成后直接显示 `Next: Level 1`。左侧提供 `Tutorial Steps` 菜单，玩家可以随时跳转到任意教学步骤重新练习。
-
-关卡类型：手势教学与交互练习。
-
-核心规则：
-
-- 教学关地板比正式关前的旧练习台更大，留出更宽的手势活动空间。
-- 每个教学步骤只显示当前步骤需要的道具，避免无关物体干扰识别和理解。
-- 单手拖动和双手旋转步骤显示中心物块，并保留 `Cube`、`Sphere`、`Cylinder` 形状切换。
-- 拉合步骤只显示教学桥板；张掌步骤只显示发光神印；地图控制步骤只保留可旋转、缩放的练习地板。
-- 气流步骤直接使用第 2 关同款中央气流走廊地板、格栅、青色箭头、雾带、流线和粒子风效，并放置在教学地板中央。
-- 教学完成后不再进入额外的自由操作页，玩家可通过左侧步骤菜单选择任意教学项，或通过 `Next: Level 1` 进入正式关卡。
-
-教学步骤：
-
-| 步骤 | 教学目标 | 成功条件 |
-| --- | --- | --- |
-| 1/9 Move your hands freely | 随意移动双手，观察屏幕上的识别效果 | Unity 同时识别到左右手 |
-| 2/9 Pinch an object with one hand and drag it | 单手拇指和食指捏合拖动物体 | 物体被拖动超过指定距离 |
-| 3/9 Pinch both sides and rotate the object | 双手捏住物体两侧并像真实物体一样旋转 | 物体旋转超过指定角度 |
-| 4/9 Join a bridge with both hands | 双手捏住桥板两端并向内拉合 | 双手距离缩短到阈值，桥板锁定 |
-| 5/9 Open your palm over the glowing seal | 张开手掌悬停在发光神印上 | 神印区域内张掌保持到指定时长 |
-| 6/9 Bring index and middle fingers together on both hands | 双手食指中指并拢控制地图 | 地图旋转或缩放超过指定变化量 |
-| 7/9 Point the airflow with one hand | 单手拇指伸出、食指中指并拢、无名指小指收起，向左或向右指示气流 | 第 2 关同款气流区显示 `LEFT` 或 `RIGHT` 风效反馈；手势消失后风效关闭 |
-| 8/9 Draw a new object | 左右食指指尖重合 1 秒确认开始；开始后只记录右手食指轨迹，左手移动不会结束绘制；右手握拳 1 秒取消；绘制后左右食指再次重合 1 秒确认结束 | 轨迹闭合后识别圆形、矩形或三角形；圆形生成近似半径的球体；矩形生成近似长宽并跟随绘制方向的立方体；三角形生成近似底面和高度的三棱锥；成功后仍可继续绘制任意数量物体，无法识别则提示并取消 |
-| 9/9 Erase a drawn object | 双手食指深交叉选中已创建物体；目标命中后物体变为高亮材质 | 深交叉姿态保持 1 秒完成确认，只消除当前高亮物体；未命中或松开手势会重置进度 |
-
-第 8、9 步绘制与消除细节：
-
-- 绘制开始和结束都使用左右食指指尖重合确认，确认期间显示进度条，避免单帧误触。
-- 绘制轨迹只使用右手食指点，按屏幕射线投射到固定世界平面后采样；短距离抖动不会产生新采样点。
-- 图形识别要求轨迹闭合，并根据路径长度、包围尺寸、折线简化、边缘拟合、半径误差和长宽比区分圆形、矩形和三角形。
-- 绘制成功后，创造物加入可操作列表；教程绘制关不会锁定绘制入口，玩家可以继续创建任意数量物体；单手捏合可拖动，双手捏合可绕 Y 轴旋转。
-- 消除使用同一套可操作列表，只对当前交叉食指命中的最近物体生效；确认完成后从列表和场景中删除该物体。
-
-教学关中的交互反馈：
-
-- 可操作物体接近手势点时高亮。
-- 抓取、旋转、桥板合拢和神印激活时使用高亮材质。
-- 第 0 关左侧 `Tutorial Steps` 可随时选择任意教学步骤。
-- 成功提示使用更大的固定字号、暖色高亮和脉冲式视觉反馈；`SUCCESS`、`TUTORIAL COMPLETE` 和 `PASS` 只做颜色/光晕闪烁，文字始终保持横向稳定显示。
-- `Continue` 和 `Next: Level 1` 按钮尺寸和字体都较大，位于成功提示下方，便于手势悬停选择。
-
-### Level 1: Trial of the Moving Path
-
-第 1 关是分段机关解谜关。玩家需要逐段完成机关，小球才会被放行进入下一段。画面中上方显示当前目标，机关完成后出现 `SUCCESS`，并打开对应挡门。关卡整体使用第 2 关同款地牢地板、金属边框、青色能量和终点祭坛视觉。
-
-关卡类型：分段放行的物理机关解谜。
-
-胜利条件：
-
-- 完成四段机关。
-- 让小球沿倾斜道路进入终点祭坛。
-- 到达终点后小球停止并隐藏，显示 `PASS`。
-
-失败条件：
-
-- 小球掉落到安全高度以下。
-- 失败后重置小球、木箱、桥、旋转空中桥、神印按钮和所有挡门。
-
-关卡结构：
-
-| 分段 | 名称 | 机关 | 使用手势 | 目标 |
-| --- | --- | --- | --- | --- |
-| Segment 1 | 清障区 | 木箱、侧槽、起点门 | 单手捏合拖动 | 把木箱拖入发光侧槽，打开起点门 |
-| Segment 2 | 断桥区 | 两块分离桥板、第二道门 | 双手捏合拉合 | 捏住桥板两端向内合拢，桥板锁定后开门 |
-| Segment 3 | 旋转空中桥区 | 横在空隙中央的简单窄板桥、第三道门 | 双手捏合旋转 | 将窄板桥旋转 90 度接上两侧地板，未接好时小球会从空隙掉落 |
-| Segment 4 | 终点按钮区 | 发光神印、终点门、祭坛 | 张掌悬停 | 张掌悬停激活神印，打开终点门 |
-
-第 1 关的设计重点：
-
-- 每一段只开放当前需要解决的机关；未到阶段的机关和已经完成的机关不会继续响应手势，降低玩家猜测成本。
-- 挡门控制小球节奏，避免玩家还未理解机关时小球提前滚入复杂区域。
-- 当前可操作机关使用 hover/held 高亮，反馈风格与教学关保持一致。
-- 路径两侧不再使用长墙或高护栏，避免木箱进入侧槽时出现穿墙视觉问题。
-- 断桥初始缝隙明显大于小球直径，拉合后吸附成连续通路。
-- 旋转机关是横在空隙中央的简单窄板桥，初始与道路垂直；玩家旋转 90 度接上两侧地板后才会放行小球。
-- 窄板桥使用单个 Unity primitive 盒体实现，不叠加 Kenney 地板模型，避免视觉上变成大面积平台。
-- 窄板桥桥面高度与左右道路顶面基本平齐，并略低一点点，减少小球在桥头被碰撞边缘卡住的概率。
-- 空中桥左侧地板加长，给玩家观察和操作的反应时间；桥两侧空隙明显宽于小球，桥未接好时小球会自然掉落。
-- 终点复用第 2 关终点祭坛视觉。
-- 双手旋转方向与真实手势方向一致。
-- 双手捏合旋转物体不再缩放物体，缩放只用于地图控制手势。
-- 小球物理由 Unity Rigidbody 驱动，并限制最大速度，保证通关过程可读。
-
-### Level 2: Portals & Airflow
-
-第 2 关是传送门与气流机关关。它使用独立的 `Level02.unity` 场景资源和 Kenney 模块化地牢素材搭建美术空间，关卡目标为“激活传送门，再保持气流手势产生风，让气流把小球送到终点”。玩家可以从主菜单选择 `Level 2: Portals & Airflow`，也可以在第 1 关通关后的 `PASS` 界面悬停 `Next: Level 2` 进入；在 Unity Editor 中直接打开 `Level02.unity` 时会自动进入第二关，便于单独调试美术和机关。
-
-关卡类型：传送门触发 + 方向控制 + 物理推动。
-
-胜利条件：
-
-- 将传送门钥匙放到发光锁座插槽上。
-- 激活传送门，使小球从左侧 Portal A 传送到右侧 Portal B。
-- 保持气流指向手势产生向右的风。
-- 气流带只在手势保持期间推动小球穿过最后挡门并进入终点。
-
-失败条件：
-
-- 小球掉落到安全高度以下。
-- 失败后重新构建第 2 关，传送门、钥匙、气流方向、挡门和小球回到初始状态。
-
-核心物体：
-
-- `Portal Key`：可单手捏合拖动的低模钥匙，使用 OpenGameArt CC0 FBX 模型导入，初始位于左上侧。
-- `key socket`：钥匙目标机关，位于平台左侧上方区域；由石质锁座、暗色插槽、黄铜护边和发光锁芯组成。
-- `portal A`：小球初始传送门，位于左侧。
-- `portal B`：传送后的落点，位于中右侧。
-- `air belt`：与加长中央气流走廊地面等长的不可见触发器 + 可见气流 VFX，使用 Kenney Particle Pack 的透明粒子贴图制作青色雾带、细流线和方向反馈；内部触发区负责对小球施加水平加速度。
-- `level2 gate`：传送门前铁栅门，传送成功后打开。
-- `level2 gate2`：气流带到终点之间的铁栅门，保持右风手势时打开。
-- `Goal Trigger`：右侧终点祭坛。
-
-第二关美术：
-
-- 场景拆分为左侧传送平台、中央气流廊和右侧祭坛平台，整体保持开阔俯视视野。
-- 石板、边框和机关细节使用 Kenney `Modular Dungeon Kit` 的 FBX 模型与项目材质风格，放在 `Assets/Resources/KenneyDungeon/`，运行时通过 `Resources.Load` 加载。
-- 传送门钥匙使用 OpenGameArt `Key - low poly` FBX 模型，放在 `Assets/Resources/OpenGameArt/LowPolyKey/`；Unity 只负责归一化尺寸、材质高亮和交互 collider。
-- 气流与传送门漩涡使用 Kenney `Particle Pack` 透明 PNG 贴图，放在 `Assets/Resources/KenneyParticles/`；Unity 通过透明材质、quad 和 particle renderer 组合成动态 VFX。
-- Unity 程序化几何只保留用于物理 collider、钥匙插座、传送门光圈、地面风向标记和必要机关结构。
-- 中央气流走廊地面、气流触发区和气流 VFX 使用同一长度，保证玩家看到的风区和真实物理受力范围一致。
-- 气流走廊地面包含通风格栅与青色箭头纹，提示玩家这里是风机关区域。
-- 气流带关闭时不显示实体碰撞盒；玩家保持有效气流手势时显示覆盖整段气流走廊的青色雾带、流线和方向提示，手势消失后风效和物理风同时关闭。
-- `LevelSceneGenerator.CaptureLevel02Preview` 会生成第二关气流开启状态预览图，输出到 `unity/HandOfGodUnity/Preview/Level02Preview.png`。
-
-关卡结构：
-
-| 分段 | 名称 | 机关 | 使用手势 | 目标 |
-| --- | --- | --- | --- | --- |
-| Segment 1 | 钥匙激活区 | Portal Key、key socket、Portal A/B | 单手捏合拖动 | 捏住钥匙并放到锁座插槽上，激活传送门 |
-| Segment 2 | 传送区 | Portal A、Portal B、第一道挡门 | 锁座触发 | 激活后小球从 Portal A 升起淡出，再从 Portal B 渐显落下，并打开第一道挡门 |
-| Segment 3 | 气流控制区 | Air Belt、第二道挡门 | 气流指向手势 | 拇指伸出、食指中指并拢、无名指小指收起，保持向右指向以产生右风 |
-| Segment 4 | 终点区 | 气流带、终点祭坛 | 物理推动 | 气流推动小球进入终点，显示 `PASS` |
-
-第 2 关的交互细节：
-
-- 钥匙靠近手势点时会整把钥匙显示 hover 高亮；玩家捏合靠近钥匙时会进入抓取。
-- 钥匙有较大的磁吸抓取半径：玩家只要在钥匙附近捏合，钥匙会先吸附到捏合点，再进入拖动状态。
-- 放开钥匙且钥匙位于锁座附近时，钥匙会吸附到插槽上方，锁芯、Portal A 和 Portal B 都变为激活高亮。
-- 传送门激活后，小球会冻结物理，先在 Portal A 上升、缩小并淡出，再在 Portal B 上方渐显、落下；动画结束后恢复 Rigidbody 并清空速度。该传送流程由 Unity 自主更新驱动，不依赖手继续留在屏幕中。
-- 玩家捏着钥匙时如果手部追踪丢失，Unity 会按释放处理，并立即检查钥匙是否已经位于锁座范围内。
-- 气流手势由 `IndexMiddleTogether + thumbExtended + ring/pinky curled + !openPalm` 组成，并带有方向死区和短时间稳定确认，避免张掌或瞬时抖动误触发。
-- 气流只能在传送完成、进入气流阶段后由手势临时产生；钥匙尚未开锁时，风向手势不会改变风带状态。
-- Unity 根据食指尖相对手腕的水平偏移判断风向：向右为通关方向，向左会显示提示要求改为向右。
-- 气流带使用 `AirBeltTrigger`，在小球停留于触发区时以渐进强度施加水平方向加速度，并限制最大水平推速，让玩家有时间修正方向；风向反转时不会瞬移或清零速度，而是通过反向加速度让小球自然减速、掉头。
-- 气流带在关闭时隐藏实体触发器；保持有效气流手势后 Kenney 粒子贴图雾带和流线随风向滚动，HUD 同步显示 `Airflow: OFF / LEFT / RIGHT`。
-- 保持右风手势时，第二道挡门打开，HUD 显示右风提示；左风会显示纠正提示；松开或姿态不满足气流手势时，气流回到 `OFF`，已打开的挡门保持打开，避免突然卡住小球。
-
-### Level 3: Creation & Erasure
-
-第 3 关是创造与消除机关关，放在 Level 1 和 Level 2 之后。第一机关需要玩家分别绘制并创建一个立方体和一个球体，将立方体放到带 cube 标记的平台、球体放到带 sphere 标记的平台；两个平台都匹配后生成第一段桥。第二机关是侧向滑桥：滑桥初始停在道路旁边，中央缺口无法通行；双手食指交叉选中并消除锁块后，滑桥从侧边滑入缺口并锁定为完整道路。整条路线带轻微下坡角度，小球可依靠重力继续滑向终点。
-
-关卡类型：绘制创造 + 物体摆放 + 交叉消除 + 侧向滑桥机关。
-
-绘制与消除规则：
-
-- 第 3 关的绘制、图形识别、物体创建、拖动、旋转和消除全部复用第 0 关第 8、9 步的核心算法。
-- 绘制开始、绘制结束、取消绘制、无效图形提示、可识别形状和生成物体类型与教程关一致。
-- 已创建物体可用单手捏合移动、双手捏合绕 Y 轴旋转，也可用双手食指深交叉选中并保持 1 秒消除。
-- 绘制或消除刚完成后，必须先松开/退出交叉消除姿态，下一次消除才会重新开始计时，避免新建物体被结束手势立即删除。
-- 第一机关完成前，滑桥锁块不会成为可消除目标；只有立方体和球体都放到对应平台并打开前段桥后，第二机关的锁块才响应交叉消除。
-
-胜利条件：
-
-- 绘制并创建一个矩形物体和一个圆形物体，对应生成立方体和球体。
-- 将立方体移动或绕 Y 轴旋转到 cube 平台、球体移动到 sphere 平台，两个平台都匹配后打开前段桥和第一道门。
-- 用双手食指深交叉选中侧向滑桥的锁块，锁块变为高亮材质并显示 1 秒进度条。
-- 确认消除锁块后，滑桥从侧边滑入道路缺口并打开后续挡门。
-- 让小球继续前进到终点祭坛并显示 `PASS`。
-
-失败条件：
-
-- 小球掉落到安全高度以下。
-- 失败后重建 Level 3，已创造物、压力板、滑桥锁块、侧向滑桥、挡门和小球回到初始状态。
-
-关卡结构：
-
-| 阶段 | 名称 | 机关 | 使用手势 | 目标 |
-| --- | --- | --- | --- | --- |
-| Segment 1 | 创造准备区 | 发光压力板、断桥、第一道门 | 绘制创造；单手移动；双手旋转 | 创建一个物体并放到压力板上，补出可通过路径 |
-| Segment 2 | 侧向滑桥区 | 侧边滑桥、可消除锁块、第二道门 | 双手食指深交叉消除 | 高亮选中锁块并保持 1 秒，释放滑桥 |
-| Segment 3 | 终点区 | 终点祭坛 | 物理小球 | 滑桥锁定后让小球到达终点 |
-
-主菜单和左侧 `Level Select` 可直接进入 `Level 3: Creation & Erasure`；Level 2 通关后的 `PASS` 界面会显示 `Next: Level 3`。Level 3 通关后只显示 `Restart` 和 `Tutorial`。
-
-### Level 4: Mirror & Magnet
-
-第 4 关是镜面光路与磁力极性机关关。玩家先用双手捏合旋转侧向镜子，让光源反射出的光束命中发光接收器；光路对准后能量门打开，小球进入磁力轨道。随后玩家使用“拇指伸出、其余手指收起”的磁极手势切换条形磁铁方向，让银色金属球沿轨道继续滚向终点。
-
-关卡类型：光路校准 + 磁力方向控制 + 物理小球通关。
-
-核心规则：
-
-- 双手捏合旋转镜子，镜子使用与普通物体一致的 pinch center 角度增量旋转；角度正确时反射光束由琥珀色变为青色，并打开第一道能量门。
-- 光束使用透明有色细柱绘制，不再使用粒子贴图飘带或烟雾光晕，避免画面出现脏乱光纹。
-- 进入磁力阶段后，拇指向右会把蓝色磁极转到右侧并增强向右吸引，拇指向左会把蓝色磁极转到左侧并产生向左校正。
-- 磁力只在对应阶段影响银色小球；小球通过磁力门后进入终点段。
-- 小球到达终点祭坛后停止并显示 `PASS`。
-
-关卡结构：
-
-| 阶段 | 名称 | 机关 | 使用手势 | 目标 |
-| --- | --- | --- | --- | --- |
-| Segment 1 | 镜面光路区 | 光源、可旋转镜子、接收器、能量门 | 双手捏合旋转 | 调整镜子角度，让反射光束命中接收器 |
-| Segment 2 | 磁力轨道区 | 条形磁铁、磁力轨道、磁力门 | 拇指磁极手势 | 切换磁铁方向，引导银色球通过轨道 |
-| Segment 3 | 终点区 | 终点祭坛 | 物理小球 | 磁力轨道通过后让小球到达终点 |
-
-## 技术架构
-
-```text
-Camera
-  │
-  ▼
-Python MediaPipe Bridge
-  ├─ MediaPipe Hands: 21 点手部 landmarks、handedness、score
-  ├─ Gesture analysis: pinch、open palm、finger extended、palm pose
-  ├─ Smoothing: displayLandmarks / landmarks 同源死区稳定、pinch 迟滞
-  ├─ UDP 5005: gesture JSON
-  └─ TCP 5006: JPEG camera frames
-       │
-       ▼
-Unity HandOfGodUnity
-  ├─ GestureUdpReceiver: 接收并解析手势 JSON
-  ├─ CameraFrameReceiver: 接收 JPEG 并更新摄像头纹理
-  ├─ GestureGameController: 校准、HUD、骨架绘制、关卡逻辑、桥接进程管理
-  ├─ BallController: 小球物理、失败与通关状态
-  ├─ AirBeltTrigger: 第 2 关气流触发区与小球加速度
-  └─ LevelSceneGenerator: batchmode 场景生成入口
-```
-
-## Python 手势桥接
-
-脚本：`unity/gesture_bridge/mediapipe_udp_sender.py`
-
-依赖：`unity/gesture_bridge/requirements.txt`
-
-```text
-mediapipe==0.10.14
-opencv-python
-numpy
-```
-
-桥接功能：
-
-- 使用 OpenCV 采集摄像头。
-- 摄像头采集使用低缓冲设置，并由后台 latest-frame 线程持续读取摄像头；MediaPipe 主循环只处理最新帧，默认请求 `60 FPS`，减少摄像头驱动队列积压造成的手型延迟；如果摄像头不支持会自动回落到驱动实际模式。
-- Windows DirectShow 默认请求 `MJPG` 摄像头格式，降低高分辨率采集时的 USB/驱动带宽压力；日志会输出实际采集到的分辨率、FPS 和 FOURCC，方便判断摄像头是否接受请求。
-- 采集/识别分辨率和 Unity 视频显示分辨率分离：默认请求 `--capture-width 960 --capture-height 540`，在保留手指关节细节的同时降低 MediaPipe 推理延迟，并直接使用摄像头返回的实际帧做识别，避免二次 resize 拉伸手型；Unity 内嵌摄像头画面默认以 `--video-width 640 --video-height 360` 发送。
-- 使用 MediaPipe Hands 最多识别两只手，默认 `model_complexity=1`，优先保证手指关节和骨架形状精度。
-- MediaPipe 默认使用 `detect-every-frame` 模式逐帧检测手部，而不是长时间沿用 ROI tracking，减少快速弯曲手指时第一指节被旧姿态拖慢的现象。
-- 支持镜像画面，保证玩家看到的左右移动符合屏幕直觉。
-- 输出 21 点 landmarks、左右手标签、识别分数、捏合中心、食指尖位置、掌宽、五指伸展、掌心姿态。
-- 通过 UDP `127.0.0.1:5005` 发送手势 JSON。
-- Unity 端 UDP receiver 使用较小 receive buffer，并在每次接收时丢弃积压旧 datagram、只解析最新帧，避免短暂卡顿后继续显示过时手型。
-- 通过 TCP `127.0.0.1:5006` 发送长度前缀 JPEG 摄像头帧；默认 `--video-fps 18`，把摄像头画面帧率和手势 UDP 帧率分离，减少 JPEG 编码、TCP 传输和 Unity `LoadImage` 对实时手型的影响。
-- 使用 TCP 锁端口 `5007` 防止多个桥接实例同时占用摄像头。
-- 默认 headless 运行；只有手动传入 `--preview` 时才显示 OpenCV 调试窗口。
-- 如低配机器帧率不足，可手动传入 `--model-complexity 0` 回退到更快但关节精度较低的模型，或传入 `--track-roi` 使用 MediaPipe ROI tracking 换取更高帧率。
-- 可用 `--camera-fps` 调整摄像头目标帧率，用 `--capture-width` / `--capture-height` 调整 MediaPipe 处理分辨率；如果第一指节仍感觉慢，优先观察校准面板 `frame age`，再尝试 `--capture-width 848 --capture-height 480` 或 `--camera-fps 30` 对比实际摄像头模式。也可用 `--camera-fourcc` 调整 DirectShow 采集格式，用 `--video-width` / `--video-height` / `--video-fps` 调整 Unity 内嵌摄像头画面，或用 `--detection-confidence` / `--tracking-confidence` 调整 MediaPipe 置信度阈值；桥接每 5 秒向 `gesture-bridge-runtime.log` 输出一次 FPS、处理耗时、实际采集格式、视频帧率、模型复杂度和 tracking 模式。
-
-### 手势数据字段
-
-每帧 JSON 包含：
-
-- `handCount`
-- `hands`
-- `timestamp`
-- `pinch`
-- `openPalm`
-- `pinchX`
-- `pinchY`
-- `indexX`
-- `indexY`
-- `pinchDistance`
-- `palmSpan`
-- `palmRoll`
-- `palmPitch`
-- `palmYaw`
-- `confidence`
-- `bridgeFps`
-- `processingMs`
-- `captureWidth`
-- `captureHeight`
-- `captureFps`
-- `captureFourcc`
-- `displayMode`
-
-每只手包含：
-
-- `id`
-- `handedness`
-- `score`
-- `landmarks`
-- `displayLandmarks`
-- `thumbExtended`
-- `indexExtended`
-- `middleExtended`
-- `ringExtended`
-- `pinkyExtended`
-- `pinch`
-- `openPalm`
-- `pinchX`
-- `pinchY`
-- `indexX`
-- `indexY`
-
-## Unity 实现
-
-主要脚本：
-
-- `unity/HandOfGodUnity/Assets/Scripts/GameBootstrap.cs`
-- `unity/HandOfGodUnity/Assets/Scripts/GestureGameController.cs`
-- `unity/HandOfGodUnity/Assets/Scripts/GestureFrame.cs`
-- `unity/HandOfGodUnity/Assets/Scripts/GestureUdpReceiver.cs`
-- `unity/HandOfGodUnity/Assets/Scripts/CameraFrameReceiver.cs`
-- `unity/HandOfGodUnity/Assets/Scripts/BallController.cs`
-- `unity/HandOfGodUnity/Assets/Scripts/AirBeltTrigger.cs`
-- `unity/HandOfGodUnity/Assets/Editor/LevelSceneGenerator.cs`
-
-Unity 端职责：
-
-- 创建相机、灯光、背景摄像头画面平面和关卡根节点。
-- 在 `OnGUI` 中绘制校准、教学、关卡、成功、失败和全局控制 UI。
-- 将摄像头帧作为 Unity 纹理显示在背景层。
-- 绘制 21 点手骨架、骨架连线、左右手标签和手势点。
-- 根据 UDP 手势帧驱动校准状态机。
-- 将 normalized screen coordinates 映射到 Unity 世界平面。
-- 处理单手拖动、双手旋转、双手拉合、张掌悬停、地图旋转缩放、气流方向临时控制。
-- 管理 Python 桥接进程启动、失败提示和退出清理。
-- 生成 Level 0、Level 1 的程序化几何体、材质和机关；生成 Level 2 时额外加载 Kenney 地牢模型、Kenney 粒子贴图和 OpenGameArt 钥匙模型，组合为第二关独立美术场景。
-
-## 算法实现
-
-### Landmark 平滑
-
-Python 对每个 hand id 的每个 landmark 输出同一套稳定后的交互/显示坐标：
-
-- `displayLandmarks`：骨架显示默认使用 `responsive-finger-current-frame`。它以 MediaPipe 当前帧 21 点为主体，只在指尖已经快速移动而 PIP / DIP 中间指节明显落后时，沿指尖运动方向做小幅补偿，再用当前帧骨长软约束避免手指链条明显压缩或拉长；最后经过更强的自适应显示死区压住静止时的高频微抖，让第一指节、指根和指尖更像真实手型同步变化；如需排查可传入 `--raw-display-landmarks` 直出原始点，如需更稳的展示可传入 `--stable-display-landmarks` 启用掌心锚点保形稳定。
-- `landmarks`：控制用 landmarks，供捏合、气流、磁力、绘制等逻辑使用；默认与 `displayLandmarks` 完全同源，Unity 实际操作点、pinch center、食指坐标和屏幕上看到的骨架点保持一致。
-- MediaPipe Hands 默认使用 `model_complexity=1` 和逐帧检测模式，提高弯曲手指、指根和第一指节的姿态精度，减少粗模型或 ROI tracking 造成的骨架形变不自然。
-- Unity UDP 接收器会丢弃 timestamp 倒退的旧手势包，并在校准界面显示 frame age / receive age，避免旧帧回灌造成骨架慢半拍却难以定位。
-
-默认 `displayLandmarks` 由 `ResponsiveFingerDisplayHand` 生成：Unity 绘制骨架时对这套显示点直绘，不再做单个指节限速；Python 仅对“指尖动得很快、中间指节明显没跟上”的帧做有限幅度的 PIP / DIP 补偿，并用当前帧 MCP、PIP、DIP、tip 骨段长度做多轮软约束，避免第一指节慢半拍造成的“折断感”或补偿后骨架明显变形。随后显示层使用基于掌宽的 deadband：目标点在几像素量级内抖动时保持上一显示位置，刚超过死区的小动作低增益跟随，大动作按运动幅度快速跟随。只有在左右两只手的食指线段彼此交叉或非常接近时，Python 才启用交叉专用稳定：先对两根食指 PIP / DIP 做轻量直线修正，再对 PIP、DIP、tip 使用更大的跨帧死区，小幅遮挡抖动会直接保持上一帧稳定位置；单手弯曲、握拳、捏合等普通动作不会触发这层处理。
-
-### 交互坐标稳定
-
-Python 手势分析直接使用稳定后的 `displayLandmarks` 作为 `landmarks`，并由这套点计算 `pinchX`、`pinchY`、`indexX`、`indexY`、手指伸展状态和气流方向。这样静止时的真实操作点不会绕过骨架死区继续高频抖动，玩家看到的手指位置就是拖拽、旋转、悬停命中的实际位置。
-
-`--raw-display-landmarks` 会让显示和交互同时使用 MediaPipe 原始点，方便排查识别原始输出；`--stable-display-landmarks` 会让显示和交互同时使用掌心锚点保形稳定点。Unity 侧在缺少 display landmarks 时仍保留整只手单帧异常位移保护。
-
-### 捏合检测
-
-Python 使用拇指尖与食指尖距离除以掌宽得到归一化 `pinchDistance`。捏合采用迟滞阈值：
-
-- 未捏合时，距离小于 `0.72` 进入捏合。
-- 已捏合时，距离小于 `0.92` 继续保持捏合。
-
-这样可以避免手指处于阈值附近时在捏合和释放之间频繁闪烁。
-
-### 张掌检测
-
-Python 根据五指伸展状态判断 open palm。Unity 进一步要求手掌位于指定机关区域，并保持短时间后才激活机关。捏合状态下会抑制 open palm，避免两种手势互相误判。
-
-### 双手旋转
-
-Unity 读取两只手的 pinch center，计算连线角度：
-
-```text
-angle = atan2(handB.y - handA.y, handB.x - handA.x)
-delta = angle - startAngle
-```
-
-教学物体、旋转空中桥和镜面机关都使用该角度增量驱动旋转方向，使物体旋转方向与玩家双手旋转方向一致。镜面机关额外在 Unity 侧保持双手角度连续性，避免两只手在输入数组中的顺序偶发交换时造成镜子和光束瞬移。
-
-### 双手拉合
-
-Unity 在进入拉合动作时记录两手初始距离：
-
-```text
-startDistance = distance(handA, handB)
-```
-
-随后计算当前距离缩短比例，并用插值驱动桥板向中心移动。当距离缩短到指定比例后，桥板吸附到锁定位置并触发机关完成。
-
-### 地图旋转与缩放
-
-Unity 检测每只手的食指和中指是否并拢。当两只手都满足条件时，记录双手中点、距离和角度：
-
-- 双手整体移动用于平移控制参考。
-- 双手距离变化用于地图缩放。
-- 双手连线角度变化用于地图旋转。
-
-该手势仅用于教学地图控制，不影响物块尺寸。
-
-### 气流方向识别
-
-第 0 关和第 2 关使用同一套气流指向手势。Unity 先检测：
-
-```text
-IndexMiddleTogether(hand)
-thumbExtended == true
-openPalm == false
-ring/pinky curled by landmark geometry
-ringExtended == false && pinkyExtended == false
-```
-
-该判定会显式排除张掌，并要求无名指和小指在 landmarks 上呈弯曲关系。满足后读取食指尖与手腕的水平差值：
-
-```text
-dirX = landmark[8].x - landmark[0].x
-```
-
-- `dirX > 0`：气流方向设为右。
-- `dirX < 0`：气流方向设为左。
-- 未检测到有效气流手势或方向落入死区时，气流方向设为 `OFF`。
-- 右风会打开通往终点的挡门；左风只显示纠正提示。
-- 小于方向死区的水平偏移会被忽略；同一方向需要短暂稳定保持后才正式切换气流方向。
-
-### 气流带物理
-
-`AirBeltTrigger` 是第 2 关的触发器组件。当小球 Rigidbody 停留在气流带触发区内，并且气流方向不是 `0` 时：
-
-- 使用 `ForceMode.Acceleration` 按当前方向持续施加水平力。
-- 推力强度从较低值开始，在约 `1.45s` 内渐进增强，避免小球刚进气流带就被突然吹走。
-- 当风向切换或手势消失时降低气流 ramp 强度但保留小球当前速度，使反向风先抵消惯性再推动掉头；没有有效手势时不再施加风力。
-- 对水平绝对风速做上限控制，保证气流有效但仍留给玩家调整空间。
-
-### 物理小球
-
-`BallController` 使用 Unity Rigidbody：
-
-- 连续动态碰撞检测。
-- 插值渲染。
-- 最大速度限制。
-- 掉落高度检测。
-- 终点半径检测。
-- 通关或失败后停止并隐藏小球。
-
-## 场景生成与构建
-
-Unity 场景由编辑器工具生成：
-
-```powershell
-& "E:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com" -batchmode -quit -projectPath "E:\同济\大二下\用户交互技术HCI\期末项目\unity\HandOfGodUnity" -executeMethod HandOfGod.EditorTools.LevelSceneGenerator.RebuildLevel01
-```
-
-构建 Windows 版本：
-
-```powershell
-.\Build-HandOfGod.bat
-```
-
-生成文件：
-
-```text
-unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
-```
-
-`Level01.unity` 是完整游戏入口场景，启动后包含自动桥接、校准、第 0 关教学、第 1 关、第 2 关、第 3 关和第 4 关入口。仓库中也包含 `Level02.unity`、`Level03.unity` 与 `Level04.unity` 作为正式关卡独立场景资源文件；在 Unity Editor 中直接打开这些关卡场景时会自动进入对应关卡，方便单独检查机关、美术和交互。Windows 构建包含 `Level01.unity`、`Level02.unity`、`Level03.unity` 和 `Level04.unity`，首个启动场景仍是 `Level01.unity`。
-
-## 手动运行桥接
-
-一般情况下不需要手动运行桥接。调试时可使用：
-
-```powershell
-cd "E:\同济\大二下\用户交互技术HCI\期末项目"
-python -m venv "E:\Unity\HandOfGodGestureBridge\.venv"
-& "E:\Unity\HandOfGodGestureBridge\.venv\Scripts\python.exe" -m pip install -r "unity\gesture_bridge\requirements.txt"
-cd "unity\gesture_bridge"
-& "E:\Unity\HandOfGodGestureBridge\.venv\Scripts\python.exe" mediapipe_udp_sender.py --preview
-```
-
-调试窗口快捷键：
-
-- `C`：将当前姿态设为 Python 侧中立姿态。
-- `Q`：退出桥接。
-
-## 验证清单
-
-基础验证：
-
-- `python -m py_compile unity\gesture_bridge\mediapipe_udp_sender.py`
-- `python -m unittest discover -s unity\gesture_bridge\tests`
-- Unity batchmode 重建 `Level01.unity` 无编译错误。
-- `.\Build-HandOfGod.bat` 成功生成 Windows exe。
-- 启动游戏后自动进入校准界面。
-- 摄像头桥接自动启动，画面显示在 Unity 背景层。
-- 不弹出独立摄像头预览窗口。
-- 退出游戏后摄像头释放，无残留 `mediapipe_udp_sender.py` 进程。
-
-校准与 UI：
-
-- 张掌保持和捏合保持均可完成校准。
-- `Start / Retry Camera` 可重新启动桥接。
-- `Exit`、`Calibrate`、`Continue`、`Next: Level 1`、`Next: Level 2`、`Next: Level 3`、`Restart`、`Tutorial` 都可用食指悬停触发；`Restart` 在 Level 0 到 Level 4 运行期间始终可用，不需要等到通关后。
-- 校准完成后的左侧 `Level Select` 可随时选择 Level 0、Level 1、Level 2、Level 3、Level 4。
-- 第 0 关左侧 `Tutorial Steps` 可随时选择任意教学步骤。
-- 按钮尺寸和位置适合手势悬停，不需要把手移动到屏幕极边缘。
-
-第 0 关：
-
-- 左右手识别提示正确。
-- 教学关地板更大，每一步只显示该步用到的道具。
-- 单手捏合拖动物体时物体跟手移动。
-- 单指指向、其他手指弯曲时，骨架和食指悬停点应保持稳定，不应向附近物体明显吸附抖动。
-- 伸直、弯曲食指时，各指节应平滑但实时跟随真实手型，不应出现指尖或第一指节明显滞后的“折断感”。
-- 双手捏合旋转物体方向自然，物体不缩放。
-- 双手捏合拉合桥板可成功锁定。
-- 张掌悬停可激活神印。
-- 双手食指中指并拢可控制地图旋转和缩放。
-- 单手气流指向手势可在教学地板中央的第 2 关同款气流地板、雾带、流线和箭头上显示左风或右风反馈；手势停止后风效关闭。
-- 第 8 步可用左右食指重合启动绘制，右手食指轨迹能稳定识别圆形、矩形和三角形并创建对应物体；右手握拳可取消。
-- 第 9 步可用双手食指深交叉高亮已创建物体，保持 1 秒后只消除当前高亮目标。
-- 每步成功后显示醒目 `SUCCESS`，并等待玩家手动 `Continue`。
-- 最后一个教学步骤完成后不进入自由操作页，悬停 `Next: Level 1` 进入第 1 关。
-- `TUTORIAL COMPLETE` 始终横向显示，只做光晕闪烁，不出现横竖交替抖动。
-
-第 1 关：
-
-- 清障、合桥、旋转空中桥、神印激活四段目标顺序清楚。
-- 第 1 关整体材质与第 2 关风格统一。
-- 路径两侧长墙已删除，木箱移入侧槽时不会视觉穿墙。
-- 第 1 段木箱可直接用拇指食指捏合抓取移动，不需要先张掌选中。
-- 断桥初始缝隙明显宽于小球，拉合后形成连续通路。
-- 第三段是横在空隙中央的简单窄板桥；未旋好时两侧空隙足够让小球掉落，旋好后小球可从桥面顺畅通过且不穿模、不在桥头卡住。
-- 第 1、2 关未到阶段的机关和已经完成的机关不会继续响应手势。
-- 终点视觉与第 2 关终点一致。
-- 每段机关完成后显示 `SUCCESS` 并打开对应挡门。
-- 小球不会在机关完成前提前进入下一段。
-- 当前可操作机关有 hover/held 高亮。
-- 小球到达终点后停止、隐藏，并显示醒目 `PASS`。
-- 小球掉落后整关重置，所有机关回到初始状态。
-- 第 1 关通关后 `PASS` 界面显示 `Next: Level 2`。
-
-第 2 关：
-
-- 主菜单可直接进入 `Level 2: Portals & Airflow`。
-- Unity Editor 可直接打开 `Level02.unity` 进入第二关；`CaptureLevel02Preview` 可输出第二关截图。
-- 传送门钥匙是导入的低模钥匙模型，可用单手捏合直接抓取和移动，抓取时整把钥匙高亮。
-- 钥匙放到锁座插槽上并释放后，钥匙吸附固定，锁芯和两个传送门变为激活高亮。
-- 小球从 Portal A 升起淡出，再从 Portal B 渐显落下，并打开第一道挡门；手离开屏幕时传送仍会自动完成。
-- 传送完成前不能设置风向；传送完成后，气流指向手势可被识别：拇指伸出、食指中指并拢、无名指和小指收起；只有保持该手势时才产生风。
-- 中央气流走廊地图段更长，气流带、青色雾带、细流线和方向提示与该段地面等长；HUD 显示当前气流方向。
-- 地面通风格栅和青色箭头会提示玩家这里可以产生气流。
-- 向右指向后 HUD 显示右风提示，第二道挡门打开。
-- 小球进入气流带后，在玩家保持气流手势期间逐渐加速；风向反转时小球会先被反向加速度减速，再掉头；手势停止后风力关闭。
-- 小球到达终点后显示 `PASS`。
-- 小球掉落后 Level 2 全局重置，钥匙、锁座、传送门、气流方向、气流 VFX、挡门和小球回到初始状态。
-
-第 3 关：
-
-- `Level03.unity` 位于 `Assets/Scenes` 并登记到 Build Settings，场景生成、入口和重置框架与一二关一致。
-- 绘制、识别、创建、移动、旋转和消除体验应与教程第 8、9 步一致。
-- 第一机关完成前，滑桥锁块不响应交叉消除，不会提前释放第二机关。
-- 立方体放到 cube 平台、球体放到 sphere 平台后，前段桥和第一道门打开。
-- 第一机关完成后，深交叉食指选中滑桥锁块并保持 1 秒可释放侧向滑桥。
-- 绘制或消除刚完成后，继续保持交叉姿态不会立刻误删新创建物体。
-
-第 4 关：
-
-- 双手捏合旋转镜子可让反射光束命中接收器，命中后光束变为青色并打开能量门。
-- 两侧光束表现为透明柔光，不应像实体杆或棍子。
-- 拇指磁极手势可切换磁铁方向，HUD 显示当前极性。
-- 磁力门通过后小球可继续滚向终点并显示 `PASS`。
-
-## 目录结构
+**Hand of God** 是一个面向用户交互技术课程的手势物理解谜游戏。项目目标不是单纯展示手势识别结果，而是把实时手部感知转化为可学习、可反馈、可连续操控的 Unity 物理游戏体验。玩家不需要键盘和鼠标，只需在摄像头前移动双手，就可以拖动物体、旋转机关、合拢桥梁、绘制与消除实体、控制气流、调整镜面光路并切换磁力方向。
+
+项目由 **Unity 游戏端** 与 **Python MediaPipe 手势桥接端** 组成。Python 负责摄像头采集和手部 21 点识别，Unity 负责校准、教学、关卡状态机、UI、摄像头画面嵌入、手骨架叠加、物理小球和机关逻辑。所有正式关卡使用到的手势都在第 0 关中教学或在关卡 HUD 中明确提示，避免玩家猜测。
+
+## 项目背景
+
+传统键鼠交互把玩家动作压缩成点击、拖拽和按键。本项目尝试把玩家的真实双手动作直接映射到虚拟物理世界中，让交互更接近“用手抓住、旋转、合拢、指向和创造”的自然行为。
+
+设计动机包括：
+
+- **自然交互**：用捏合、张掌、双手旋转、食指交叉等动作替代鼠标操作。
+- **可学习性**：设置完整教学关，逐步引导玩家理解每个手势。
+- **物理隐喻**：让手势作用在小球、桥、钥匙、气流、镜子和磁铁等具体物理对象上。
+- **实时反馈**：在游戏画面中显示摄像头背景、21 点手骨架、按钮悬停进度、机关高亮、成功提示和关卡 HUD。
+- **鲁棒展示**：支持自动启动桥接、摄像头嵌入 Unity、桥接单实例锁、退出释放摄像头和鼠标兜底操作，便于课堂答辩演示。
+
+## 功能概览
+
+- 实时摄像头画面嵌入 Unity 游戏窗口，不弹出独立 OpenCV 预览窗口。
+- 实时显示 MediaPipe Hands 21 点手骨架、左右手标签和关键交互点。
+- 自动启动 Python 手势桥接，并通过本地端口保证单实例运行。
+- Unity 退出时自动释放由 Unity 启动的桥接进程，避免摄像头常亮。
+- 校准流程使用张掌保持和捏合保持，生成适合当前玩家的捏合阈值。
+- 左侧常驻 `Level Select`，校准后可随时切换 Level 0 到 Level 4。
+- 关卡内常驻 `Restart`，任意时刻可重开当前关卡。
+- 第 0 关完整教学所有核心手势。
+- 第 1 关：移动路径机关，包含清障、合桥、旋转空中桥和张掌终点。
+- 第 2 关：传送门与气流机关，包含钥匙、传送动画、气流带和渐进风力。
+- 第 3 关：创造与消除机关，包含手势绘制物体、物体摆放、深交叉消除锁块和侧向滑桥。
+- 第 4 关：镜面与磁力机关，包含双手旋转镜面光路和拇指磁极切换。
+- 小球到达终点后停止并隐藏，显示醒目的 `PASS`；掉落后重置当前关卡。
+
+## 项目结构
 
 ```text
 .
@@ -705,11 +42,16 @@ cd "unity\gesture_bridge"
 ├─ unity
 │  ├─ gesture_bridge
 │  │  ├─ mediapipe_udp_sender.py
-│  │  └─ requirements.txt
+│  │  ├─ requirements.txt
+│  │  └─ tests
 │  └─ HandOfGodUnity
 │     ├─ Assets
 │     │  ├─ Editor
 │     │  │  └─ LevelSceneGenerator.cs
+│     │  ├─ Resources
+│     │  │  ├─ KenneyDungeon
+│     │  │  ├─ KenneyParticles
+│     │  │  └─ OpenGameArt
 │     │  ├─ Scenes
 │     │  │  ├─ Level01.unity
 │     │  │  ├─ Level02.unity
@@ -723,48 +65,485 @@ cd "unity\gesture_bridge"
 │     │     ├─ GestureFrame.cs
 │     │     ├─ GestureGameController.cs
 │     │     ├─ GestureUdpReceiver.cs
-│     │     └─ OneEuroFilter.cs
+│     │     ├─ OneEuroFilter.cs
+│     │     └─ TutorialDrawLevel3CodeVolume.cs
 │     └─ ProjectSettings
 └─ tools
 ```
 
-## 第三方技术
+## 架构设计
 
-- Unity 6.4：游戏运行、3D 场景、物理、UI 和构建。
-- Python：摄像头桥接与手势识别进程。
-- MediaPipe Hands：手部 21 点 landmarks、左右手识别和置信度。
-- OpenCV：摄像头采集、镜像、缩放和 JPEG 编码。
-- NumPy：手部距离、速度和平滑计算。
-- Kenney Modular Dungeon Kit：CC0 模块化地牢 3D 素材。第二关使用其中精选 FBX 模型搭建地牢墙体、地面模块和场景细节，许可证文件保存在 `Assets/Resources/KenneyDungeon/ModularDungeonKit-License.txt`。
-- Kenney Particle Pack：CC0 粒子贴图素材。第二关使用透明 PNG 制作气流雾带、流线和传送门漩涡，许可证文件保存在 `Assets/Resources/KenneyParticles/ParticlePack-License.txt`。
-- OpenGameArt Key - low poly：CC0 低模钥匙模型。第二关使用其中 `key.fbx` 作为传送门钥匙，许可证文件保存在 `Assets/Resources/OpenGameArt/LowPolyKey/LowPolyKey-License.txt`。
+```text
+Camera
+  │
+  ▼
+Python gesture_bridge
+  ├─ OpenCV camera capture
+  ├─ MediaPipe Hands recognition
+  ├─ Gesture feature extraction
+  ├─ Landmark smoothing and deadband
+  ├─ UDP 5005: hand gesture JSON
+  ├─ TCP 5006: JPEG camera frames
+  └─ TCP 5007: single-instance lock
+  │
+  ▼
+Unity HandOfGodUnity
+  ├─ GestureUdpReceiver
+  ├─ CameraFrameReceiver
+  ├─ GestureGameController
+  ├─ BallController
+  ├─ AirBeltTrigger
+  ├─ Tutorial and level state machines
+  ├─ Physics and interaction mapping
+  └─ HUD / skeleton overlay / camera background
+```
 
-## 开源项目与资料来源
+### Python 手势桥接端
 
-- MediaPipe：Google 开源的跨平台感知计算框架。本项目通过 `mediapipe==0.10.14` Python package 使用其 Hands solution，获取手部 21 点 landmarks、handedness 和识别置信度。
-  - GitHub: `https://github.com/google-ai-edge/mediapipe`
-  - Documentation: `https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker`
-- OpenCV：开源计算机视觉库。本项目通过 `opencv-python` 采集摄像头、镜像画面、调整分辨率并将摄像头帧编码为 JPEG。
-  - GitHub: `https://github.com/opencv/opencv`
-  - Python package: `https://pypi.org/project/opencv-python/`
-- NumPy：开源数值计算库。本项目在 Python 桥接中用于 landmark 距离、速度和平滑相关的向量计算。
-  - GitHub: `https://github.com/numpy/numpy`
-  - Documentation: `https://numpy.org/doc/`
-- One Euro Filter：实时交互场景中常用的低延迟平滑算法资料。本项目包含 Unity 侧 `OneEuroFilter` 实现，并在 Python 桥接中采用速度感知的轻量平滑策略来降低边缘抖动。
-  - Project page: `https://gery.casiez.net/1euro/`
-- Kenney Modular Dungeon Kit：公共领域 CC0 游戏素材包。
-  - Source: `https://opengameart.org/content/modular-dungeon-kit`
-  - Creator: `https://www.kenney.nl/`
-- Kenney Particle Pack：公共领域 CC0 粒子贴图包。
-  - Source: `https://kenney.nl/assets/particle-pack`
-  - Creator: `https://www.kenney.nl/`
-- OpenGameArt Key - low poly：公共领域 CC0 低模钥匙模型。
-  - Source: `https://opengameart.org/content/key-low-poly`
-  - Creator: `https://opengameart.org/users/knotai`
+Python 端位于 `unity/gesture_bridge`，主要职责是：
+
+- 打开摄像头并采集画面。
+- 使用 MediaPipe Hands 输出每只手的 21 点 landmarks、handedness 和识别置信度。
+- 计算捏合、张掌、五指伸展、食指/中指并拢、拇指方向等手势特征。
+- 对显示点和交互点进行一致的死区稳定与速度感知平滑。
+- 通过 UDP 向 Unity 发送手势 JSON。
+- 通过 TCP 向 Unity 发送 JPEG 摄像头帧。
+- 通过 5007 锁端口避免多个 Python 进程同时抢占摄像头。
+
+### Unity 游戏端
+
+Unity 端位于 `unity/HandOfGodUnity`，主要职责是：
+
+- 自动启动和管理 Python 桥接进程。
+- 接收 UDP 手势帧并丢弃过时帧，降低延迟和旧帧回灌。
+- 接收 TCP 摄像头帧并显示为游戏背景纹理。
+- 绘制 21 点手骨架、左右手标签和交互指示。
+- 执行校准状态机、教学状态机和 4 个正式关卡状态机。
+- 把 normalized 手势坐标映射到 Unity 世界平面。
+- 驱动拖拽、旋转、拉合、张掌按钮、气流、绘制、消除、镜面和磁力等交互。
+- 使用 Unity Rigidbody、Collider、Trigger 和材质高亮构建物理解谜体验。
+
+## 运行与构建
+
+### 环境要求
+
+- Windows
+- Unity 6.4
+- Python 3.x
+- 摄像头
+
+Python 依赖见 `unity/gesture_bridge/requirements.txt`：
+
+```text
+mediapipe==0.10.14
+opencv-python>=4.9.0
+numpy>=1.26.0
+```
+
+### 构建 Windows 可执行文件
+
+先检查 `Build-HandOfGod.bat` 顶部路径配置：
+
+```bat
+set "UNITY_EXE=<Unity Editor directory>\Unity.com"
+set "UNITY_PROJECT=%ROOT%unity\HandOfGodUnity"
+set "LOG=<writable build log path>"
+```
+
+其中 `UNITY_EXE` 需要指向本机 Unity 6.4 的 `Unity.com`，`LOG` 可以改到任意可写目录。
+
+构建命令：
+
+```powershell
+.\Build-HandOfGod.bat
+```
+
+构建产物：
+
+```text
+unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
+```
+
+### 启动游戏
+
+检查 `Play-HandOfGod.bat` 顶部桥接运行目录：
+
+```bat
+set "BRIDGE_RUNTIME=<English-only bridge runtime directory>"
+```
+
+建议把桥接虚拟环境放在纯英文路径，降低 MediaPipe 原生资源加载异常的概率。首次运行时脚本会在该目录下创建 `.venv` 并安装依赖。
+
+启动命令：
+
+```powershell
+.\Play-HandOfGod.bat
+```
+
+也可以直接启动已构建的 `HandOfGod.exe`。如果不使用启动脚本，可在运行参数中指定桥接脚本目录和 Python 解释器：
+
+```text
+HandOfGod.exe --gesture-bridge-dir "<repo>\unity\gesture_bridge" --gesture-python "<python.exe>"
+```
+
+## 启动与校准流程
+
+1. 启动 Unity 游戏。
+2. 游戏进入校准界面。
+3. Unity 自动尝试启动隐藏的 Python 手势桥接。
+4. 摄像头画面显示在背景层。
+5. 前景显示实时 21 点手骨架。
+6. 玩家张开手掌保持约 1 秒。
+7. 玩家用拇指和食指捏合保持约 1 秒。
+8. Unity 生成本次游戏的捏合阈值。
+9. 校准完成后进入 Level 0 教学关。
+
+校准界面提供：
+
+- `Start / Retry Camera`：自动桥接失败时手动重试。
+- `Skip Calibration`：课堂展示或无摄像头环境下跳过校准。
+- `Exit`：退出游戏。
+- 摄像头和桥接状态信息：FPS、帧龄、处理耗时、采集格式等。
+- 鼠标点击兜底：所有 UI 按钮都保留鼠标点击。
+
+## 手势系统
+
+| 手势 | 触发方式 | 使用场景 | 我们的实现要点 |
+| --- | --- | --- | --- |
+| 食指悬停 | 食指尖停在 UI 按钮区域内 | `Exit`、`Calibrate`、`Restart`、选关、教学 `Continue`、`Next` | Unity 使用当前稳定后的食指坐标命中按钮矩形，保持约 0.85 秒后触发；左右手可以独立作为 UI 指针；鼠标点击保留兜底 |
+| 张掌保持 | 五指明显伸展，手掌位于目标区域 | 校准、Level 1 终点神印 | Python 输出 `openPalm`，Unity 再检查手掌位置和保持时间；捏合状态会抑制张掌，避免误触 |
+| 单手捏合拖动 | 拇指和食指捏合，使用 pinch center | 教学物体、Level 1 木箱、Level 2 传送门钥匙、绘制物体移动 | Python 输出稳定 `pinch` 和 pinch center；Unity 将其映射到世界平面，并用 hover/held 材质反馈选中状态 |
+| 双手捏合旋转 | 两只手同时捏合，旋转两手连线 | 教学物体、Level 1 空中桥、Level 4 镜子、绘制物体旋转 | Unity 记录双手 pinch center 初始连线角度和起始 `Quaternion`，使用角度增量驱动物体绕 Y 轴旋转；镜子额外保持双手角度连续，防止手序交换导致光束瞬移 |
+| 双手捏合拉合 | 两只手同时捏合并向内靠近 | Level 0 合桥教学、Level 1 断桥机关 | Unity 记录初始双手距离，计算距离缩短比例，用插值驱动桥板向中心吸附并锁定 |
+| 双手食指中指并拢 | 两只手的食指和中指分别靠近 | Level 0 地图控制教学 | Unity 检测每只手 index/middle 距离；双手同时满足后记录中点、距离和角度，用于地图旋转和缩放 |
+| 气流指向 | 食指中指并拢、拇指伸出、无名指小指收起 | Level 0 气流教学、Level 2 气流带 | Unity 明确排除张掌；结合 landmark 几何判断无名指和小指弯曲；用食指相对手腕的水平偏移判断左风或右风；手势消失后风关闭 |
+| 绘制开始/结束确认 | 左右食指指尖重合并保持 | Level 0 绘制教学、Level 3 创造机关 | Unity 检测双食指重合保持时间，开始后只采样右手食指轨迹；结束后执行图形识别和 3D 物体生成 |
+| 绘制取消 | 右手握拳保持 | Level 0 绘制教学、Level 3 创造机关 | 绘制过程中右手握拳保持可取消当前轨迹，避免错误图形被创建 |
+| 深交叉消除 | 两只食指深度交叉并命中目标 | Level 0 消除教学、Level 3 锁块消除 | Unity 计算两根食指线段交叉深度和命中对象；仅深交叉且持续保持才确认消除，避免食指轻碰误删 |
+| 拇指磁极手势 | 握拳并伸出拇指指向左/右 | Level 0 磁极教学、Level 4 磁力机关 | Unity 根据拇指方向稳定保持时间切换磁铁极性；HUD 显示当前磁极方向 |
+
+### 手势鲁棒性设计
+
+- 捏合使用进入阈值和保持阈值，减少临界距离闪烁。
+- 双手连续动作使用短暂 grace，避免单帧丢手导致旋转或拉合断触。
+- 显示骨架和实际交互坐标同源，玩家看到的手指位置就是命中位置。
+- 静止手势使用 deadband 抑制高频小抖动，大幅动作仍保持快速跟随。
+- 双食指交叉时对遮挡导致的食指抖动做局部稳定，减少消除误触。
+
+## 关卡设计
+
+### Level 0: Gesture Tutorial
+
+第 0 关是完整教学关，用于让玩家在正式解谜前掌握所有核心手势。画面中上方显示大号教学提示，成功后出现醒目的 `SUCCESS`，玩家通过大号 `Continue` 进入下一步。左侧 `Tutorial Steps` 菜单允许随时重练任意步骤。
+
+关卡类型：手势教学与交互练习。
+
+核心设计：
+
+- 每一步只显示当前需要的道具，降低干扰。
+- 教学地板更大，为双手动作留出空间。
+- 所有正式关卡使用的新手势都会在这里练习。
+- 成功后不自动跳走，玩家可以确认理解后手动继续。
+- 最后一项完成后显示 `Next: Level 1`。
+
+| 步骤 | 教学目标 | 道具 | 成功条件 |
+| --- | --- | --- | --- |
+| 1 | 随意移动双手，观察识别效果 | 摄像头背景、手骨架 | Unity 同时识别到左右手 |
+| 2 | 单手捏合拖动物体 | 中心物块 | 物体被拖动超过指定距离 |
+| 3 | 双手捏合旋转物体 | 中心物块 | 物体旋转超过指定角度 |
+| 4 | 双手拉合桥板 | 两块桥板 | 双手距离缩短，桥板吸附锁定 |
+| 5 | 张掌悬停激活神印 | 发光神印 | 张掌在神印区域保持到指定时间 |
+| 6 | 双手食指中指并拢控制地图 | 练习地板 | 地图旋转或缩放超过阈值 |
+| 7 | 气流指向 | Level 2 同款气流走廊 | 显示 `LEFT` 或 `RIGHT` 风效，手势停止后风效关闭 |
+| 8 | 绘制新物体 | 绘制平面 | 识别圆形、矩形或三角形并生成球、立方体或三棱锥，可连续绘制任意数量 |
+| 9 | 消除已绘制物体 | 已创建物体 | 深交叉食指命中并保持，删除当前高亮目标 |
+| 10 | 旋转镜面 | 光源、镜子、接收器 | 双手旋转镜子，使光束命中接收器 |
+| 11 | 切换磁极 | 条形磁铁 | 拇指方向切换磁铁极性并显示反馈 |
+
+### Level 1: Trial of the Moving Path
+
+第 1 关是分段放行的物理机关解谜。玩家必须按顺序完成机关，小球才会进入下一段。每段都有清晰 HUD 目标、机关高亮和成功反馈。
+
+关卡类型：分段放行 + 物理机关解谜。
+
+胜利条件：
+
+- 完成四段机关。
+- 让小球沿路径进入终点祭坛。
+- 到达终点后显示 `PASS`。
+
+失败条件：
+
+- 小球掉落到安全高度以下。
+- 失败后重置小球、木箱、桥、旋转空中桥、神印和挡门。
+
+| 分段 | 名称 | 机关 | 使用手势 | 目标 |
+| --- | --- | --- | --- | --- |
+| Segment 1 | 清障区 | 木箱、侧槽、起点门 | 单手捏合拖动 | 把木箱拖入发光侧槽，打开起点门 |
+| Segment 2 | 断桥区 | 两块分离桥板、第二道门 | 双手捏合拉合 | 向内合拢桥板，形成连续通路 |
+| Segment 3 | 旋转空中桥区 | 横在空隙中央的窄板桥、第三道门 | 双手捏合旋转 | 将窄板桥旋转 90 度接上两侧地板 |
+| Segment 4 | 终点按钮区 | 发光神印、终点门、祭坛 | 张掌悬停 | 激活神印并打开终点门 |
+
+设计重点：
+
+- 未到阶段的机关不会响应手势，避免提前误操作。
+- 已完成机关锁定，不再被手势干扰。
+- 第一段木箱可直接捏取，不需要先张掌选中。
+- 断桥缝隙明显宽于小球，未合拢时无法通行。
+- 旋转空中桥是单个简单窄板，避免视觉上变成大平台。
+- 终点视觉与 Level 2 祭坛统一。
+
+### Level 2: Portals & Airflow
+
+第 2 关是传送门与气流机关关。玩家先将钥匙放入锁座激活传送门，小球完成传送后进入气流走廊；随后玩家保持气流指向手势产生风，把小球送入终点。
+
+关卡类型：钥匙触发 + 传送动画 + 方向气流 + 物理推动。
+
+胜利条件：
+
+- 将钥匙放到锁座插槽。
+- 传送门激活，小球从 Portal A 传送到 Portal B。
+- 传送完成后保持向右气流。
+- 气流推动小球进入终点祭坛。
+
+失败条件：
+
+- 小球掉落到安全高度以下。
+- 失败后钥匙、传送门、气流、VFX、挡门和小球全部回到初始状态。
+
+| 分段 | 名称 | 机关 | 使用手势 | 目标 |
+| --- | --- | --- | --- | --- |
+| Segment 1 | 钥匙激活区 | 低模钥匙、锁座、Portal A/B | 单手捏合拖动 | 把钥匙插入锁座，激活传送门 |
+| Segment 2 | 传送区 | Portal A、Portal B、第一道挡门 | 锁座触发 | 小球升起淡出，再从目标传送门渐显落下 |
+| Segment 3 | 气流控制区 | Air Belt、气流 VFX、第二道挡门 | 气流指向 | 保持向右风，打开道路并推动小球 |
+| Segment 4 | 终点区 | 气流带、终点祭坛 | 物理推动 | 气流将小球送入终点 |
+
+设计重点：
+
+- 钥匙使用导入低模模型，抓取时整把钥匙高亮。
+- 钥匙放入锁座后吸附固定，手离开屏幕也会继续触发传送。
+- 传送过程冻结小球 Rigidbody，播放升起、缩小、淡出、目标点渐显、落下动画。
+- 气流必须在传送完成后才允许设置。
+- 张掌不会触发气流，只有正确的气流指向手势才生效。
+- 气流使用真实加速度，小球会逐渐加速；风向反转时先减速再掉头。
+- 气流地面、触发区和 VFX 长度一致，玩家看到的风区就是实际受力范围。
+
+### Level 3: Creation & Erasure
+
+第 3 关是“创造与消除”机关关。玩家先用食指轨迹绘制并创建物体，再把对应物体放到压力板上补齐道路；随后用深交叉食指消除锁块，释放侧向滑桥，让小球继续前进。
+
+关卡类型：手势绘制 + 图形识别 + 物体摆放 + 深交叉消除 + 物理通关。
+
+胜利条件：
+
+- 创建并摆放指定物体，激活第一机关。
+- 用深交叉食指消除滑桥锁块。
+- 滑桥进入道路缺口并锁定。
+- 小球到达终点祭坛并显示 `PASS`。
+
+失败条件：
+
+- 小球掉落到安全高度以下。
+- 失败后已创建物、压力板、滑桥锁块、侧向滑桥、挡门和小球全部重置。
+
+| 分段 | 名称 | 机关 | 使用手势 | 目标 |
+| --- | --- | --- | --- | --- |
+| Segment 1 | 创造准备区 | Cube 压力板、Sphere 压力板、断桥、第一道门 | 绘制创造、单手移动、双手旋转 | 创建立方体和球体，并放到对应压力板 |
+| Segment 2 | 侧向滑桥区 | 侧边滑桥、可消除锁块、第二道门 | 深交叉食指消除 | 高亮锁块并保持，释放滑桥 |
+| Segment 3 | 终点区 | 终点祭坛 | 物理小球 | 滑桥锁定后让小球进入终点 |
+
+实现细节：
+
+- 绘制开始和结束都需要左右食指重合保持，避免误触。
+- 开始绘制后只记录右手食指轨迹，左手移动不会打断绘制。
+- 图形识别根据闭合程度、路径长度、包围盒、折线简化、半径误差、角点数量和长宽比区分圆、矩形和三角形。
+- 圆形生成球体，矩形生成立方体，三角形生成三棱锥。
+- 生成物加入可操作列表，可继续拖动和旋转。
+- 深交叉消除要求两食指交叉足够深，轻微接触不会触发。
+- 消除完成后需要手势释放，避免连续误删。
+- 第一机关完成前，第二机关锁块不会响应消除。
+
+### Level 4: Mirror & Magnet
+
+第 4 关是镜面光路与磁力机关关。玩家先双手捏合旋转镜子，让反射光束命中接收器并打开能量门；随后通过拇指磁极手势改变条形磁铁方向，让银色金属球沿磁力轨道进入终点。
+
+关卡类型：镜面光路校准 + 磁力方向控制 + 物理通关。
+
+胜利条件：
+
+- 旋转镜子使反射光束命中接收器。
+- 能量门打开，小球进入磁力轨道。
+- 切换磁铁极性，引导金属球通过磁力门。
+- 小球到达终点祭坛并显示 `PASS`。
+
+失败条件：
+
+- 小球掉落到安全高度以下。
+- 失败后镜子、光门、磁铁、磁力门和小球全部回到初始状态。
+
+| 分段 | 名称 | 机关 | 使用手势 | 目标 |
+| --- | --- | --- | --- | --- |
+| Segment 1 | 镜面光路区 | 光源、可旋转镜子、接收器、能量门 | 双手捏合旋转 | 调整镜子，让反射光束命中接收器 |
+| Segment 2 | 磁力轨道区 | 条形磁铁、磁力轨道、磁力门 | 拇指磁极手势 | 切换磁铁方向，引导金属球通过轨道 |
+| Segment 3 | 终点区 | 终点祭坛 | 物理小球 | 小球进入终点 |
+
+实现细节：
+
+- 镜子使用与普通物体相同的双手 pinch center 角度增量旋转。
+- 镜子额外做双手角度连续性处理，避免两手输入顺序交换导致光束抽搐或瞬移。
+- 光束用透明有色细柱显示，不使用脏乱烟雾效果。
+- 光路对准后，光束从琥珀色变为青色，并打开能量门。
+- 拇指向左/向右分别切换磁铁极性，HUD 显示当前状态。
+- 磁力只在对应阶段影响金属球，避免未到阶段时误触。
+
+## 技术实现
+
+### 实时通信
+
+- UDP `5005`：手势 JSON，包含 timestamp、左右手、landmarks、displayLandmarks、pinch、openPalm、finger states、FPS 和延迟信息。
+- TCP `5006`：长度前缀 JPEG 摄像头帧，用于 Unity 背景显示。
+- TCP `5007`：Python 单实例锁，避免重复启动多个桥接进程。
+
+### 坐标与交互映射
+
+- Python 输出 normalized screen coordinates。
+- Unity 将 `pinchX/pinchY`、`indexX/indexY` 映射到游戏世界平面。
+- UI 使用屏幕坐标；物理物体使用世界坐标。
+- 所有关键操作都使用当前稳定后的交互点，保证显示与命中一致。
+
+### Landmark 稳定
+
+项目在 MediaPipe 原始识别之上实现了面向交互的稳定策略：
+
+- 显示骨架和交互点使用同源稳定 landmarks。
+- 小范围抖动使用 deadband 保持上一稳定位置。
+- 小动作低增益跟随，大动作快速跟随。
+- 指尖快速移动时，对中间指节做轻量补偿，减少“折断感”。
+- 食指交叉时对遮挡引起的后方食指抖动进行局部稳定。
+
+### 状态机设计
+
+每个关卡都有独立阶段状态：
+
+- Level 0：教学步骤状态机。
+- Level 1：清障、合桥、旋转空中桥、终点按钮。
+- Level 2：钥匙激活、传送、气流、终点。
+- Level 3：创造压力板、消除锁块、侧向滑桥、终点。
+- Level 4：镜面光路、磁力轨道、终点。
+
+状态机限制了“当前可操作机关”，未到阶段和已完成机关不会继续响应手势。
+
+### 物理系统
+
+- 小球使用 Unity Rigidbody、连续动态碰撞检测和速度上限。
+- 气流使用 `ForceMode.Acceleration`，从弱到强渐进加速。
+- 传送时临时冻结小球物理，动画结束后恢复 Rigidbody。
+- 关卡失败时重建或重置所有相关机关和临时状态。
+
+## 项目创新点
+
+以下是项目中由我们自主设计和实现的重点，可作为答辩技术亮点：
+
+1. **Python-Unity 双进程实时桥接架构**
+   我们把手势识别、摄像头采集、游戏逻辑和物理渲染拆成两个协作进程，通过 UDP/TCP 分流手势数据和摄像头画面，并实现自动启动、单实例锁和退出释放摄像头。
+
+2. **显示与交互同源的稳定坐标体系**
+   玩家看到的骨架点就是实际拖动、点击和旋转使用的点，解决了常见的“视觉位置稳定但操作点仍抖动”问题。
+
+3. **面向任务的手势稳定算法**
+   项目不是简单套平滑滤波，而是针对静止抖动、边缘抖动、食指交叉遮挡、捏合断触等实际交互问题分别处理，兼顾稳定性和响应速度。
+
+4. **自适应捏合校准和迟滞判定**
+   通过校准阶段采样用户捏合距离生成阈值，并使用进入/保持两套阈值减少闪烁，让不同手型和摄像头距离下都能操作。
+
+5. **自然物理隐喻的多手势映射**
+   双手旋转来自两手 pinch center 连线角度；双手拉合来自两手距离缩短；气流来自手指方向；磁极来自拇指方向。这些映射符合玩家对物理世界的直觉。
+
+6. **可学习的完整教学关**
+   第 0 关不是菜单说明，而是逐项练习所有核心手势，并且每一步只显示必要道具、成功后手动继续，降低学习成本。
+
+7. **手势驱动的创造与消除玩法**
+   Level 3 把二维食指轨迹识别为三维物理对象，并允许继续拖动、旋转、摆放和消除，是项目中最具交互创造性的玩法。
+
+8. **关卡阶段放行与反馈闭环**
+   每段机关都有目标、可操作范围、成功反馈和门控节奏，避免玩家不知道下一步做什么。
+
+## 优点与不足
+
+### 优点
+
+- 交互链路完整：从摄像头、识别、稳定、通信、显示到物理反馈都闭环。
+- 手势体系丰富：覆盖拖动、旋转、拉合、绘制、消除、指向和磁极切换。
+- 教学充分：所有关键手势都有第 0 关教学或关卡 HUD 提示。
+- 反馈明确：骨架、标签、高亮、进度、SUCCESS、PASS、风效、光束颜色和磁极颜色都能说明系统状态。
+- 展示友好：自动启动摄像头桥接，保留鼠标兜底和 Restart/Level Select。
+
+### 不足
+
+- 识别质量仍受摄像头光照、手部遮挡、背景复杂度和摄像头视角影响。
+- 纯手势 UI 悬停比鼠标点击慢，适合展示和沉浸交互，但不适合高频菜单操作。
+- 美术资源以程序化几何和少量 CC0 素材为主，整体艺术风格仍有提升空间。
+- 当前主要支持 Windows，本地路径和摄像头设备差异需要在部署前检查。
+- 多人或多人手同时入镜时没有做复杂身份管理，只面向单玩家双手体验。
+
+### 后续可改进方向
+
+- 增加更完整的设置界面，允许在游戏内调整摄像头、平滑、阈值和桥接参数。
+- 引入更统一的 UI 系统和关卡选择界面。
+- 增加更多可复用美术 prefab 和粒子效果，提升场景一致性。
+- 支持更多关卡和更复杂的物理机关组合。
+- 加入演示录像、自动化截图和课堂展示模式。
+
+## 第三方技术与资源
+
+项目使用第三方技术作为底层能力和素材来源，但核心交互系统、稳定策略、关卡状态机和物理机关逻辑均由项目自行实现。
+
+| 名称 | 用途 | 说明 |
+| --- | --- | --- |
+| Unity 6.4 | 游戏引擎 | 3D 场景、物理、渲染、UI、构建 |
+| C# | Unity 逻辑 | 关卡状态机、交互映射、UI、物理控制 |
+| Python | 桥接进程 | 摄像头采集、MediaPipe 调用、手势特征计算 |
+| MediaPipe Hands | 手部识别 | 输出 21 点 hand landmarks、handedness、score |
+| OpenCV | 摄像头与图像处理 | 采集摄像头、镜像画面、编码 JPEG |
+| NumPy | 数值计算 | landmark 距离、速度和平滑计算 |
+| Kenney Modular Dungeon Kit | 场景素材 | CC0 地牢模块资源 |
+| Kenney Particle Pack | 粒子贴图 | CC0 气流和传送视觉贴图 |
+| OpenGameArt Key - low poly | 钥匙模型 | CC0 传送门钥匙模型 |
+
+参考资料：
+
+- MediaPipe: `https://github.com/google-ai-edge/mediapipe`
+- MediaPipe Hand Landmarker documentation: `https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker`
+- OpenCV: `https://github.com/opencv/opencv`
+- NumPy: `https://github.com/numpy/numpy`
+- One Euro Filter: `https://gery.casiez.net/1euro/`
+- Kenney: `https://www.kenney.nl/`
+- OpenGameArt: `https://opengameart.org/`
+
+## 验证清单
+
+基础验证：
+
+- `python -m py_compile unity\gesture_bridge\mediapipe_udp_sender.py`
+- `python -m unittest discover -s unity\gesture_bridge\tests`
+- `.\Build-HandOfGod.bat`
+- 启动游戏后自动进入校准界面。
+- 摄像头画面显示在 Unity 背景层。
+- 退出游戏后摄像头释放，无残留桥接进程。
+
+功能验收：
+
+- Level 0 所有教学步骤都能完成，成功后手动 Continue。
+- Level 1 四段机关顺序清楚，失败后整关重置。
+- Level 2 钥匙、传送、气流和终点流程完整，手离开屏幕后传送仍能完成。
+- Level 3 能绘制、创建、摆放、旋转和消除物体。
+- Level 4 镜面旋转稳定，光束命中后开门；磁力极性可切换并推动小球。
+- `Restart` 在任意关卡运行中可用。
+- `Level Select` 可在校准后随时切换关卡。
 
 ## Git 与提交约定
 
 - README 与功能实现保持同步。
 - 不提交 `.docx`、`.venv`、Unity `Library/`、`Builds/`、`Logs/`、`UserSettings/`、临时日志、临时截图和本地构建产物。
-- 提交前确认 `git status` 中只包含计划内文件。
-- 涉及代码或场景变化时，提交前运行 Python 编译、Unity 场景重建和 Windows 构建验证。
+- 提交前确认 `git status` 只包含计划内文件。
+- 涉及代码或场景变化时，提交前运行 Python 编译和 Unity 构建验证。
