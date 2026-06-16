@@ -3,7 +3,7 @@ setlocal
 chcp 65001 >nul
 
 set "ROOT=%~dp0"
-set "UNITY_EXE=D:\Unity\6000.4.10f1\Editor\Unity.com"
+set "UNITY_EXE=E:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com"
 set "UNITY_PROJECT=%ROOT%unity\HandOfGodUnity"
 set "LOG=E:\Unity\hand-of-god-build.log"
 
@@ -25,3 +25,4 @@ if errorlevel 1 (
 
 echo Build complete:
 echo "%UNITY_PROJECT%\Builds\Windows\HandOfGod.exe"
+pause

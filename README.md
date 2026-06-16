@@ -64,6 +64,31 @@ unity\HandOfGodUnity\Builds\Windows\HandOfGod.exe
 
 第一次运行时会在英文路径 `E:\Unity\HandOfGodGestureBridge\.venv` 创建 Python 虚拟环境并安装依赖，耗时可能较长。该路径用于规避 MediaPipe 原生模型资源在中文路径下加载不稳定的问题；Unity 项目本身仍保留在当前中文目录中。
 
+## 本机路径配置
+
+根目录下的两个 `.bat` 脚本包含本机路径配置。如果 Unity 或桥接虚拟环境保存在不同位置，需要先用文本编辑器修改脚本顶部的变量。
+
+`Build-HandOfGod.bat`：
+
+```bat
+set "UNITY_EXE=E:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com"
+set "LOG=E:\Unity\hand-of-god-build.log"
+```
+
+- `UNITY_EXE` 必须指向当前电脑 Unity 6.4 Editor 目录下的 `Unity.com`。如果 Unity Hub 安装在其他盘，常见路径类似 `D:\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com` 或 `C:\Program Files\Unity\Hub\Editor\6000.4.10f1\Editor\Unity.com`。
+- `LOG` 是构建日志输出位置，可以改到任意英文路径或可写目录。
+- `UNITY_PROJECT` 会自动使用仓库内的 `unity\HandOfGodUnity`，通常不需要修改。
+
+`Play-HandOfGod.bat`：
+
+```bat
+set "BRIDGE_RUNTIME=E:\Unity\HandOfGodGestureBridge"
+```
+
+- `BRIDGE_RUNTIME` 是 Python MediaPipe 桥接虚拟环境所在目录，脚本会在其下创建 `.venv`。
+- 建议继续使用纯英文路径，例如 `D:\Unity\HandOfGodGestureBridge`，避免 MediaPipe 原生资源在中文路径下加载不稳定。
+- 如果改了 `BRIDGE_RUNTIME`，第一次运行会重新创建虚拟环境并按 `unity\gesture_bridge\requirements.txt` 安装依赖。
+
 ## 启动与校准流程
 
 1. 启动 Unity 游戏。
